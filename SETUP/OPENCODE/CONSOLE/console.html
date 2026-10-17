@@ -1,0 +1,1159 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BAZER Console</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTQnIGZpbGw9JyNmNWM1NDInLz48cGF0aCBkPSdNMzIgOCBMNTIuNzggMjAgTDUyLjc4IDQ0IEwzMiA1NiBMMTEuMjIgNDQgTDExLjIyIDIwIFonIGZpbGw9JyMwYTBjMTAnLz48L3N2Zz4="/>
+<style>
+:root{
+  --bg:#0a0c10; --panel:rgba(255,255,255,.032); --panel2:rgba(255,255,255,.055);
+  --line:rgba(255,255,255,.08); --text:#e8ecf4; --dim:#8b94a7; --dim2:#5d6678;
+  --gold:#f5c542; --teal:#4cc9a4; --red:#ff5c5c; --ok:#3ddc84; --warn:#ffb020;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(245,197,66,.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(76,201,164,.06), transparent 60%),
+    var(--bg);
+  color:var(--text);font:14px/1.55 "Segoe UI","Leelawadee UI",system-ui,sans-serif;
+}
+.app{display:flex;min-height:100vh}
+aside{
+  width:224px;flex:none;padding:18px 14px;position:sticky;top:0;height:100vh;
+  display:flex;flex-direction:column;gap:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0) 40%);
+  border-right:1px solid var(--line);
+}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 6px 12px;border-bottom:1px solid var(--line)}
+.brand .logo{
+  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:18px;color:#0a0c10;
+  background:linear-gradient(135deg,var(--gold),#ffdf7e);box-shadow:0 0 18px rgba(245,197,66,.35);
+}
+.brand b{display:block;font-size:15px;letter-spacing:.3px}
+.brand i{display:block;font-style:normal;font-size:11px;color:var(--dim);letter-spacing:2px;text-transform:uppercase}
+nav{display:flex;flex-direction:column;gap:4px;flex:1}
+nav button{
+  all:unset;cursor:pointer;padding:9px 12px;border-radius:10px;color:var(--dim);font-size:13.5px;
+  border:1px solid transparent;transition:all .15s ease;position:relative;
+}
+nav button:hover{color:var(--text);background:var(--panel)}
+nav button.on{
+  color:var(--text);background:var(--panel2);border-color:var(--line);
+  box-shadow:0 0 0 1px rgba(245,197,66,.25), 0 6px 20px -12px rgba(245,197,66,.5);
+}
+nav button.on::before{content:"";position:absolute;left:-1px;top:8px;bottom:8px;width:3px;border-radius:3px;background:linear-gradient(180deg,var(--gold),#ffdf7e)}
+nav button.navbazer{color:#ff9a76}
+nav button.navbazer:hover{color:#ffc9b5}
+nav button.navbazer.on{box-shadow:0 0 0 1px rgba(217,72,15,.45), 0 6px 20px -12px rgba(217,72,15,.85)}
+nav button.navbazer.on::before{background:linear-gradient(180deg,#D9480F,#ff9a76)}
+nav button.navsnack{color:#7fe8dc}
+nav button.navsnack:hover{color:#b3f4ec}
+nav button.navsnack.on{box-shadow:0 0 0 1px rgba(64,224,208,.45), 0 6px 20px -12px rgba(64,224,208,.85)}
+nav button.navsnack.on::before{background:linear-gradient(180deg,#40E0D0,#7fe8dc)}
+.navgroup{font-size:10.5px;color:var(--dim);letter-spacing:.8px;text-transform:uppercase;padding:9px 12px 2px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.navgroup .cnt{font-size:10.5px;letter-spacing:0;color:var(--dim2);text-transform:none}
+#navModes{display:flex;flex-direction:column;gap:4px}
+nav button.agent-tab{display:flex;align-items:center;gap:8px}
+nav button.agent-tab .adot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dim2)}
+nav button.agent-tab .aname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav button.agent-tab .abadge{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim);flex:none}
+nav button.agent-tab .awarn{color:var(--warn);border-color:rgba(255,176,32,.4)}
+nav button.agent-tab.off{opacity:.45}
+nav button.agent-tab.off .aname{text-decoration:line-through}
+nav button.agent-tab.miss{opacity:.55}
+nav button.agent-tab.miss .aname{font-style:italic}
+.foot{display:flex;flex-direction:column;gap:8px}
+.pill{
+  display:flex;gap:8px;align-items:center;padding:8px 12px;border:1px solid var(--line);
+  border-radius:999px;font-size:12.5px;color:var(--dim);background:var(--panel);
+}
+main{flex:1;min-width:0;padding:22px 26px 60px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+header h1{font-size:19px;margin:0;letter-spacing:.2px}
+.hacts{display:flex;gap:8px}
+.btn{
+  all:unset;cursor:pointer;border-radius:10px;padding:8px 14px;font-size:13px;text-align:center;
+  border:1px solid var(--line);color:var(--text);background:var(--panel2);transition:all .15s ease;
+}
+.btn:hover{background:rgba(255,255,255,.09);transform:translateY(-1px)}
+.btn.gold{background:linear-gradient(135deg,var(--gold),#ffdf7e);color:#14100a;font-weight:600;border-color:transparent;box-shadow:0 6px 22px -10px rgba(245,197,66,.7)}
+.btn.gold:hover{filter:brightness(1.05)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:rgba(255,92,92,.4);color:#ffb3b3}
+.btn.sm{padding:4px 10px;font-size:12px;border-radius:8px}
+.view{display:flex;flex-direction:column;gap:14px;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.card{
+  background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015) 45%),var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;
+  backdrop-filter:blur(8px);
+}
+.card h3{margin:0 0 10px;font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+.card .big{font-size:17px;font-weight:600;letter-spacing:.2px}
+.card .sub{font-size:12.5px;color:var(--dim);margin-top:3px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mt{margin-top:10px}
+.led{width:9px;height:9px;border-radius:50%;flex:none;background:var(--dim2);display:inline-block}
+.led.ok{background:var(--ok);box-shadow:0 0 10px rgba(61,220,132,.8);animation:pulse 2.4s infinite}
+.led.warn{background:var(--warn);box-shadow:0 0 10px rgba(255,176,32,.8)}
+.led.fail{background:var(--red);box-shadow:0 0 10px rgba(255,92,92,.8)}
+.led.info{background:#5ea2ff;box-shadow:0 0 10px rgba(94,162,255,.6)}
+@keyframes pulse{50%{opacity:.55}}
+.badge{font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.badge.gold{color:var(--gold);border-color:rgba(245,197,66,.4);background:rgba(245,197,66,.08)}
+.badge.ok{color:var(--ok);border-color:rgba(61,220,132,.35);background:rgba(61,220,132,.07)}
+.badge.warn{color:var(--warn);border-color:rgba(255,176,32,.35);background:rgba(255,176,32,.07)}
+.badge.red{color:#ffb3b3;border-color:rgba(255,92,92,.35);background:rgba(255,92,92,.07)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+tr:last-child td{border-bottom:none}
+code,.mono{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;color:#cfe3ff}
+.muted{color:var(--dim)}
+.small{font-size:12px}
+.xs{font-size:11.5px}
+input[type=text],textarea,select{
+  background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--text);border-radius:9px;
+  padding:7px 10px;font:inherit;font-size:13px;outline:none;width:100%;
+}
+input[type=text]:focus,textarea:focus,select:focus{border-color:rgba(245,197,66,.5);box-shadow:0 0 0 3px rgba(245,197,66,.12)}
+textarea{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;min-height:120px;resize:vertical}
+label.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--dim);cursor:pointer;user-select:none}
+input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px}
+.switch{position:relative;width:42px;height:23px;flex:none;cursor:pointer}
+.switch input{display:none}
+.switch i{
+  position:absolute;inset:0;border-radius:999px;background:rgba(255,255,255,.12);
+  transition:.18s;border:1px solid var(--line);
+}
+.switch i::after{
+  content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;
+  background:#cfd6e4;transition:.18s;
+}
+.switch input:checked+i{background:linear-gradient(135deg,var(--gold),#ffdf7e);border-color:transparent}
+.switch input:checked+i::after{left:21px;background:#17120a}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  display:inline-flex;gap:6px;align-items:center;padding:3px 6px 3px 10px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--dim);
+}
+.chip b{color:var(--text);font-weight:500}
+.chip button{all:unset;cursor:pointer;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;color:var(--dim);font-size:11px}
+.chip button:hover{background:rgba(255,92,92,.2);color:#ffb3b3}
+.hair{height:1px;background:var(--line);margin:10px 0;border:0}
+#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:50;max-width:400px}
+.toast{
+  padding:10px 14px;border-radius:11px;font-size:13px;border:1px solid var(--line);
+  background:rgba(18,22,30,.95);box-shadow:0 14px 40px -18px rgba(0,0,0,.9);
+  animation:fade .2s ease;white-space:pre-wrap;
+}
+.toast.err{border-color:rgba(255,92,92,.5);color:#ffc9c9}
+.toast.ok{border-color:rgba(61,220,132,.4)}
+.verify-list{display:flex;flex-direction:column;gap:2px}
+.vrow{display:flex;gap:10px;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,.04);align-items:flex-start}
+.vrow:last-child{border-bottom:0}
+.vrow .led{margin-top:6px}
+.help{font-size:12px;color:var(--dim);background:rgba(94,162,255,.06);border:1px solid rgba(94,162,255,.18);border-radius:10px;padding:8px 12px}
+.warnbox{font-size:12px;color:#ffd9a1;background:rgba(255,176,32,.07);border:1px solid rgba(255,176,32,.25);border-radius:10px;padding:8px 12px}
+.flex{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:120px}
+.section-title{font-size:14px;font-weight:600;margin:8px 0 2px;letter-spacing:.2px}
+details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--panel)}
+summary{cursor:pointer;color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="logo">⬢</div>
+      <div><b>BAZER</b><i>Console</i></div>
+    </div>
+    <nav id="nav">
+      <button data-tab="dash" class="on">ภาพรวม</button>
+      <button data-tab="lock">ล็อก &amp; โมเดล</button>
+      <button data-tab="server">Server &amp; Cline</button>
+      <button data-tab="pstack">pStack</button>
+      <div class="navgroup">โหมดผู้ช่วย <span id="navModesCnt" class="cnt"></span></div>
+      <span id="navModes"></span>
+      <button data-tab="projects">โปรเจกต์</button>
+      <button data-tab="plannotator">Plannotator</button>
+      <button data-tab="history">ประวัติ &amp; สำรอง</button>
+    </nav>
+    <div class="foot">
+      <div class="pill"><span class="led" id="serverLed"></span><span id="serverPillText">กำลังโหลด…</span></div>
+      <button class="btn gold" data-act="verify">⚡ ตรวจความครบ</button>
+    </div>
+  </aside>
+  <main>
+    <header>
+      <h1 id="hTitle">ภาพรวม</h1>
+      <div class="hacts">
+        <button class="btn ghost" data-act="refresh">↻ รีเฟรช</button>
+      </div>
+    </header>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+<div id="toasts"></div>
+<script>
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+let TAB = 'dash', S = null, VERIFY = null, MODELS = null, BP = null, FILTER = '', PM = null, AMODELS = null, SETUP = null, BAM = null, UP = null;
+
+async function api(u, opts={}){
+  const r = await fetch(u, {
+    method: opts.post ? 'POST' : 'GET',
+    headers: { 'x-oc-token': TOKEN, ...(opts.post ? {'content-type':'application/json'} : {}) },
+    body: opts.post ? JSON.stringify(opts.post) : undefined,
+  });
+  if(!r.ok){ let t=''; try{ t = await r.text(); }catch{} throw new Error(t.slice(0,300) || ('HTTP '+r.status)); }
+  return r.json();
+}
+
+function toast(msg, isErr){
+  const d = document.createElement('div');
+  d.className = 'toast ' + (isErr ? 'err' : 'ok');
+  d.textContent = msg;
+  document.getElementById('toasts').appendChild(d);
+  setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity .3s'; setTimeout(()=>d.remove(), 320); }, isErr ? 7000 : 3500);
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const led = l => `<span class="led ${l}"></span>`;
+const MODE_LABEL = {
+  'deepseek-only': ['ล็อกแน่น — deepseek ตัวเดียว', 'ok'],
+  'provider-only': ['ล็อก provider เดียว (opencode-go)', 'ok'],
+  'off': ['ปลดล็อก (ไฟล์ว่าง)', 'warn'],
+  'custom': ['กำหนดเอง', 'info'],
+  'none': ['ยังไม่มีไฟล์ล็อก', 'fail'],
+};
+
+async function refresh(){
+  try{
+    S = await api('/api/state');
+    render();
+  }catch(e){ toast('โหลดสถานะไม่สำเร็จ: ' + e.message, true); }
+}
+
+async function act(id, params={}, confirmText){
+  if(confirmText && !confirm(confirmText)) return;
+  try{
+    const r = await api('/api/action', { post: { id, ...params } });
+    if(r.ok === false){ toast('ผิดพลาด: ' + (r.message||''), true); }
+    else { toast(r.message || 'สำเร็จ'); }
+    await refresh();
+    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','save-agent','save-bazer-arena'];
+    if(after.includes(id)) runVerify(false);
+  }catch(e){ toast('ผิดพลาด: ' + e.message, true); }
+}
+
+async function runVerify(showTab){
+  try{
+    VERIFY = await api('/api/verify');
+    if(showTab !== false) tab('dash'); else render();
+  }catch(e){ toast('ตรวจไม่สำเร็จ: ' + e.message, true); }
+}
+
+function tab(name){
+  TAB = name;
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  render();
+}
+
+/* ---------- renderers ---------- */
+
+function render(){
+  if(!S) return;
+  const titles = { dash:'ภาพรวม', lock:'ล็อก & โมเดล', server:'Server & Cline', pstack:'pStack', bazer:'Bazer Mode', snack:'Snack', projects:'โปรเจกต์', plannotator:'Plannotator', history:'ประวัติ & สำรอง' };
+  const af = TAB.indexOf('agent:') === 0 ? TAB.slice(6) : null;
+  const meta = af ? (AGENT_META[af] || { name: af.replace(/\.md$/, '') }) : null;
+  document.getElementById('hTitle').textContent = af ? (meta.name + ' Mode') : (titles[TAB] || '');
+  const pill = document.getElementById('serverLed');
+  const ptext = document.getElementById('serverPillText');
+  if(S.server.up){ pill.className = 'led ok'; ptext.textContent = `server 4096 · v${S.server.version||'?'}`; }
+  else { pill.className = 'led fail'; ptext.textContent = 'server 4096 ปิดอยู่'; }
+  const v = af ? vAgent(af) : ({ dash: vDash, lock: vLock, server: vServer, pstack: vPstack, bazer: vBazer, snack: vSnack, projects: vProjects, plannotator: vPl, history: vHist }[TAB] || vDash)();
+  document.getElementById('view').innerHTML = v;
+  renderNavModes();
+  if(TAB === 'pstack'){ if(!PM) initPM(); renderPM(); }
+  if(TAB === 'bazer'){ if(!BAM) BAM = parseBazerModels(); renderBzChips(); }
+}
+
+function verifyPanel(){
+  if(!VERIFY) return '';
+  const s = VERIFY.summary || {};
+  const rows = VERIFY.items.map(i => `
+    <div class="vrow">${led(i.level)}<div><b>${esc(i.label)}</b><div class="small muted">${esc(i.detail||'')}</div></div></div>`).join('');
+  return `<div class="card">
+    <h3>ผลตรวจความครบ</h3>
+    <div class="row" style="margin-bottom:6px">
+      <span class="badge ok">ผ่าน ${s.ok||0}</span>
+      <span class="badge warn">เตือน ${s.warn||0}</span>
+      <span class="badge red">ไม่ผ่าน ${s.fail||0}</span>
+      <span class="muted xs">ตรวจเมื่อ ${esc(VERIFY.at||'')}</span>
+    </div>
+    <div class="verify-list">${rows}</div>
+  </div>`;
+}
+
+function vDash(){
+  const L = MODE_LABEL[S.lock.mode] || MODE_LABEL['none'];
+  return `
+  <div class="grid">
+    <div class="card"><h3>Server 4096</h3>
+      <div class="row">${led(S.server.up?'ok':'fail')}<span class="big">${S.server.up?'ทำงานอยู่':'ปิดอยู่'}</span></div>
+      <div class="sub">เวอร์ชัน ${esc(S.server.version||'—')} · CLI ${esc(S.opencodeCli||'—')}${S.server.mismatch?' ⚠ ไม่ตรงกัน':''}${S.server.pinned?' · ปักหมุด v1 (ตั้งใจ)':''}</div>
+      ${S.server.mismatch ? '<div class="warnbox mt">เวอร์ชัน server ไม่ตรงกับ CLI — server อาจยังรันตัวเก่า ล็อกบางอย่าง (เช่น blacklist บน V2) อาจมีพฤติกรรมต่าง</div>' : ''}
+    </div>
+    <div class="card"><h3>โหมดล็อก</h3>
+      <div class="row">${led(L[1])}<span class="big">${esc(L[0])}</span></div>
+      <div class="sub">${S.lock.blacklist.length} โมเดลถูกบล็อก · provider: ${esc((S.lock.enabledProviders||[]).join(', ') || '—')}</div>
+    </div>
+    <div class="card"><h3>โมเดลเริ่มต้น</h3>
+      <div class="row"><span class="big mono">${esc(S.model.current||'—')}</span></div>
+      <div class="sub">effort: ${esc(S.model.effort||'—')} · model.json: ${esc(S.model.modelJsonVariant||'—')}${S.model.mismatch?' ⚠':''}</div>
+      ${S.model.mismatch ? '<div class="warnbox mt">model.json (variant ที่กดใน TUI) ทับ config — มีปุ่มซิงค์ในแท็บ "ล็อก & โมเดล"</div>' : ''}
+    </div>
+    <div class="card"><h3>Skills</h3>
+      <div class="row"><span class="big">${S.skills.total} ตัว</span></div>
+      <div class="sub">ซ่อนจากโมเดล ${S.skills.hiddenCount} · ฟิลด์เก่า ${S.skills.legacyCount}${S.skills.legacyCount?' ⚠':''}</div>
+    </div>
+    <div class="card"><h3>Plannotator</h3>
+      <div class="row">${led(S.pl.configs.some(c=>c.has)||S.pl.cache.length?'ok':'warn')}<span class="big">${S.pl.cache[0]?('v'+esc(S.pl.cache[0].version)):'ไม่พบ cache'}</span></div>
+      <div class="sub">CLI: ${S.pl.cliOk?'พบ':'ไม่พบ'} · ลงทะเบียนใน config ${S.pl.configs.filter(c=>c.has).length} ที่</div>
+    </div>
+    <div class="card"><h3>pStack build</h3>
+      <div class="row">${led(S.build.exists?'ok':'warn')}<span class="big">${S.build.exists?('พร้อม apply · ต่าง '+S.build.diffCount+' ไฟล์'):'ไม่พบ build — ตั้ง buildDir หรือใช้ bundle ที่แนบมากับแอป'}</span></div>
+      <div class="sub mono">${esc(S.build.dir)}</div>
+    </div>
+    <div class="card"><h3>Autostart</h3>
+      <div class="row">${led(S.autostart?'ok':'info')}<span class="big">${S.autostart?'เปิด':'ปิด'}</span></div>
+      <div class="sub">ทางลัด Startup: ${esc(S.autostart?'มี':'ไม่มี')}</div>
+    </div>
+    <div class="card"><h3>แอปนี้</h3>
+      <div class="row"><span class="big">v${esc(S.app.version)}</span></div>
+      <div class="sub">Node ${esc(S.app.node)} · port ${esc(String(S.app.port))}</div>
+    </div>
+  </div>
+  ${S.setup && S.setup.bundle ? `
+  <div class="card" style="border-color:rgba(245,197,66,.35)">
+    <h3>🚀 ติดตั้งเสร็จสรรพ — ทั้งหมด</h3>
+    <div class="small muted">ติดตั้ง config + skills + agents + commands + ปลั๊กอิน (Plannotator + bazer-fire 🔥) + ไฟล์เปิด server/ล็อก จากชุดที่แนบมากับแอป (รวมตั้งค่า Bazer Mode ครบ) — สำรองก่อนเขียนทุกจุด กดซ้ำได้ปลอดภัย${S.setup.firstRun ? ' · <b>เครื่องนี้ยังตั้งไม่ครบ — แนะนำกดติดตั้งเลย</b>' : ''}</div>
+    <div class="mt flex">
+      <button class="btn" data-act="setup-preview">ดูขั้นตอนก่อน (พรีวิว)</button>
+      <button class="btn gold" data-act="setup-quick">ติดตั้งเสร็จสรรพ - ทั้งหมด</button>
+    </div>
+    <div id="setupBox" class="mt"></div>
+  </div>` : ''}
+  ${S.setup && S.setup.bundle ? `
+  <div class="card" style="border-color:rgba(94,162,255,.35)">
+    <h3>⬆️ อัพเดตเวอร์ชัน (git pull แล้วกดที่นี่)</h3>
+    <div class="small muted">เทียบของที่ติดตั้งไว้ในเครื่องกับชุดใหม่ในโฟลเดอร์ bundle — คัดลอกทับเฉพาะไฟล์ที่ต่าง/ใหม่ พร้อมสำรองอัตโนมัติทุกไฟล์ (ตัวแอปเอง: ปิด-เปิด BAZER Console ใหม่หลัง pull)</div>
+    <div class="small muted mt">ไฟล์ส่วนตัวไม่ถูกแตะ: AGENTS.md · pstack-models.md · serve-restricted.jsonc · โหมดที่ปิดไว้ (.disabled) จะได้เนื้อหาใหม่แต่คงสถานะปิด</div>
+    <div class="mt flex">
+      <button class="btn" data-act="update-check">ตรวจว่ามีอะไรใหม่</button>
+      <button class="btn gold" data-act="update-run">อัพเดตทั้งหมด</button>
+    </div>
+    <div id="updBox" class="mt">${updBoxHtml()}</div>
+  </div>` : ''}
+  ${S.remind && S.remind.exists ? `<div class="card"><h3>↻ remindToUpdate</h3><div class="small muted" style="white-space:pre-wrap">${esc(S.remind.preview)}</div></div>` : ''}
+  ${verifyPanel()}`;
+}
+
+function vLock(){
+  const modes = [
+    ['deepseek-only','ล็อกแน่น — deepseek ตัวเดียว','provider เดียว + โมเดลเดียว · fail-closed กันเครดิตหลุด'],
+    ['provider-only','ล็อก provider เดียว','เปิดทุกโมเดลของ opencode-go (สลับโมเดลทดลองได้)'],
+    ['off','ปลดล็อก','ไฟล์ล็อกว่าง — server เห็นทุก provider/โมเดล'],
+  ];
+  const modeCards = modes.map(([id,t,d]) => `
+    <div class="card">
+      <div class="spread"><b>${t}</b>${S.lock.mode===id?'<span class="badge gold">ใช้อยู่</span>':''}</div>
+      <div class="sub">${d}</div>
+      <div class="mt"><button class="btn ${S.lock.mode===id?'ghost':''}" data-act="lock-mode" data-mode="${id}">ใช้โหมดนี้</button></div>
+    </div>`).join('');
+  const chips = S.lock.blacklist.map(m => `<span class="chip"><b>${esc(m)}</b><button data-act="bl-del" data-m="${esc(m)}" title="ปลดบล็อก">✕</button></span>`).join('');
+  const options = (MODELS||[]).filter(m=>!S.lock.blacklist.includes(m)).map(m=>`<option>${esc(m)}</option>`).join('');
+  const effortOpts = ['max','xhigh','high','medium','low','default'].map(e=>`<option ${S.model.effort===e?'selected':''}>${e}</option>`).join('');
+  return `
+  <div class="help">สลับโหมดแล้วแอปจะเขียน <span class="mono">serve-restricted.jsonc</span> (สำรองอัตโนมัติ) และสั่งรีสตาร์ท server ตามที่ติ๊กไว้ — ล็อกมีผลเฉพาะ server 4096 (Cline) ไม่กระทบ TUI ปกติ</div>
+  <label class="chk"><input type="checkbox" id="lockRestart" checked> รีสตาร์ท server 4096 อัตโนมัติหลังเปลี่ยนโหมด (แนะนำ)</label>
+  <div class="grid">${modeCards}</div>
+  <div class="card">
+    <h3>Blacklist — โมเดลที่ถูกบล็อก</h3>
+    ${chips ? `<div class="chips">${chips}</div>` : '<div class="muted small">ยังไม่มีรายการ</div>'}
+    <div class="hair"></div>
+    <div class="flex">
+      <select id="blSelect" class="grow">${options || '<option value="">— กด "ดึงรายชื่อโมเดล" ก่อน —</option>'}</select>
+      <button class="btn sm" data-act="bl-add">+ เพิ่ม</button>
+      <button class="btn sm ghost" data-act="bl-fetch">⇣ ดึงรายชื่อโมเดลจาก server</button>
+    </div>
+    <div class="small muted mt">ดึงรายชื่อได้เมื่อ server 4096 ทำงานอยู่ (โหมด provider-only จะเห็นครบสุด)</div>
+  </div>
+  <div class="card">
+    <h3>โมเดลเริ่มต้น &amp; Effort</h3>
+    <div class="flex">
+      <input type="text" id="mModel" class="grow" value="${esc(S.model.current||'')}" placeholder="provider/model">
+      <select id="mEffort" style="width:130px">${effortOpts}</select>
+    </div>
+    <label class="chk mt"><input type="checkbox" id="mSync" checked> ซิงค์ <span class="mono">model.json</span> ด้วย — กัน variant ที่กดใน TUI ทับค่าที่ตั้ง</label>
+    <div class="mt"><button class="btn gold" data-act="model-save">บันทึกโมเดล + effort</button></div>
+    <div class="small muted mt">เขียนลง <span class="mono">opencode.jsonc</span> (model + variants บังคับทุก variant) และ <span class="mono">model.json</span> (variant ต่อโมเดล) — มีผลกับ session ใหม่</div>
+  </div>`;
+}
+
+function vServer(){
+  const files = S.files.launch.map(f => `<div class="vrow">${led(f.exists?'ok':'fail')}<div><b class="mono">${esc(f.name)}</b><div class="small muted">${f.exists?'พบ':'ไม่พบ — ไฟล์ launch อาจหาย'}</div></div></div>`).join('');
+  return `
+  <div class="grid">
+    <div class="card"><h3>สถานะ server 4096</h3>
+      <div class="row">${led(S.server.up?'ok':'fail')}<span class="big">${S.server.up?('v'+esc(S.server.version)):'ปิดอยู่'}</span></div>
+      <div class="sub">http://127.0.0.1:4096 — สำหรับ Cline</div>
+      <div class="mt flex">
+        <button class="btn sm" data-act="srv-health">ตรวจสุขภาพ</button>
+        <button class="btn sm" data-act="srv-restart">รีสตาร์ท server</button>
+        <button class="btn sm ghost" data-act="srv-service">รีสตาร์ท opencode service</button>
+      </div>
+    </div>
+    <div class="card"><h3>Autostart ตอนล็อกอิน</h3>
+      <div class="row">${led(S.autostart?'ok':'info')}<span class="big">${S.autostart?'เปิดอยู่':'ปิด'}</span>
+        <span class="grow"></span>
+        <label class="switch"><input type="checkbox" data-act="autostart" ${S.autostart?'checked':''}><i></i></label>
+      </div>
+      <div class="sub">ทางลัดในโฟลเดอร์ Startup ของ Windows</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ค่าที่ต้องใส่ใน Cline (ใส่ครั้งเดียว)</h3>
+    <table>
+      <tr><th>ช่อง</th><th>ค่า</th></tr>
+      <tr><td>API Provider</td><td><span class="mono">OpenCode</span> (ตัว local — ไม่ใช่ OpenCode Go)</td></tr>
+      <tr><td>Base URL</td><td><span class="mono">http://127.0.0.1:4096</span></td></tr>
+      <tr><td>API Key</td><td><span class="mono">local</span> (ค่าใดก็ได้)</td></tr>
+      <tr><td>Model ID</td><td><span class="mono">${esc(S.model.current||'opencode-go/deepseek-v4.1-flash')}</span></td></tr>
+      <tr><td>Custom Headers</td><td>ไม่ต้องแตะ</td></tr>
+    </table>
+    <div class="mt"><button class="btn sm" data-act="copy-cline">คัดลอกค่า Model ID</button></div>
+  </div>
+  <div class="card">
+    <h3>ไฟล์ launch (โฟลเดอร์ ${esc(S.paths.launchDir)})</h3>
+    <div class="verify-list">${files}</div>
+    <div class="mt"><button class="btn sm ghost" data-act="open" data-key="launch">เปิดโฟลเดอร์ launch</button></div>
+  </div>
+  <details>
+    <summary>ตั้งค่า TUI (cli.json) — แก้ไข</summary>
+    <div class="mt"><textarea id="cliJson">${esc(S.cli.content||'{}')}</textarea>
+    <div class="flex mt"><button class="btn sm gold" data-act="cli-save">บันทึก cli.json</button><span class="small muted">ใช้กับหน้าจอ TUI ของ OpenCode (คีย์ลัด/ธีม) — ต้องเป็น JSON ที่ถูกต้อง</span></div></div>
+  </details>`;
+}
+
+function skillRows(){
+  const f = FILTER.toLowerCase();
+  const items = S.skills.items.filter(i => !f || i.name.toLowerCase().includes(f) || (i.desc||'').toLowerCase().includes(f));
+  if(!items.length) return '<div class="muted small">ไม่พบ skill ที่ตรงกับคำค้น</div>';
+  return items.map(i => `
+    <div class="vrow">
+      ${led(i.hidden?'warn':'ok')}
+      <div class="grow">
+        <div class="row"><b class="mono">${esc(i.name)}</b>
+          <span class="badge">${esc(i.sourceLabel)}</span>
+          ${i.hidden?'<span class="badge warn">ซ่อนจากโมเดล</span>':''}
+          ${i.legacy?'<span class="badge red">ฟิลด์เก่า</span>':''}
+        </div>
+        <div class="small muted">${esc(i.desc||'')}</div>
+      </div>
+      <div class="flex" style="flex:none">
+        ${i.hidden
+          ? `<button class="btn sm" data-act="skill-show" data-name="${esc(i.name)}">แสดง</button>`
+          : `<button class="btn sm ghost" data-act="skill-hide" data-name="${esc(i.name)}">ซ่อนจากโมเดล</button>`}
+        ${i.legacy?`<button class="btn sm danger" data-act="skill-field" data-name="${esc(i.name)}" title="ลบ disable-model-invocation (V2 เคารพฟิลด์นี้ = ซ่อน)">ลบฟิลด์เก่า</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function bpRow(f){ const m = {new:['gold','ใหม่'], diff:['warn','ต่าง'], same:['','เหมือน'], exists:['','มีอยู่ (จะไม่ทับ)']}; const [cls,label] = m[f.status] || ['', f.status]; return `<tr><td class="mono small">${esc(f.path)}</td><td><span class="badge ${cls}">${label}</span></td></tr>`; }
+
+const PM_DEFAULTS = [
+  ['feature, refactoring','grok-4.7-xhigh-fast'], ['bug-fix','grok-4.7-xhigh-fast'],
+  ['perf-issue','grok-4.7-xhigh-fast'], ['hillclimb','grok-4.7-xhigh-fast'],
+  ['judgment and prose','claude-opus-5-5-xhigh'], ['hardest tasks','claude-opus-5-5-xhigh'],
+  ['how explorer','grok-4.7-xhigh-fast'], ['how explainer','claude-opus-5-5-xhigh'],
+  ['why investigators','grok-4.7-xhigh-fast'], ['why synthesizer','claude-opus-5-5-xhigh'],
+  ['reflect tooling','grok-4.7-xhigh-fast'], ['reflect judgment, divergent, synthesizer','claude-opus-5-5-xhigh'],
+  ['arena runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'], ['bazer arena runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'], ['arena cross-judge pool','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
+  ['swarm workers','grok-4.7-xhigh-fast'], ['architect runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
+  ['interrogate reviewers','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
+];
+const LIST_ROLES = ['arena runners', 'bazer arena runners', 'arena cross-judge pool'];
+function parsePM(txt){
+  const rows = []; let budget = 'large';
+  for(const line of (txt || '').split(/\r?\n/)){
+    const l = line.trim();
+    if(!l) continue;
+    if(l.startsWith('#')){
+      const b = l.match(/^#\s*budget:\s*(\w+)/);
+      if(b && ['unlimited','large','medium','small'].includes(b[1])) budget = b[1];
+      continue;
+    }
+    const i = l.indexOf(':');
+    if(i > 0){
+      const role = l.slice(0, i).trim();
+      const raw = l.slice(i + 1).trim();
+      rows.push({ role, models: LIST_ROLES.includes(role) ? raw.split(',').map(s => s.trim()).filter(Boolean) : raw });
+    }
+  }
+  return { budget, rows };
+}
+function initPM(){
+  PM = S.models2.exists
+    ? parsePM(S.models2.content)
+    : { budget: 'large', rows: PM_DEFAULTS.map(([r, m]) => ({ role: r, models: LIST_ROLES.includes(r) ? m.split(',').map(s => s.trim()).filter(Boolean) : m })) };
+  if(!PM.rows.some(r => r.role === 'bazer arena runners')) {
+    PM.rows.push({ role: 'bazer arena runners', models: ['claude-opus-5-5-xhigh', 'grok-4.7-xhigh-fast'] });
+  }
+}
+function collectPM(){
+  if(!PM) return;
+  const rows = [];
+  document.querySelectorAll('#pmEditor .pm-row').forEach(el => {
+    const role = el.querySelector('.pm-role').value.trim();
+    if(el.dataset.list === '1'){
+      const models = [...el.querySelectorAll('.chip b')].map(b => b.textContent.trim()).filter(Boolean);
+      if(role || models.length) rows.push({ role, models });
+    } else {
+      const models = (el.querySelector('.pm-models')?.value || '').trim();
+      if(role || models) rows.push({ role, models });
+    }
+  });
+  PM.rows = rows;
+  const b = document.getElementById('pmBudget');
+  if(b) PM.budget = b.value;
+}
+function renderPM(){
+  const box = document.getElementById('pmEditor');
+  if(!box || !PM) return;
+  box.innerHTML = PM.rows.map((r, i) => {
+    if(LIST_ROLES.includes(r.role)){
+      const arr = Array.isArray(r.models) ? r.models : [r.models].filter(Boolean);
+      const chips = arr.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="pm-chip-del" data-idx="${i}" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
+        || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์หรือเลือกด้านล่างแล้วกด +</span>';
+      const tag = r.role === 'bazer arena runners' ? '<span class="badge gold">Bazer arena</span>'
+        : r.role.includes('cross') ? '<span class="badge">cross-judge pool</span>' : '<span class="badge">arena เดี่ยว</span>';
+      return `<div class="pm-row" data-idx="${i}" data-list="1" style="margin-bottom:12px">
+        <div class="row"><input type="text" class="pm-role" style="width:270px" value="${esc(r.role)}" readonly> ${tag}<span class="small muted">ใช้หลายโมเดลพร้อมกัน (เลือก 1 ตัวต่อ 1 subagent)</span></div>
+        <div class="chips" style="margin-top:6px">${chips}</div>
+        <div class="flex" style="margin-top:6px">
+          <input type="text" class="pm-add-input grow" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดลจากรายชื่อ แล้วกด + (เช่น opencode-go/deepseek-v4.1-flash)">
+          <button class="btn sm" data-act="pm-chip-add" data-idx="${i}" style="flex:none">+ เพิ่มโมเดล</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="pm-row row" data-idx="${i}" style="margin-bottom:6px">
+      <input type="text" class="pm-role" style="width:270px" placeholder="role เช่น swarm workers" value="${esc(r.role)}">
+      <input type="text" class="pm-models grow" placeholder="model เดียว" value="${esc(r.models)}">
+      <button class="btn sm danger" data-act="pm-del" data-idx="${i}" style="flex:none" title="ลบแถว">✕</button>
+    </div>`;
+  }).join('') || '<div class="muted small">ยังไม่มีแถว — กด "+ เพิ่ม role"</div>';
+  const b = document.getElementById('pmBudget');
+  if(b) b.value = PM.budget;
+}
+function vPstack(){
+  const bp = BP && BP.files ? `
+    <table><tr><th>ไฟล์</th><th>สถานะ</th></tr>${BP.files.slice(0,200).map(bpRow).join('')}</table>
+    <div class="small muted mt">รวม ${BP.files.length} ไฟล์ — ใหม่ ${BP.counts.new} · ต่าง ${BP.counts.diff} · เหมือน ${BP.counts.same}</div>` : '';
+  const agents = S.agents.map(a => `
+    <div class="vrow">${led(a.disabled?'warn':'ok')}
+      <div class="grow"><div class="row"><b class="mono">${esc(a.file)}</b>${a.mode?`<span class="badge">${esc(a.mode)}</span>`:''}${a.colorOk===false?'<span class="badge red">color ไม่ใช่ hex</span>':''}</div>
+      <div class="small muted">${esc(a.desc||'')}</div>
+      ${a.content ? `<details class="mt"><summary>✏️ แก้ไข ${esc(a.file)}</summary><textarea class="agent-edit mt" data-file="${esc(a.file)}">${esc(a.content)}</textarea><div class="mt"><button class="btn sm gold" data-act="agent-save">บันทึก</button></div></details>` : ''}
+      </div>
+      <div class="flex" style="flex:none">
+        <button class="btn sm" data-act="agent-toggle" data-file="${esc(a.file)}" data-en="${a.disabled?1:0}">${a.disabled?'เปิด':'ปิด'}</button>
+        <button class="btn sm danger" data-act="agent-del" data-file="${esc(a.file)}">ลบ</button>
+      </div>
+    </div>`).join('') || '<div class="muted small">ไม่พบ agent</div>';
+  return `
+  <div class="card">
+    <h3>ชุด build พร้อม apply</h3>
+    <div class="small muted mono">${esc(S.build.dir)}</div>
+    <div class="flex mt">
+      <button class="btn" data-act="build-preview">ดูรายการที่จะ apply (diff)</button>
+      <label class="chk"><input type="checkbox" id="bpSkills" checked> skills</label>
+      <label class="chk"><input type="checkbox" id="bpAgents" checked> agents</label>
+      <label class="chk"><input type="checkbox" id="bpCommands" checked> commands</label>
+      <label class="chk"><input type="checkbox" id="bpConfig" checked> pstack-models template</label>
+      ${S.build.stray?'<label class="chk"><input type="checkbox" id="bpCleanup" checked> ลบไฟล์ค้าง pstack-models.md (ผิดที่)</label>':''}
+      <button class="btn gold" data-act="build-apply">Apply</button>
+    </div>
+    ${bp}
+    <div class="help mt">Apply = คัดลอกทับพร้อมสำรองอัตโนมัติ (ดูได้ในแท็บ "ประวัติ &amp; สำรอง") — คือขั้นตอนที่ 2 ของการย้าย pStack เข้าเครื่อง</div>
+  </div>
+  <div class="card">
+    <h3>Skills (${S.skills.total})</h3>
+    <input type="text" id="skFilter" placeholder="ค้นหา skill…" value="${esc(FILTER)}">
+    <div class="mt verify-list" id="skillList">${skillRows()}</div>
+    <div class="mt flex">
+      <button class="btn sm ghost" data-act="npx-list">npx skills list</button>
+      <button class="btn sm ghost" data-act="npx-update">npx skills update</button>
+    </div>
+    <div class="small muted mt">"ซ่อนจากโมเดล" = ใส่ <span class="mono">metadata.opencode/autoinvoke: false</span> (V2) — skill ยังโหลดได้ด้วย <span class="mono">@ชื่อ</span></div>
+  </div>
+  <div class="card">
+    <h3>pStack models — pstack-models.md (โมเดลต่อ role)</h3>
+    <div class="small muted">กำหนดโมเดลที่แต่ละ role ใช้ตอน spawn subagent — role ของ arena ใช้ <b>หลายโมเดลพร้อมกัน</b> (chip + เลือกจากรายชื่อจริงของเครื่อง) · ${S.models2.exists ? 'ไฟล์มีอยู่แล้ว' : 'ยังไม่มีไฟล์ (กดบันทึกแล้วจะสร้างให้)'}</div>
+    <div class="flex mt">
+      <span class="small muted">budget:</span>
+      <select id="pmBudget" style="width:230px">
+        <option value="unlimited">unlimited — max reasoning</option>
+        <option value="large">large — xhigh (ค่าเริ่มต้น)</option>
+        <option value="medium">medium — high</option>
+        <option value="small">small — medium</option>
+      </select>
+      <button class="btn sm ghost" data-act="pm-add">+ เพิ่ม role</button>
+      <button class="btn sm ghost" data-act="pm-reset">↺ โหลดค่าจากไฟล์ใหม่</button>
+      <button class="btn sm ghost" data-act="amodels-fetch">⇣ ดึงรายชื่อโมเดลทั้งหมด${AMODELS ? ' (' + AMODELS.length + ')' : ' — opencode models'}</button>
+    </div>
+    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
+    <div id="pmEditor" class="mt"></div>    <div class="mt flex">
+      <button class="btn gold" data-act="pm-save2">บันทึก pstack-models.md</button>
+      <span class="small muted">เขียนใหม่ทั้งไฟล์พร้อมสำรองอัตโนมัติ — มีผลกับ session ใหม่</span>
+    </div>
+    <details class="mt"><summary>ดู/แก้ไฟล์ดิบ (ขั้นสูง)</summary>
+      <textarea id="pmText" class="mt">${esc(S.models2.content)}</textarea>
+      <div class="mt"><button class="btn sm" data-act="pm-save">บันทึกไฟล์ดิบ</button></div>
+    </details>
+  </div>
+  <div class="card">
+    <h3>Agents (${S.agents.length})</h3>
+    <div class="verify-list">${agents}</div>
+    <div class="mt flex"><button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button><span class="small muted">commands ของ Plannotator ย้ายไปแท็บ Plannotator</span></div>
+  </div>`;
+}
+
+function parseBazerModels(){
+  const txt = (S.models2 && S.models2.content) || '';
+  const line = txt.split(/\r?\n/).find(l => /^bazer arena runners\s*:/.test(l.trim()));
+  return line ? line.split(':').slice(1).join(':').split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+function renderBzChips(){
+  const el = document.getElementById('bzChips');
+  if(!el || !BAM) return;
+  el.innerHTML = BAM.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="bz-del" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
+    || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์หรือเลือกด้านล่างแล้วกด +</span>';
+}
+function vBazer(){
+  const b = S.bazer || {};
+  const bzAgent = agentOf('bazer.md');
+  const bzOn = !!(bzAgent && !bzAgent.disabled);
+  return `
+  <div class="card" style="border-color:rgba(217,72,15,.5);background:linear-gradient(160deg,rgba(217,72,15,.12),rgba(255,255,255,.02) 45%),var(--panel)">
+    <h3>🔥 Bazer Mode</h3>
+    <div class="row">${led(bzOn ? 'ok' : (bzAgent ? 'warn' : 'fail'))}<span class="big">${bzOn ? 'ติดตั้งแล้ว' : (bzAgent ? 'ปิดอยู่' : 'ยังไม่พบ bazer.md')}</span>${b.pluginOk ? '<span class="badge ok">submit_plan พร้อม</span>' : '<span class="badge warn">planningAgents ไม่ครบ (plan · bazer · arena · snack)</span>'}<span class="grow"></span>${agentSwitch('bazer.md')}</div>
+    <div class="sub">${esc(bzAgent && bzAgent.desc ? bzAgent.desc : 'prompt อะไรก็ได้ → วางแผน Arena → ด่าน 1 Plannotator (อนุมัติ + สลับเป็น arena) → Arena Mode → ด่าน 2 แผนสุดท้าย → อนุมัติแล้วสร้าง')} · สีโหมด <span class="mono">${esc(b.color || '#D9480F')}</span></div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="copy-bazer">คัดลอกคำสั่งเข้าโหมด</button>
+      <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ขั้นตอนของโหมด</h3>
+    <div class="verify-list">
+      <div class="vrow">${led('info')}<div><b>1. วิเคราะห์ + วางแผน Arena</b><div class="small muted">อ่าน prompt (read-only) → candidates 2-3 ทางต่างกันจริง + rubric + โมเดลจากชิปด้านล่าง</div></div></div>
+      <div class="vrow">${led('warn')}<div><b>2. ด่าน 1 · Plannotator</b><div class="small muted">ยื่นแผน Arena — อนุมัติแล้วเลือกสลับ agent เป็น <b>arena</b> (ปุ่มของ Plannotator เอง) หรือ approve ธรรมดา = Bazer รัน arena ภายในให้</div></div></div>
+      <div class="vrow">${led('info')}<div><b>3. Arena Mode</b><div class="small muted">Fan out → Cross-judge → Pick a base → Graft → Verify (sketches ลง temp เท่านั้น)</div></div></div>
+      <div class="vrow">${led('warn')}<div><b>4. ด่าน 2 · Plannotator</b><div class="small muted">แผนสุดท้ายหลัง Arena (base + graft + ขั้นตอน + verification) — arena ยื่นเองได้เพราะอยู่ใน planningAgents</div></div></div>
+      <div class="vrow">${led('ok')}<div><b>5. ตัดสินใจ</b><div class="small muted">feedback → แก้+ยื่นใหม่ · อนุมัติ → สลับเป็น build แล้วลุยสร้าง (พิสูจน์ผลก่อนบอกเสร็จ)</div></div></div>
+    </div>
+    <div class="mt"><span class="small muted">เข้าโหมด: กด Tab เลือก <b>Bazer</b> ใน TUI หรือรัน <span class="mono">opencode run --agent bazer "โจทย์"</span></span></div>
+  </div>
+  <div class="card">
+    <h3>🔥 โมเดล Arena ของ Bazer (ใช้หลายโมเดลพร้อมกัน)</h3>
+    <div class="small muted">บันทึกลงบรรทัด <span class="mono">bazer arena runners</span> ใน pstack-models.md — แยกจาก arena เดี่ยว ๆ</div>
+    <div class="chips mt" id="bzChips"></div>
+    <div class="flex mt">
+      <input type="text" class="bz-add grow" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดล แล้วกด +">
+      <button class="btn sm" data-act="bz-add">+ เพิ่มโมเดล</button>
+      <button class="btn sm gold" data-act="bz-save">บันทึก</button>
+      <button class="btn sm ghost" data-act="amodels-fetch">⇣ ดึงรายชื่อโมเดล</button>
+    </div>
+    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
+  </div>
+  ${bzAgent && bzAgent.content ? `
+  <div class="card">
+    <h3>✏️ แก้ prompt ของโหมด (bazer.md)</h3>
+    <textarea class="agent-edit" data-file="bazer.md" style="min-height:240px">${esc(bzAgent.content)}</textarea>
+    <div class="mt"><button class="btn gold" data-act="agent-save">บันทึก bazer.md</button><span class="small muted" style="margin-left:10px">สำรองก่อนเขียนทุกครั้ง · มีผลกับ session ใหม่</span></div>
+  </div>` : ''}`;
+}
+function vSnack(){
+  const s = S.snack || {};
+  const snAgent = agentOf('snack.md');
+  const snOn = !!(snAgent && !snAgent.disabled);
+  return `
+  <div class="card" style="border-color:rgba(64,224,208,.5);background:linear-gradient(160deg,rgba(64,224,208,.12),rgba(255,255,255,.02) 45%),var(--panel)">
+    <h3>🍟 Snack</h3>
+    <div class="row">${led(snOn ? 'ok' : (snAgent ? 'warn' : 'fail'))}<span class="big">${snOn ? 'ติดตั้งแล้ว' : (snAgent ? 'ปิดอยู่' : 'ยังไม่พบ snack.md')}</span>${s.pluginOk ? '<span class="badge ok">submit_plan พร้อม</span>' : '<span class="badge warn">planningAgents ยังไม่มี snack</span>'}<span class="grow"></span>${agentSwitch('snack.md')}</div>
+    <div class="sub">${esc(snAgent && snAgent.desc ? snAgent.desc : "prompt อะไรก็ได้ → ประมวลผลด้วย poteto's skills (~60) → ด่านเดียว Plannotator (submit_plan) → อนุมัติแล้วสร้าง → เสร็จแล้วกลับสู่สภาวะ poteto พร้อมรอบถัดไป")} · สีโหมด <span class="mono">${esc(s.color || '#40E0D0')}</span></div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="copy-snack">คัดลอกคำสั่งเข้าโหมด</button>
+      <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ขั้นตอนของโหมด</h3>
+    <div class="verify-list">
+      <div class="vrow">${led('info')}<div><b>1. ประมวลผล prompt ด้วย poteto's skills</b><div class="small muted">โหลด poteto-mode + จับคู่ playbook/principle แล้วแปลงโจทย์เป็นแผนที่ตัดสินใจหลักครบ</div></div></div>
+      <div class="vrow">${led('warn')}<div><b>2. ด่านเดียว · Plannotator</b><div class="small muted">ยื่นแผนผ่าน submit_plan — อนุมัติ / แก้ตาม feedback / สลับเป็น build เพื่อลุยสร้าง</div></div></div>
+      <div class="vrow">${led('ok')}<div><b>3. สร้าง → กลับ poteto</b><div class="small muted">พิสูจน์ผลจริงก่อนบอกเสร็จ แล้วกลับสู่สภาวะ poteto รอรอบถัดไป</div></div></div>
+    </div>
+    <div class="mt"><span class="small muted">เข้าโหมด: กด Tab เลือก <b>Snack</b> ใน TUI หรือรัน <span class="mono">opencode run --agent snack "โจทย์"</span></span></div>
+  </div>
+  ${snAgent && snAgent.content ? `
+  <div class="card">
+    <h3>✏️ แก้ prompt ของโหมด (snack.md)</h3>
+    <textarea class="agent-edit" data-file="snack.md" style="min-height:240px">${esc(snAgent.content)}</textarea>
+    <div class="mt"><button class="btn gold" data-act="agent-save">บันทึก snack.md</button><span class="small muted" style="margin-left:10px">สำรองก่อนเขียนทุกครั้ง · มีผลกับ session ใหม่</span></div>
+  </div>` : ''}`;
+}
+
+/* ---------- modes (primary agents) ---------- */
+
+const AGENT_META = {
+  'bazer.md':       { name: 'Bazer',   icon: '🔥' },
+  'arena.md':       { name: 'Arena',   icon: '⚔️' },
+  'snack.md':       { name: 'Snack',   icon: '🍟' },
+  'poteto-mode.md': { name: 'Poteto',  icon: '🥔' },
+  'buddha.md':      { name: 'Buddha',  icon: '🧘' },
+  'advisor.md':     { name: 'Advisor', icon: '🧭' },
+};
+const MODE_ORDER = ['bazer.md', 'arena.md', 'snack.md', 'poteto-mode.md', 'buddha.md', 'advisor.md'];
+function agentOf(file){
+  const b = String(file).replace(/\.disabled$/, '');
+  return (S.agents || []).find(a => a.file.replace(/\.disabled$/, '') === b);
+}
+function agentTabId(file){ return file === 'bazer.md' ? 'bazer' : file === 'snack.md' ? 'snack' : 'agent:' + file; }
+function agentSwitch(file){
+  const a = agentOf(file);
+  if(!a) return '';
+  return `<label class="switch" title="${a.disabled ? 'เปิดโหมดนี้' : 'ปิดโหมดนี้'}"><input type="checkbox" data-act="agent-toggle" data-file="${esc(a.file)}" ${a.disabled ? '' : 'checked'}><i></i></label>`;
+}
+function renderNavModes(){
+  const el = document.getElementById('navModes');
+  if(!el) return;
+  const live = (S.agents || []).filter(a => a.mode === 'primary').map(a => a.file.replace(/\.disabled$/, ''));
+  const files = [...MODE_ORDER, ...live.filter(f => !MODE_ORDER.includes(f)).sort()];
+  let on = 0, total = 0;
+  el.innerHTML = files.map(f => {
+    const a = agentOf(f);
+    const meta = AGENT_META[f] || { name: f.replace(/\.md$/, ''), icon: '🤖' };
+    if(a){ total++; if(!a.disabled) on++; }
+    const col = a && !a.disabled && a.color && a.colorOk !== false ? a.color.replace(/["']/g, '') : '';
+    const cls = 'agent-tab' + (a ? (a.disabled ? ' off' : '') : ' miss') + (agentTabId(f) === TAB ? ' on' : '');
+    return `<button data-tab="${agentTabId(f)}" class="${cls}" title="${esc(a ? (a.desc || f) : 'ยังไม่พบไฟล์ ' + f)}"><span class="adot"${col ? ` style="background:${esc(col)};box-shadow:0 0 8px ${esc(col)}66"` : ''}></span><span class="aname">${meta.icon} ${esc(meta.name)}</span>${a && a.colorOk === false ? '<span class="abadge awarn" title="color ไม่ใช่ hex — V2 จะทิ้งโหมดนี้">!</span>' : ''}${a && a.disabled ? '<span class="abadge">ปิด</span>' : ''}${!a ? '<span class="abadge">ยังไม่มี</span>' : ''}</button>`;
+  }).join('');
+  const cnt = document.getElementById('navModesCnt');
+  if(cnt) cnt.textContent = total ? `${on}/${total} เปิด` : '';
+}
+function vAgent(file){
+  const a = agentOf(file);
+  const meta = AGENT_META[file] || { name: file.replace(/\.md$/, ''), icon: '🤖' };
+  if(!a) return `
+  <div class="card">
+    <h3>${meta.icon} ${esc(meta.name)} Mode</h3>
+    <div class="row">${led('fail')}<span class="big">ยังไม่พบไฟล์ ${esc(file)}</span></div>
+    <div class="sub">ติดตั้งได้จากแท็บ pStack → การ์ด Agents — หรือกด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวม</div>
+    <div class="mt"><button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button></div>
+  </div>`;
+  const on = !a.disabled;
+  const hasSkill = n => ((S.skills && S.skills.items) || []).some(x => x.name === n);
+  const pmHas = /^bazer arena runners\s*:/m.test((S.models2 && S.models2.content) || '');
+  const deps = {
+    'bazer.md': [
+      ['skill arena', hasSkill('arena')],
+      ['ปลั๊กอิน Plannotator — planningAgents: plan · bazer · arena · snack', !!(S.bazer && S.bazer.pluginOk)],
+      ['ปลั๊กอิน bazer-fire — ไฟ 🔥 ลุกในโหมด Bazer', !!(S.fire && S.fire.file && S.fire.reg)],
+      ['บรรทัด bazer arena runners ใน pstack-models.md', pmHas],
+    ],
+    'arena.md': [['skill arena', hasSkill('arena')]],
+    'snack.md': [
+      ['skill poteto-mode', hasSkill('poteto-mode')],
+      ['ปลั๊กอิน Plannotator — planningAgents มี snack', !!(S.snack && S.snack.pluginOk)],
+    ],
+    'poteto-mode.md': [['skill poteto-mode', hasSkill('poteto-mode')]],
+  }[file] || [];
+  return `
+  <div class="grid">
+    <div class="card">
+      <h3>${meta.icon} ${esc(meta.name)} Mode</h3>
+      <div class="row">${led(on ? 'ok' : 'warn')}<span class="big">${on ? 'เปิดใช้งาน' : 'ปิดอยู่'}</span><span class="grow"></span>${agentSwitch(file)}</div>
+      <div class="sub">${esc(a.desc || '')}</div>
+      <div class="chips mt"><span class="chip"><b class="mono">${esc(a.file)}</b></span>${a.color ? `<span class="chip"><span class="adot" style="background:${esc(a.color.replace(/["']/g, ''))}"></span><b>${esc(a.color.replace(/["']/g, ''))}</b></span>` : ''}${a.colorOk === false ? '<span class="badge red">color ไม่ใช่ hex — V2 จะทิ้งโหมดนี้</span>' : ''}</div>
+      <div class="mt flex">
+        <button class="btn sm" data-act="copy-agent" data-agent="${esc(file.replace(/\.md$/, ''))}">คัดลอกคำสั่งเข้าโหมด</button>
+        <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ของที่โหมดนี้ต้องมี</h3>
+      <div class="verify-list">${deps.length ? deps.map(([l, ok]) => `<div class="vrow">${led(ok ? 'ok' : 'warn')}<div><b>${esc(l)}</b></div></div>`).join('') : '<div class="muted small">ไม่พึ่งอะไรเป็นพิเศษ — ไฟล์เดียวจบ ใช้ได้ทันที</div>'}</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>✏️ แก้ prompt ของโหมด (${esc(a.file)})</h3>
+    <div class="small muted">บันทึกแล้วมีผลกับ session ใหม่ — สำรองอัตโนมัติก่อนเขียนทุกครั้ง</div>
+    <textarea class="agent-edit mt" data-file="${esc(a.file)}" style="min-height:240px">${esc(a.content || '')}</textarea>
+    <div class="mt flex"><button class="btn gold" data-act="agent-save">บันทึก ${esc(a.file)}</button><span class="small muted">สถานะบนสุด: สวิตช์เปิด/ปิดโหมดนี้</span></div>
+  </div>`;
+}
+function vProjects(){
+  const items = S.projects || [];
+  const rows = items.map(p => {
+    const d = p.lastUsed ? new Date(p.lastUsed).toLocaleDateString('th-TH') : '—';
+    const agentRows = (p.agents || []).map(a => {
+      const full = p.root + '\\.opencode\\agents\\' + a.file;
+      return `
+      <div class="vrow">${led(a.disabled ? 'warn' : 'ok')}
+        <div class="grow"><b class="mono small">${esc(a.file)}</b>
+        ${a.content ? `<details class="mt"><summary>✏️ แก้ไข ${esc(a.file)}</summary><textarea class="agent-edit mt" data-file="${esc(full)}">${esc(a.content)}</textarea><div class="mt"><button class="btn sm gold" data-act="agent-save">บันทึก</button></div></details>` : ''}
+        </div>
+        <button class="btn sm" data-act="pj-toggle" data-file="${esc(full)}" data-en="${a.disabled ? 1 : 0}">${a.disabled ? 'เปิด' : 'ปิด'}</button>
+        <button class="btn sm danger" data-act="pj-del" data-file="${esc(full)}">ลบ</button>
+      </div>`;
+    }).join('') || '<div class="muted small">ยังไม่มี agent — เพิ่มจากรายการด้านล่าง</div>';
+    const opts = (S.agentLib || []).map(n => `<option>${esc(n)}</option>`).join('');
+    return `<div class="card">
+      <div class="spread"><b class="mono small">${esc(p.root)}</b>
+        <span class="flex">${p.hasOpencode ? '<span class="badge ok">.opencode ✓</span>' : '<span class="badge">ยังไม่มี .opencode</span>'}<span class="badge">${p.sessions || 0} sessions</span><span class="badge">ล่าสุด ${d}</span></span>
+      </div>
+      <details class="mt"><summary>agents ในโปรเจกต์ (${(p.agents || []).length})</summary>
+        <div class="verify-list mt">${agentRows}</div>
+        <div class="flex mt">
+          <select class="pj-add grow">${opts || '<option value="">— ไม่พบ agent ต้นทาง —</option>'}</select>
+          <button class="btn sm" data-act="pj-add" data-root="${esc(p.root)}">+ ติดตั้ง agent</button>
+          <button class="btn sm ghost" data-act="pj-init" data-root="${esc(p.root)}">ติดตั้ง .opencode เริ่มต้น</button>
+        </div>
+      </details>
+    </div>`;
+  }).join('') || '<div class="muted small">ยังไม่ได้สแกนในรอบนี้ — กด "สแกนเครื่อง" ด้านบน (ผลสแกนจะหายเมื่อปิดแอป)</div>';
+  return `
+  <div class="card">
+    <h3>โปรเจกต์ที่เคยใช้ OpenCode</h3>
+    <div class="small muted">สแกนจากฐานข้อมูล session ของ OpenCode (โฟลเดอร์ที่คุณเคยเปิดใช้) + ตรวจว่าแต่ละโปรเจกต์มี .opencode/agents อะไร — ใช้จัดการ agent.md แยกรายโปรเจกต์</div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="pj-scan">⇣ สแกนเครื่อง</button>
+      <span class="small muted">${S.projectsAt ? 'สแกนล่าสุด: ' + new Date(S.projectsAt).toLocaleString('th-TH') : 'ยังไม่เคยสแกนในรอบนี้'}</span>
+    </div>
+  </div>
+  ${rows}`;
+}
+function renderSetupBox(){
+  const el = document.getElementById('setupBox');
+  if(!el) return;
+  if(!SETUP){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="verify-list">${SETUP.steps.map(s => `
+    <div class="vrow">${led(s.will ? 'warn' : 'ok')}
+      <div class="grow"><label class="chk"><input type="checkbox" class="su-step" data-id="${s.id}" ${s.will ? 'checked' : 'disabled'}> <b>${esc(s.label)}</b></label>
+      <div class="small muted" style="margin-left:25px">${esc(s.detail)}</div></div>
+    </div>`).join('')}</div>
+    <div class="flex mt">
+      <label class="chk"><input type="checkbox" id="suOverwrite"> ทับไฟล์ที่มีอยู่ด้วย (อัปเดตเวอร์ชัน)</label>
+      <label class="chk"><input type="checkbox" id="suAutostart"> เปิด autostart server ตอนล็อกอิน</label>
+    </div>
+    <div class="mt"><button class="btn gold" data-act="setup-run">ติดตั้งตามที่เลือก</button></div>`;
+}
+function updBoxHtml(){
+  if(!UP) return '';
+  const c = UP.counts || {};
+  const rows = (UP.changed || []).map(i => `
+    <div class="vrow">${led(i.status === 'new' ? 'info' : 'warn')}<div><b class="mono small">${esc(i.cat)}/${esc(i.name)}</b><div class="small muted">${i.status === 'new' ? 'ยังไม่มีในเครื่อง — จะติดตั้งให้' : 'มีของเก่าอยู่ — จะอัพเดตทับ (สำรองก่อน)'}</div></div></div>`).join('') || `<div class="vrow">${led('ok')}<div><b>ทุกอย่างตรงกับชุดใหม่แล้ว</b><div class="small muted">ไม่ต้องอัพเดตอะไร</div></div></div>`;
+  return `
+    <div class="row">
+      <span class="badge warn">ต่าง ${c.diff || 0}</span>
+      <span class="badge gold">ใหม่ ${c.new || 0}</span>
+      <span class="badge">เหมือน ${c.same || 0}</span>
+      ${UP.launchSkipped ? '<span class="badge red">ข้าม: ไฟล์ launch (ยังไม่ตั้ง launchDir)</span>' : ''}
+    </div>
+    <div class="verify-list mt" style="max-height:280px;overflow:auto">${rows}</div>`;
+}
+function vPl(){
+  const g = S.pl.configs.find(c=>c.global);
+  const cmds = S.commands.filter(c=>c.file.startsWith('plannotator')).map(c => `
+    <div class="vrow">${led(c.disabled?'warn':'ok')}<div class="grow"><b class="mono">/${esc(c.file.replace('.md','').replace('.disabled',''))}</b></div>
+    <button class="btn sm" data-act="cmd-toggle" data-file="${esc(c.file)}" data-en="${c.disabled?1:0}">${c.disabled?'เปิด':'ปิด'}</button></div>`).join('') || '<div class="muted small">ไม่พบคำสั่ง plannotator</div>';
+  const cfgs = S.pl.configs.map(c => `<div class="vrow">${led(c.has?'ok':'info')}<div><b class="mono small">${esc(c.path)}</b><div class="small muted">${c.has?'ลงทะเบียน plugin อยู่':'ไม่ได้ลงทะเบียน'}</div></div></div>`).join('');
+  const vers = S.pl.cache.map(v=>`<span class="chip"><b>v${esc(v.version)}</b></span>`).join('') || '<span class="muted small">ไม่พบ cache</span>';
+  return `
+  <div class="card">
+    <h3>ปลั๊กอิน (global config)</h3>
+    <div class="row"><label class="switch"><input type="checkbox" data-act="pl-toggle" ${g&&g.has?'checked':''}><i></i></label>
+    <span>${g&&g.has?'เปิดใช้งานใน config หลัก':'ปิด (จะไม่โหลดใน session ใหม่)'}</span></div>
+    <div class="hair"></div>
+    <div class="verify-list">${cfgs}</div>
+    <div class="small muted mt">แนะนำเปิดเฉพาะ global config — ถ้าโปรเจกต์อื่นลงทะเบียนไว้ซ้ำ จะโหลดจากที่นั้นแทน</div>
+  </div>
+  <div class="card">
+    <h3>เวอร์ชัน &amp; cache</h3>
+    <div class="row">${vers}</div>
+    <div class="sub">CLI: ${esc(S.pl.cliPath||'ไม่พบบน PATH')}</div>
+    <div class="mt flex">
+      <button class="btn sm" data-act="pl-version">ตรวจเวอร์ชัน</button>
+      <button class="btn sm danger" data-act="pl-clear" title="ลบ cache เพื่อให้ติดตั้งใหม่ตอนเปิด OpenCode ครั้งถัดไป">ล้าง cache plugin</button>
+      <button class="btn sm ghost" data-act="open" data-key="cache">เปิดโฟลเดอร์ cache</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>คำสั่งลัด</h3>
+    <div class="verify-list">${cmds}</div>
+    <div class="mt"><button class="btn sm ghost" data-act="open" data-key="commands">เปิดโฟลเดอร์ commands</button></div>
+  </div>
+  <div class="card">
+    <h3>ตั้งค่า Plannotator (config.json)</h3>
+    <div class="small muted mono">${esc(S.pl.configJson?.path || '')}</div>
+    <div class="row mt">
+      <label class="chk"><input type="checkbox" id="plSemantic" ${S.pl.configJson?.parsed?.reviewAnalysis?.semanticDiff ? 'checked' : ''}> Semantic diff (วิเคราะห์ diff เชิงความหมาย)</label>
+      <label class="chk"><input type="checkbox" id="plCallFlow" ${S.pl.configJson?.parsed?.reviewAnalysis?.callFlow ? 'checked' : ''}> Call flow</label>
+    </div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="pl-cfg-save">บันทึก config</button>
+      <span class="small muted">ฟิลด์อื่นในไฟล์ถูกเก็บครบ · มีผลกับรอบถัดไปของ Plannotator</span>
+    </div>
+    <details class="mt"><summary>แก้ config.json ดิบ (ขั้นสูง)</summary>
+      <textarea id="plCfgRaw" class="mt">${esc(S.pl.configJson?.content || '{}')}</textarea>
+      <div class="mt"><button class="btn sm" data-act="pl-cfg-raw-save">บันทึก JSON ดิบ</button></div>
+    </details>
+    <details class="mt"><summary>install-prefs (ขั้นสูง — มีผลตอนติดตั้ง/อัปเดตครั้งถัดไป)</summary>
+      <textarea id="plPrefs" class="mt">${esc(S.pl.prefs?.content || '')}</textarea>
+      <div class="mt"><button class="btn sm" data-act="pl-prefs-save">บันทึก install-prefs</button></div>
+    </details>
+  </div>
+  <div class="card">
+    <h3>ข้อมูล Plannotator</h3>
+    <div class="small muted mono">${esc(S.paths.plannotatorDir)}</div>
+    <div class="mt flex">
+      <button class="btn sm" data-act="open" data-key="plannotator">เปิดคลังแผน/ข้อมูล</button>
+    </div>
+  </div>`;
+}
+
+function vHist(){
+  const rows = [...S.history].reverse().map(h => `
+    <tr><td class="small mono">${esc(h.time)}</td><td class="small">${esc(h.action)}</td>
+    <td>${led(h.result==='ok'?'ok':'fail')}</td><td class="small muted">${esc(h.detail)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted small">ยังไม่มีประวัติ</td></tr>';
+  const bks = S.backups.map(b => `
+    <tr><td class="mono small">${esc(b.set)}</td><td class="small">${b.count} ไฟล์</td>
+    <td><button class="btn sm danger" data-act="bk-restore" data-set="${esc(b.set)}">กู้คืนชุดนี้</button></td></tr>`).join('') || '<tr><td colspan="3" class="muted small">ยังไม่มีชุดสำรอง</td></tr>';
+  return `
+  <div class="card"><h3>ประวัติการเปลี่ยนแปลง (${S.history.length} รายการล่าสุด)</h3>
+    <table><tr><th>เวลา</th><th>การกระทำ</th><th></th><th>รายละเอียด</th></tr>${rows}</table>
+  </div>
+  <div class="card"><h3>ชุดสำรอง (backups)</h3>
+    <table><tr><th>ชุด</th><th>ขนาด</th><th></th></tr>${bks}</table>
+    <div class="mt flex">
+      <button class="btn sm ghost" data-act="open" data-key="backups">เปิดโฟลเดอร์ backups</button>
+      <span class="small muted">ทุกการแก้ผ่านแอปจะสำรองก่อนเสมอ — กู้คืนได้จากที่นี่</span>
+    </div>
+  </div>`;
+}
+
+/* ---------- events ---------- */
+
+document.addEventListener('input', e => {
+  if(e.target.id === 'skFilter'){ FILTER = e.target.value; const l = document.getElementById('skillList'); if(l) l.innerHTML = skillRows(); }
+});
+
+document.addEventListener('change', e => {
+  const t = e.target.closest('[data-act]');
+  if(!t || t.tagName !== 'INPUT') return;
+  if(t.dataset.act === 'autostart') act('autostart', { on: t.checked });
+  else if(t.dataset.act === 'pl-toggle') act('plannotator-toggle', { enable: t.checked }, 'สลับปลั๊กอิน Plannotator ใน global config?');
+  else if(t.dataset.act === 'agent-toggle') act('agent-toggle', { file: t.dataset.file, enable: t.checked }, 'สลับสถานะ agent นี้?');
+});
+
+document.addEventListener('click', async e => {
+  const navBtn = e.target.closest('#nav button[data-tab]');
+  if(navBtn){ tab(navBtn.dataset.tab); return; }
+  const t = e.target.closest('[data-act]');
+  if(!t) return;
+  if(t.tagName === 'INPUT') return; // checkbox จัดการผ่าน change event
+  const a = t.dataset.act;
+  switch(a){
+    case 'refresh': if(TAB === 'pstack' && PM && document.getElementById('pmEditor')) collectPM(); refresh(); break;
+    case 'verify': runVerify(); break;
+    case 'lock-mode': {
+      const mode = t.dataset.mode, restart = document.getElementById('lockRestart')?.checked;
+      const label = MODE_LABEL[mode]?.[0] || mode;
+      act('set-lock', { mode, restart }, `เปลี่ยนเป็น "${label}"${restart?' และรีสตาร์ท server':''}?`);
+      break;
+    }
+    case 'bl-fetch': {
+      try{ const r = await api('/api/action', { post: { id:'list-models' } }); MODELS = r.models || []; toast('ดึงได้ ' + MODELS.length + ' โมเดล'); render(); }
+      catch(err){ toast('ดึงไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'bl-add': {
+      const v = document.getElementById('blSelect')?.value;
+      if(v) act('update-blacklist', { add:[v] });
+      break;
+    }
+    case 'bl-del': act('update-blacklist', { remove:[t.dataset.m] }, `ปลดบล็อกโมเดล ${t.dataset.m}?`); break;
+    case 'model-save': act('set-model-effort', {
+      model: document.getElementById('mModel').value.trim(),
+      effort: document.getElementById('mEffort').value,
+      sync: document.getElementById('mSync').checked,
+    }); break;
+    case 'srv-health': act('health-check'); break;
+    case 'srv-restart': act('restart-server', {}, 'รีสตาร์ท server 4096? (Cline ที่กำลังทำงานอยู่อาจสะดุดชั่วครู่)'); break;
+    case 'srv-service': act('restart-service', {}, 'รีสตาร์ท opencode service?'); break;
+    case 'autostart': act('autostart', { on: t.checked }); break;
+    case 'copy-cline': { try{ await navigator.clipboard.writeText(S.model.current||''); toast('คัดลอกแล้ว'); }catch{ toast('คัดลอกไม่สำเร็จ', true); } break; }
+    case 'copy-agent': { const n = t.dataset.agent || ''; try{ await navigator.clipboard.writeText(`opencode run --agent ${n} "โจทย์ของคุณ"`); toast('คัดลอกแล้ว — หรือกด Tab เลือกโหมดใน TUI'); }catch{ toast('คัดลอกไม่สำเร็จ', true); } break; }
+    case 'cli-save': act('save-text', { target:'cli', content: document.getElementById('cliJson').value }); break;
+    case 'build-preview': {
+      try{ BP = await api('/api/action', { post: { id:'build-preview' } }); render(); }
+      catch(err){ toast('ดู diff ไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'build-apply': {
+      const parts = { skills: document.getElementById('bpSkills').checked, agents: document.getElementById('bpAgents').checked, commands: document.getElementById('bpCommands').checked, config: document.getElementById('bpConfig').checked };
+      const cleanup = document.getElementById('bpCleanup')?.checked || false;
+      act('build-apply', { parts, cleanup }, 'Apply ชุด build ทับของเดิม? (สำรองอัตโนมัติก่อนทุกไฟล์)');
+      break;
+    }
+    case 'skill-hide': act('skill-hide', { name: t.dataset.name }); break;
+    case 'skill-show': act('skill-show', { name: t.dataset.name }); break;
+    case 'skill-field': act('skill-remove-field', { name: t.dataset.name }, 'ลบฟิลด์ disable-model-invocation ออกจาก skill นี้?'); break;
+    case 'pm-save': act('save-text', { target:'pstack-models', content: document.getElementById('pmText').value }); break;
+    case 'pm-add': { collectPM(); PM.rows.push({ role:'', models:'' }); renderPM(); break; }
+    case 'pm-del': { collectPM(); PM.rows.splice(+t.dataset.idx, 1); renderPM(); break; }
+    case 'pm-reset': { PM = null; initPM(); renderPM(); break; }
+    case 'pm-save2': { collectPM(); act('save-pstack-models', { budget: PM.budget, rows: PM.rows }); break; }
+    case 'pm-chip-add': {
+      collectPM();
+      const i = +t.dataset.idx;
+      const row = PM.rows[i];
+      const inp = t.parentElement.querySelector('.pm-add-input');
+      const v = (inp?.value || '').trim();
+      if(row && v){ row.models = Array.isArray(row.models) ? row.models : []; if(!row.models.includes(v)) row.models.push(v); }
+      renderPM();
+      break;
+    }
+    case 'pm-chip-del': {
+      collectPM();
+      const row = PM.rows[+t.dataset.idx];
+      if(row && Array.isArray(row.models)) row.models.splice(+t.dataset.j, 1);
+      renderPM();
+      break;
+    }
+    case 'amodels-fetch': {
+      try{ const r = await api('/api/action', { post: { id:'list-avail-models' } }); AMODELS = r.models || []; toast(r.message || ('ได้ ' + AMODELS.length + ' โมเดล')); render(); }
+      catch(err){ toast('ดึงรายชื่อไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'pj-scan': {
+      try{ const r = await api('/api/action', { post: { id:'scan-projects' } }); toast(r.message || 'สแกนเสร็จ'); await refresh(); }
+      catch(err){ toast('สแกนไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'pj-toggle': act('project-agent-toggle', { file: t.dataset.file, enable: t.dataset.en === '1' }, 'สลับสถานะ agent ในโปรเจกต์นี้?'); break;
+    case 'pj-del': act('project-agent-del', { file: t.dataset.file }, 'ลบ agent ในโปรเจกต์นี้? (สำรองไว้ — กู้ได้ในแท็บประวัติ)'); break;
+    case 'pj-add': {
+      const sel = t.closest('.flex')?.querySelector('.pj-add');
+      if(sel && sel.value) act('project-agent-add', { root: t.dataset.root, name: sel.value });
+      break;
+    }
+    case 'pj-init': act('project-init', { root: t.dataset.root }, 'ติดตั้ง .opencode เริ่มต้น (agents ชุด pStack + AGENTS.md + opencode.json) ในโปรเจกต์นี้?'); break;
+    case 'setup-preview': {
+      try{ SETUP = await api('/api/action', { post: { id:'setup-preview' } }); renderSetupBox(); }
+      catch(err){ toast('พรีวิวไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'setup-quick': {
+      try{
+        const pv = await api('/api/action', { post: { id:'setup-preview' } });
+        const steps = pv.steps.filter(s => s.will).map(s => s.id);
+        if(!steps.length){ toast('ทุกอย่างตั้งไว้ครบแล้ว — ไม่มีอะไรต้องติดตั้ง'); break; }
+        if(!confirm('ติดตั้ง ' + steps.length + ' ขั้นตอน: ' + steps.join(', ') + ' ?')) break;
+        const r = await api('/api/action', { post: { id:'setup-apply', steps } });
+        toast(r.message || 'ติดตั้งเสร็จ'); await refresh(); runVerify(false);
+      }catch(err){ toast('ติดตั้งไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'setup-run': {
+      const steps = [...document.querySelectorAll('.su-step:checked')].map(x => x.dataset.id);
+      if(!steps.length){ toast('ยังไม่ได้เลือกขั้นตอน'); break; }
+      act('setup-apply', { steps, overwrite: document.getElementById('suOverwrite')?.checked || false, autostart: document.getElementById('suAutostart')?.checked || false }, 'ติดตั้ง ' + steps.length + ' ขั้นตอนที่เลือก?');
+      break;
+    }
+    case 'update-check': {
+      try{ UP = await api('/api/action', { post: { id:'update-check' } }); toast(UP.message || 'ตรวจแล้ว'); render(); }
+      catch(err){ toast('ตรวจไม่สำเร็จ: ' + err.message, true); }
+      break;
+    }
+    case 'update-run': {
+      if(!UP){
+        try{ UP = await api('/api/action', { post: { id:'update-check' } }); }catch(err){ toast('ตรวจไม่สำเร็จ: ' + err.message, true); break; }
+        if(!UP.counts || (!UP.counts.new && !UP.counts.diff)){ toast('ทุกอย่างเป็นเวอร์ชันล่าสุดอยู่แล้ว'); render(); break; }
+      }
+      UP = null;
+      act('update-apply', {}, 'อัพเดตทับไฟล์ที่ต่าง/ใหม่ทั้งหมด? (สำรองอัตโนมัติก่อนทุกไฟล์)');
+      break;
+    }
+    case 'agent-save': {
+      const ta = t.closest('details')?.querySelector('.agent-edit') || (t.closest('.card')?.querySelector('.agent-edit'));
+      if(!ta){ toast('ไม่พบช่องแก้ไข', true); break; }
+      act('save-agent', { file: ta.dataset.file, content: ta.value });
+      break;
+    }
+    case 'bz-add': {
+      if(!BAM) BAM = parseBazerModels();
+      const inp = document.querySelector('.bz-add');
+      const v = (inp?.value || '').trim();
+      if(v && !BAM.includes(v)) BAM.push(v);
+      renderBzChips();
+      break;
+    }
+    case 'bz-del': {
+      if(!BAM) BAM = parseBazerModels();
+      BAM.splice(+t.dataset.j, 1);
+      renderBzChips();
+      break;
+    }
+    case 'bz-save': act('save-bazer-arena', { models: BAM || parseBazerModels() }); break;
+    case 'copy-bazer': {
+      try{ await navigator.clipboard.writeText('opencode run --agent bazer "โจทย์ของคุณ"'); toast('คัดลอกแล้ว — หรือกด Tab เลือก Bazer ใน TUI'); }
+      catch{ toast('คัดลอกไม่สำเร็จ', true); }
+      break;
+    }
+    case 'copy-snack': {
+      try{ await navigator.clipboard.writeText('opencode run --agent snack "โจทย์ของคุณ"'); toast('คัดลอกแล้ว — หรือกด Tab เลือก Snack ใน TUI'); }
+      catch{ toast('คัดลอกไม่สำเร็จ', true); }
+      break;
+    }
+    case 'pl-cfg-save': act('save-plannotator-config', { semanticDiff: document.getElementById('plSemantic').checked, callFlow: document.getElementById('plCallFlow').checked }); break;
+    case 'pl-cfg-raw-save': act('save-plannotator-config', { raw: document.getElementById('plCfgRaw').value }); break;
+    case 'pl-prefs-save': act('save-plannotator-prefs', { content: document.getElementById('plPrefs').value }); break;
+    case 'npx-list': act('npx-skills', { op:'list' }); break;
+    case 'npx-update': act('npx-skills', { op:'update' }, 'รัน npx skills update -g? (อาจใช้เวลาหลายนาที)'); break;
+    case 'agent-toggle': act('agent-toggle', { file: t.dataset.file, enable: t.dataset.en === '1' }, 'สลับสถานะ agent นี้?'); break;
+    case 'agent-del': act('agent-del', { file: t.dataset.file }, `ลบ ${t.dataset.file}? (สำรองไว้ก่อน)`); break;
+    case 'cmd-toggle': act('command-toggle', { file: t.dataset.file, enable: t.dataset.en === '1' }, 'สลับสถานะคำสั่งนี้?'); break;
+    case 'pl-toggle': act('plannotator-toggle', { enable: t.checked }, 'สลับปลั๊กอิน Plannotator ใน global config?'); break;
+    case 'pl-clear': act('plannotator', { op:'clear-cache' }, 'ล้าง cache ปลั๊กอิน? (OpenCode จะติดตั้งใหม่ตอนเปิดครั้งถัดไป)'); break;
+    case 'pl-version': act('plannotator', { op:'version' }); break;
+    case 'open': { try{ await api('/api/action', { post: { id:'open-folder', key: t.dataset.key } }); }catch(err){ toast(err.message, true); } break; }
+    case 'bk-restore': act('restore-backup', { set: t.dataset.set }, `กู้คืนชุดสำรอง ${t.dataset.set}?\nไฟล์ปัจจุบันจะถูกสำรองก่อนเขียนทับ`); break;
+    default: break;
+  }
+});
+
+refresh();
+setInterval(() => { if(!document.hidden) refreshQuiet(); }, 30000);
+async function refreshQuiet(){ const ae = document.activeElement; if(ae && ['TEXTAREA','INPUT','SELECT'].includes(ae.tagName)) return; try{ S = await api('/api/state'); render(); }catch{} }
+</script>
+</body>
+</html>
