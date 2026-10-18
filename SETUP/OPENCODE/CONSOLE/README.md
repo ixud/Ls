@@ -4,13 +4,13 @@
 
 สเปคของโหมด/โฟลว์/การติดตั้ง (ต้นทาง → ปลายทาง, BAZER FLOW v2) อยู่ที่ **`../FLOW.md`** — README นี้ไม่คัดลอกตารางเหล่านั้นมา เพื่อไม่ให้ไม่ตรงกัน
 
-**วิธีเปิด:** ดับเบิลคลิก **`BAZER Console.vbs`** ในโฟลเดอร์นี้
+**วิธีเปิด:** ดับเบิลคลิก **`BAZER Console.vbs`** (Windows) · **`CONSOLE/MACOS/BAZER Console.command`** (macOS) · **`CONSOLE/LINUX/BAZER Console.sh`** (Linux) ในโฟลเดอร์นี้
 
 - ครั้งแรก: แอปจะสตาร์ทเองเบื้องหลัง (ซ่อนหน้าต่าง) แล้วเด้งเบราว์เซอร์ให้
 - เปิดซ้ำ: ถ้าแอปเปิดอยู่แล้ว จะเด้งเบราว์เซอร์ไปหน้าเดิมทันที (ไม่สตาร์ทซ้ำ)
 - ปิดแอป: ปิด `node.exe` ที่รัน `console.mjs` ใน Task Manager หรือรีสตาร์ทเครื่อง
 
-**สิ่งที่ต้องมี:** Windows 10/11 + Node.js 22.5 ขึ้นไป (มีอยู่แล้วถ้าเครื่องนี้ใช้ OpenCode) — ไม่ต้องติดตั้งอะไรเพิ่ม แอปใช้เฉพาะของที่มากับ Node เอง
+**สิ่งที่ต้องมี:** Windows 10/11 · macOS · หรือ Linux + Node.js 22.5 ขึ้นไป (มีอยู่แล้วถ้าเครื่องนี้ใช้ OpenCode) — ไม่ต้องติดตั้งอะไรเพิ่ม แอปใช้เฉพาะของที่มากับ Node เอง (ฝั่ง macOS/Linux ดูรายละเอียดที่ `MACOS/README.md` และ `LINUX/README.md`)
 
 
 **ครั้งแรกที่ใช้ — ติดตั้งอัตโนมัติ:**
@@ -44,7 +44,7 @@
 
 **BAZER FLOW v2 (โฟลว์บังคับของ Buddha Mode + Plan Mode):** Buddha เดินทุกเฟสในเซสชันและ agent เดียว — B1 GATE 1 (แผน Arena) → B2 Arena inside → B3 GATE 2 (แผนสร้าง) → B4 Built inside — ไม่มีการสลับ agent · Plan Mode ใช้ `builder` subagent ตัวเดียวหลังอนุมัติ (Plan ไม่เขียนไฟล์เอง) · กติกาถูกบังคับจริงด้วยปลั๊กอิน `bazer-flow` (ก่อนอนุมัติเขียนไฟล์นอก `%TEMP%\bazer\` ไม่ได้, `task(builder)` ไม่ได้) — ติดตั้ง/ซ่อม/ปิดได้จากปุ่มในการ์ด BAZER FLOW v2 (แท็บ Buddha หรือ Plannotator) · สเปคทั้งหมดอยู่ที่ `../FLOW.md` §3 · marker `<!-- BAZER-FLOW: v2 -->` ใน `bundle/agents/buddha.md` ถูกเทียบกับไฟล์ที่ติดตั้ง · ตรวจ logic ของ gate ด้วย `node flow-check.mjs`
 
-**ค่าเริ่มต้นหลังติดตั้ง:** `tui.json` ได้ `keybinds.messages_copy = ["ctrl+alt+m","ctrl+alt+o"]` (เฉพาะเมื่อยังไม่มีค่า — ค่าที่ผู้ใช้แก้เองไม่ถูกทับ) และมี shortcut **BAZER CONSOLE - WINDOW** ที่ `SETUP/OPENCODE` ชี้ portable launcher `BAZER CONSOLE - WINDOW.vbs` (ตัว `.vbs` ใช้ได้ทันทีหลัง clone; ไฟล์ `.lnk` ถูกสร้างใหม่ต่อเครื่องและไม่ขึ้น git)
+**ค่าเริ่มต้นหลังติดตั้ง:** `tui.json` ได้ `keybinds.messages_copy = ["ctrl+alt+m","ctrl+alt+o"]` (เฉพาะเมื่อยังไม่มีค่า — ค่าที่ผู้ใช้แก้เองไม่ถูกทับ) และมี shortcut **BAZER CONSOLE - WINDOW** ที่ `SETUP/OPENCODE` — ตั้งชื่อตาม OS ของตัวเอง: `BAZER CONSOLE - WINDOW (Windows).lnk` (ชี้ portable launcher `BAZER CONSOLE - WINDOW (Windows).vbs` · `.lnk` ถูกสร้างใหม่ต่อเครื่องและไม่ขึ้น git) · `BAZER CONSOLE - WINDOW (macOS).command` · `BAZER CONSOLE - WINDOW (Linux).desktop`
 
 การ์ด **Arena session** (แท็บ Arena และ Buddha อ่านค่าเดียวกัน) เขียนบรรทัด `arena runners` + `arena cross-judge pool` ใน `~/.agents/pstack-models.md` — ไฟล์เก่าที่มีบรรทัด `bazer arena runners` จะมีปุ่มย้ายค่าให้ในแท็บ Buddha · จัดทั้งไฟล์เป็น **ชุดโมเดล (sets)** ได้ที่แท็บ pStack → การ์ด "🧩 ชุดโมเดล & Functions"
 
@@ -53,7 +53,7 @@
 
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `BAZER Console.vbs` | ปุ่มเปิดแอป (ดับเบิลคลิก) |
+| `BAZER Console.vbs` | ปุ่มเปิดแอป Windows (ดับเบิลคลิก) — macOS/Linux ใช้ `MACOS/BAZER Console.command` · `LINUX/BAZER Console.sh` |
 | `console.mjs` | ตัวแอป (backend + API) |
 | `console.html` | หน้าจอ UI — แก้แล้วรีเฟรชเบราว์เซอร์เห็นทันที ไม่ต้องปิดแอป |
 | `console.config.json` | ค่าตั้งของแอป (พอร์ต, โฟลเดอร์ launch/build) — สร้างอัตโนมัติครั้งแรก |
@@ -107,9 +107,10 @@
 
 | อาการ | ทางแก้ |
 |---|---|
-| ดับเบิลคลิกแล้วขึ้น MsgBox ไม่สำเร็จ | ติดตั้ง Node.js ถ้ายังไม่มี หรือเปิด PowerShell ในโฟลเดอร์นี้แล้วรัน `node console.mjs` เพื่อดู error |
+| ดับเบิลคลิกแล้วขึ้น MsgBox ไม่สำเร็จ | ติดตั้ง Node.js ถ้ายังไม่มี หรือเปิด PowerShell/Terminal ในโฟลเดอร์นี้แล้วรัน `node console.mjs` เพื่อดู error |
 | เบราว์เซอร์เปิดแต่หน้าโหลดไม่ขึ้น | ปิด node.exe ที่ค้างใน Task Manager แล้วเปิดใหม่ |
 | ดาวน์โหลดมาเป็น zip แล้ว Windows บล็อกไฟล์ | คลิกขวาที่ไฟล์ zip → Properties → ติ๊ก "Unblock" → OK |
+| macOS/Linux: ดับเบิลคลิก `.command`/`.sh`/`.desktop` แล้วไม่รัน | exec bit หายตอนคัดลอกข้ามระบบ — `chmod +x "BAZER Console.command" "../BAZER CONSOLE - WINDOW (macOS).command"` (หรือ `.sh`/`(Linux).desktop`) ครั้งเดียว |
 | Firefox ขึ้น "This address is restricted" | พอร์ตนั้นอยู่ในบัญชีห้ามของเบราว์เซอร์ (เช่น 4190) — แก้ `port` ใน `console.config.json` เป็นค่าอื่น เช่น 4311 แล้วเปิดใหม่ |
 | อยากใช้พอร์ตอื่น | แก้ `port` ใน `console.config.json` — เลือกพอร์ตที่ไม่ถูกบล็อก (เลี่ยงช่วง 1-1023 และ 4190, 6000, 6665-6669, 10080) |
 | ปุ่มในหน้าเว็บกดไม่ได้ | กด Ctrl+F5 รีเฟรช (token อาจเป็นของรอบเก่า) |

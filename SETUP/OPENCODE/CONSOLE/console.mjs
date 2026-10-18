@@ -16,6 +16,13 @@ import { createSettingsApi } from './tui-settings/src/api.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_VERSION = '1.5.0';
 
+/* ---- per-OS platform adapter ---------------------------------------------------------
+   darwin → CONSOLE/MACOS/platform.mjs · linux → CONSOLE/LINUX/platform.mjs
+   win32  → null: ทุกจุดเรียกใช้จะคงโค้ด Windows เดิมไว้เป๊ะ (ไม่มีการ eval import บน win32) */
+const PLAT = process.platform === 'darwin' ? await import('./MACOS/platform.mjs')
+           : process.platform === 'linux'  ? await import('./LINUX/platform.mjs')
+           : null;
+
 /* ---------------------------------- config ---------------------------------- */
 
 const DEFAULTS = {
@@ -34,7 +41,7 @@ try {
 // ตรวจอัตโนมัติแบบพกพา — ไม่ผูกกับ path ส่วนตัวของใคร
 try {
   if (!CFG.buildDir) { const b = path.join(__dirname, 'bundle'); if (fs.existsSync(path.join(b, 'skills'))) CFG.buildDir = b; }
-  if (!CFG.launchDir) { const c = path.resolve(__dirname, '..'); if (fs.existsSync(path.join(c, 'opencode-serve.vbs'))) CFG.launchDir = c; }
+  if (!CFG.launchDir) { const c = path.resolve(__dirname, '..'); if (fs.existsSync(path.join(c, PLAT ? PLAT.SERVER_LAUNCHER : 'opencode-serve.vbs'))) CFG.launchDir = c; }
 } catch {}
 for (const a of process.argv.slice(2)) { const m = a.match(/^--port=(\d+)$/); if (m) CFG.port = +m[1]; }
 
@@ -67,7 +74,7 @@ const P = {
    ห้ามปล่อยเป็นชื่อไฟล์ลอย ๆ (path.join('', name)) เพราะจะไปอิง CWD ของ process
    ทำให้ตัวตรวจบอก "ไฟล์ launch หาย" ทั้งชุดทั้งที่ไฟล์อยู่ครบในโฟลเดอร์มาตรฐาน */
 function launchDirResolved() { return CFG.launchDir || path.join(HOME, 'opencode-launch'); }
-const LAUNCH_NAMES = {
+const LAUNCH_NAMES = PLAT ? PLAT.LAUNCH_NAMES : {
   serveVbs: 'opencode-serve.vbs',
   lockDeepseekJsonc: 'lock-deepseek-only.jsonc',
   lockProviderJsonc: 'lock-provider-only.jsonc',
@@ -95,6 +102,18 @@ const BUNDLE = (() => {
   if (CFG.buildDir && fs.existsSync(path.join(CFG.buildDir, 'skills'))) return CFG.buildDir;
   return local;
 })();
+/* โฟลเดอร์เทมเพลตไฟล์ launch — Windows ใช้ launch-template/ (.vbs), macOS/Linux ใช้ของตัวเอง */
+const LAUNCH_TPL_DIR = PLAT ? PLAT.templateDir() : path.join(__dirname, 'launch-template');
+/* บน macOS/Linux สคริปต์ที่เพิ่งคัดลอกต้องมี exec bit ไม่งั้นดับเบิลคลิกไม่รัน (Windows: ไม่ต้องทำ) */
+function chmodLaunchers(dir) {
+  if (!PLAT) return;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      const p = path.join(dir, f);
+      try { if (fs.statSync(p).isFile()) fs.chmodSync(p, 0o755); } catch {}
+    }
+  } catch {}
+}
 function patchConfig(patch) {
   try {
     const cur = fs.existsSync(CFG_FILE) ? JSON.parse(fs.readFileSync(CFG_FILE, 'utf8').replace(/^\uFEFF/, '')) : { ...DEFAULTS };
@@ -103,7 +122,7 @@ function patchConfig(patch) {
     if ('launchDir' in patch) Object.assign(LAUNCH, makeLaunch());
   } catch {}
 }
-const STARTUP_LNK = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'OpenCode Server.lnk');
+const STARTUP_LNK = PLAT ? PLAT.startupEntryPath() : path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'OpenCode Server.lnk');
 const SERVER_URL = 'http://127.0.0.1:4096';
 const TOKEN = crypto.randomBytes(16).toString('hex');
 const STARTED_AT = new Date().toISOString();
@@ -149,6 +168,7 @@ function jsonHeader(what) {
   return `// ${what} — จัดการโดย BAZER Console (สำรองอัตโนมัติทุกครั้งที่เขียน)\n`;
 }
 function ps(script, timeoutMs = 60000) {
+  if (PLAT) return PLAT.ps(script, timeoutMs);
   return new Promise(resolve => {
     const p = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true });
     let out = '', err = '';
@@ -256,6 +276,7 @@ function findProjectRoot(dir) {
 async function scanProjects() {
   const seen = new Map();
   const noise = d => {
+    if (PLAT) return PLAT.isNoiseDir(d);
     const l = String(d).toLowerCase().replace(/\//g, '\\');
     return l.includes('\\appdata\\local\\temp') || l.includes('\\opencode-pi-') || /^[a-z]:\\?$/.test(l);
   };
@@ -593,7 +614,7 @@ function gatherPlannotator() {
 }
 
 async function gatherPlannotatorCli(pl) {
-  const r = await ps('where.exe plannotator', 10000);
+  const r = PLAT ? await PLAT.which('plannotator') : await ps('where.exe plannotator', 10000);
   const line = (r.out || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0];
   pl.cliPath = line || null;
   pl.cliOk = !!line;
@@ -755,11 +776,11 @@ async function runVerify() {
     else add('info', 'keybind copy latest (แก้เอง)', kb.join(', '));
 
     const root = path.resolve(__dirname, '..');
-    const vbs = path.join(root, 'BAZER CONSOLE - WINDOW.vbs');
-    const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
-    if (!fs.existsSync(vbs)) add('warn', 'shortcut BAZER CONSOLE', 'ไม่พบ portable launcher (BAZER CONSOLE - WINDOW.vbs)');
-    else if (!fs.existsSync(link)) add('info', 'shortcut BAZER CONSOLE', 'มี launcher แล้ว แต่ยังไม่มี .lnk — กดติดตั้ง/ซิงค์');
-    else add('ok', 'shortcut BAZER CONSOLE', 'มี .lnk + portable launcher');
+    const vbs = PLAT ? PLAT.portableLauncherPath(root) : path.join(root, 'BAZER CONSOLE - WINDOW (Windows).vbs');
+    const link = PLAT ? PLAT.shortcutPath(root) : path.join(root, 'BAZER CONSOLE - WINDOW (Windows).lnk');
+    if (!fs.existsSync(vbs)) add('warn', 'shortcut BAZER CONSOLE', 'ไม่พบ portable launcher (' + path.basename(vbs) + ')');
+    else if (!fs.existsSync(link)) add('info', 'shortcut BAZER CONSOLE', 'มี launcher แล้ว แต่ยังไม่มี shortcut — กดติดตั้ง/ซิงค์');
+    else add('ok', 'shortcut BAZER CONSOLE', 'มี shortcut + portable launcher');
   }
 
   // 6 skills
@@ -854,7 +875,7 @@ async function runVerify() {
   // 9 autostart + launch files
   {
     const lnk = fs.existsSync(STARTUP_LNK);
-    add(lnk ? 'ok' : 'info', 'Autostart server ตอนล็อกอิน', lnk ? 'มีทางลัดใน Startup' : 'ปิดอยู่ (เปิดได้ในแท็บ Server)');
+    add(lnk ? 'ok' : 'info', 'Autostart server ตอนล็อกอิน', lnk ? 'มีรายการ autostart ของระบบ' : 'ปิดอยู่ (เปิดได้ในแท็บ Server)');
     const la = safe(launchAudit, { items: [], template: [], extra: [] });
     const missing = la.items.filter(x => !x.exists);
     const noTpl = la.items.filter(x => !x.inTemplate);
@@ -946,7 +967,7 @@ function packUpdateItems() {
   addFiles('commands', path.join(BUNDLE, 'commands'), P.commandsDir, '.md');
   if (fs.existsSync(path.join(BUNDLE, 'plugins'))) addDirs('plugins', path.join(BUNDLE, 'plugins'), path.join(P.config, 'plugins'));
   const ldir = launchDirResolved();
-  if (fs.existsSync(ldir)) addFiles('launch', path.join(__dirname, 'launch-template'), ldir);
+  if (fs.existsSync(ldir)) addFiles('launch', LAUNCH_TPL_DIR, ldir);
   return out;
 }
 function packStatus(it) {
@@ -1006,7 +1027,7 @@ function templateDrift() {
    (4) สคริปต์ล็อกเขียนทับชื่อไฟล์เดียวกับที่แอปใช้จริงไหม · refs = โค้ดเรียกไฟล์นี้เองกี่ครั้ง (0 = ให้ผู้ใช้ดับเบิลคลิกเอง) */
 function launchAudit() {
   const dir = launchDirResolved();
-  const tplDir = path.join(__dirname, 'launch-template');
+  const tplDir = LAUNCH_TPL_DIR;
   const listDir = d => { try { return fs.readdirSync(d).filter(f => fs.statSync(path.join(d, f)).isFile()); } catch { return []; } };
   const tpl = listDir(tplDir);
   let self = ''; try { self = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8'); } catch {}
@@ -1015,8 +1036,8 @@ function launchAudit() {
     const name = path.basename(file);
     const exists = fs.existsSync(file);
     const txt = exists ? (readText(file) || '') : '';
-    const lockVbs = /^lock-.*\.vbs$/i.test(name);
-    const mate = lockVbs ? name.replace(/\.vbs$/i, '.jsonc') : null;
+    const lockVbs = (PLAT ? PLAT.LOCK_LAUNCHER_RE : /^lock-.*\.vbs$/i).test(name);
+    const mate = lockVbs ? name.replace(PLAT ? PLAT.LOCK_LAUNCHER_EXT_RE : /\.vbs$/i, '.jsonc') : null;
     return {
       key, name, exists,
       inTemplate: tpl.includes(name),
@@ -1255,10 +1276,12 @@ const ACTIONS = {
   /* server */
   'restart-server': async () => {
     const ldir = launchDirResolved();
-    if (!fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ไม่พบ opencode-serve.vbs ใน ${ldir} — ไปกด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน (หรือตั้ง launchDir ใน console.config.json)`);
-    await ps('Get-NetTCPConnection -LocalPort 4096 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }', 15000);
+    if (!fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ไม่พบ ${path.basename(LAUNCH.serveVbs)} ใน ${ldir} — ไปกด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน (หรือตั้ง launchDir ใน console.config.json)`);
+    if (PLAT) await PLAT.killPort(4096);
+    else await ps('Get-NetTCPConnection -LocalPort 4096 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }', 15000);
     await new Promise(r => setTimeout(r, 900));
-    spawn('wscript.exe', [LAUNCH.serveVbs], { detached: true, stdio: 'ignore', windowsHide: true, cwd: ldir }).unref();
+    if (PLAT) PLAT.launchServer(LAUNCH.serveVbs, ldir);
+    else spawn('wscript.exe', [LAUNCH.serveVbs], { detached: true, stdio: 'ignore', windowsHide: true, cwd: ldir }).unref();
     let version = null;
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 800));
@@ -1287,7 +1310,12 @@ const ACTIONS = {
 
   autostart: async ({ on }) => {
     const ldir = launchDirResolved();
-    if (on && !fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ยังไม่มี opencode-serve.vbs ใน ${ldir} — กด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน`);
+    if (on && !fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ยังไม่มี ${path.basename(LAUNCH.serveVbs)} ใน ${ldir} — กด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน`);
+    if (PLAT) {
+      const r = on ? await PLAT.enableAutostart({ serverPath: LAUNCH.serveVbs, workDir: ldir }) : await PLAT.disableAutostart();
+      if (!r.ok) throw new Error(r.message);
+      return { message: r.message };
+    }
     if (on) {
       const cmdLn = [
         `$ws=New-Object -ComObject WScript.Shell`,
@@ -1743,9 +1771,10 @@ const ACTIONS = {
 
   'shortcut-apply': async ({ dryRun }) => {
     const root = path.resolve(__dirname, '..');
-    const target = path.join(root, 'BAZER CONSOLE - WINDOW.vbs');
-    const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
+    const target = PLAT ? PLAT.portableLauncherPath(root) : path.join(root, 'BAZER CONSOLE - WINDOW (Windows).vbs');
+    const link = PLAT ? PLAT.shortcutPath(root) : path.join(root, 'BAZER CONSOLE - WINDOW (Windows).lnk');
     if (!fs.existsSync(target)) throw new Error('ไม่พบ portable launcher: ' + target);
+    if (PLAT) { const r = await PLAT.applyShortcut({ root, dryRun }); if (!r.ok) throw new Error(r.message); return { message: r.message }; }
     if (dryRun) return { message: 'ทดสอบ: จะสร้าง ' + link };
     const q = (s) => String(s).replace(/'/g, "''");
     const script = [
@@ -1881,11 +1910,11 @@ const ACTIONS = {
     }
     {
       const root = path.resolve(__dirname, '..');
-      const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
+      const link = PLAT ? PLAT.shortcutPath(root) : path.join(root, 'BAZER CONSOLE - WINDOW (Windows).lnk');
       steps.push({
         id: 'shortcut',
         label: 'สร้าง shortcut "BAZER CONSOLE - WINDOW"',
-        detail: fs.existsSync(link) ? 'มีอยู่แล้วที่ ' + link : 'จะสร้าง .lnk ชี้ portable launcher (clone แล้วยังใช้ได้)',
+        detail: fs.existsSync(link) ? 'มีอยู่แล้วที่ ' + link : 'จะสร้าง shortcut ชี้ portable launcher (clone แล้วยังใช้ได้)',
         will: !fs.existsSync(link),
       });
     }
@@ -1916,9 +1945,9 @@ const ACTIONS = {
     }
     steps.push({ id: 'lock-file', label: 'ไฟล์ล็อก server (serve-restricted.jsonc)', detail: fs.existsSync(P.serveRestricted) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างค่าเริ่มต้นแบบปลดล็อก (สลับโหมดได้ในแท็บ ล็อก & โมเดล)', will: !fs.existsSync(P.serveRestricted) });
     const launchTarget = launchDirResolved();
-    const serveExists = fs.existsSync(path.join(launchTarget, 'opencode-serve.vbs'));
+    const serveExists = fs.existsSync(path.join(launchTarget, PLAT ? PLAT.SERVER_LAUNCHER : 'opencode-serve.vbs'));
     let launchMissing = 0;
-    try { launchMissing = fs.readdirSync(path.join(__dirname, 'launch-template')).filter(f => !fs.existsSync(path.join(launchTarget, f))).length; } catch {}
+    try { launchMissing = fs.readdirSync(LAUNCH_TPL_DIR).filter(f => !fs.existsSync(path.join(launchTarget, f))).length; } catch {}
     steps.push({ id: 'launch', label: 'ติดตั้งไฟล์ launch (เปิด server 4096 + สคริปต์สลับโหมดล็อก)', detail: (serveExists && !launchMissing) ? 'มีอยู่แล้วที่ ' + launchTarget : 'จะสร้างที่ ' + launchTarget + (CFG.launchDir ? '' : ' + ตั้ง launchDir ให้แอป') + (launchMissing ? ` (ยังขาด ${launchMissing} ไฟล์)` : ''), will: !serveExists || launchMissing > 0 });
     {
       const ms = safe(mirrorStatus, []);
@@ -2033,13 +2062,14 @@ const ACTIONS = {
       fs.mkdirSync(target, { recursive: true });
       let nL = 0;
       try {
-        for (const f of fs.readdirSync(path.join(__dirname, 'launch-template'))) {
-          const src = path.join(__dirname, 'launch-template', f);
+        for (const f of fs.readdirSync(LAUNCH_TPL_DIR)) {
+          const src = path.join(LAUNCH_TPL_DIR, f);
           if (!fs.statSync(src).isFile()) continue;
           const dst = path.join(target, f);
           if (!fs.existsSync(dst)) { fs.writeFileSync(dst, readText(src) ?? ''); nL++; }
         }
       } catch {}
+      chmodLaunchers(target);
       if (!CFG.launchDir) patchConfig({ launchDir: target });
       log.push('ไฟล์ launch: ' + target + (nL ? ' (+' + nL + ')' : ''));
     }
@@ -2082,6 +2112,7 @@ const ACTIONS = {
       } catch {}
     }
     bk.finalize();
+    if (PLAT && todo.some(it => it.cat === 'launch')) chmodLaunchers(launchDirResolved());
     const extra = [];
     try { await ACTIONS['mirror-agents']({}); extra.push('mirror'); } catch { extra.push('mirror ข้าม (error)'); }
     try { if (!configDrift().ok) { await ACTIONS['refresh-config']({}); extra.push('planningAgents'); } } catch {}
@@ -2161,7 +2192,8 @@ const ACTIONS = {
     const dir = map[key];
     if (!dir) throw new Error((key === 'launch' || key === 'build') ? 'ยังไม่ได้ตั้งค่าโฟลเดอร์นี้ — ดู console.config.json หรือกด Setup' : 'key ไม่ถูกต้อง');
     if (!fs.existsSync(dir)) throw new Error('ไม่พบโฟลเดอร์: ' + dir);
-    spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore' }).unref();
+    if (PLAT) PLAT.openPath(dir);
+    else spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore' }).unref();
     return { message: 'เปิดโฟลเดอร์แล้ว: ' + dir };
   },
 

@@ -404,7 +404,7 @@ function vDash(){
     </div>
     <div class="card"><h3>Autostart</h3>
       <div class="row">${led(S.autostart?'ok':'info')}<span class="big">${S.autostart?'เปิด':'ปิด'}</span></div>
-      <div class="sub">ทางลัด Startup: ${esc(S.autostart?'มี':'ไม่มี')}</div>
+      <div class="sub">autostart ของระบบ: ${esc(S.autostart?'มี':'ไม่มี')}</div>
     </div>
     <div class="card"><h3>แอปนี้</h3>
       <div class="row"><span class="big">v${esc(S.app.version)}</span></div>
@@ -540,7 +540,7 @@ function vServer(){
         <span class="grow"></span>
         <label class="switch"><input type="checkbox" data-act="autostart" ${S.autostart?'checked':''}><i></i></label>
       </div>
-      <div class="sub">ทางลัดในโฟลเดอร์ Startup ของ Windows</div>
+      <div class="sub">รายการ autostart ของระบบ (Windows Startup · macOS LaunchAgent · Linux XDG autostart)</div>
     </div>
   </div>
   <div class="card">

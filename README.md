@@ -34,6 +34,9 @@ Repo นี้มีไว้เพื่อให้พวกคุณที่
 
 > Right now, I'm using OpenCode Go. From my perspective, today the open-weight model is as good as the `frontier model from 6 months ago`, which makes me think you should use the frontier model in the free plan and let it help you brainstorm and refine for the tasks with the models available in OpenCode Go. I think this way, you can save a lot of costs. As of the day I wrote this message, the most cost-effective model is opencode-go/deepseek-v4.1-flash, so I will set it as the default. You can modify it as needed.
 
+#### What's Make This Repo Difference
+
+This `BAZER's CONSOLE` is the complete Graphical User Interface that make you install all neccessary in one click. After that the config is so simple to use. (It can be more facilitated than this but this features is enough, if you want some better UXUI, write an issue to me.)
 
 ## 🌐 LANGUAGES
 

@@ -26,6 +26,7 @@
  *   node tools/gen-opencode-facts.mjs --bin=<path>
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -126,18 +127,31 @@ const ANCHORS = {
   miniDefaults: 'thinking:t?.mini?.thinking??"show"',
 };
 
+function npmGlobalPrefixes() {
+  const out = [];
+  if (process.env.APPDATA) out.push(path.join(process.env.APPDATA, 'npm'));
+  const home = os.homedir();
+  out.push(path.join(home, '.npm-global', 'lib'));
+  out.push(path.join(home, '.local', 'share', 'npm', 'lib'));
+  out.push('/usr/local/lib');
+  out.push('/opt/homebrew/lib');
+  out.push('/usr/lib');
+  return out;
+}
+
 function candidateBinaries() {
   const explicit = opt('bin', '') || process.env.OPENCODE_BIN || '';
   const out = explicit ? [explicit] : [];
-  const npm = process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli') : null;
-  if (npm) {
+  for (const prefix of npmGlobalPrefixes()) {
+    const npm = path.join(prefix, 'node_modules', '@opencode', 'cli');
+    if (!fs.existsSync(npm)) continue;
     const inner = path.join(npm, 'node_modules', '@opencode');
-    for (const p of [path.join(npm, 'bin', 'opencode.exe')]) out.push(p);
-    for (const dir of ['cli-windows-x64', 'cli-windows-x64-baseline', 'cli-linux-x64', 'cli-darwin-arm64']) {
+    for (const p of [path.join(npm, 'bin', 'opencode.exe'), path.join(npm, 'bin', 'opencode')]) out.push(p);
+    for (const dir of ['cli-windows-x64', 'cli-windows-x64-baseline', 'cli-linux-x64', 'cli-linux-arm64', 'cli-darwin-x64', 'cli-darwin-arm64']) {
       for (const f of ['opencode.exe', 'opencode']) out.push(path.join(inner, dir, 'bin', f));
     }
   }
-  out.push('/usr/local/bin/opencode', '/usr/bin/opencode');
+  out.push('/usr/local/bin/opencode', '/usr/bin/opencode', '/opt/homebrew/bin/opencode');
   return out.filter(Boolean);
 }
 
