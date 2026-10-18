@@ -250,7 +250,7 @@ async function act(id, params={}, confirmText){
     if(r.ok === false){ toast('ผิดพลาด: ' + (r.message||''), true); }
     else { toast(r.message || 'สำเร็จ'); }
     await refresh();
-    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent'];
+    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent'];
     if(after.includes(id)) runVerify(false);
   }catch(e){ toast('ผิดพลาด: ' + e.message, true); }
 }
@@ -378,10 +378,19 @@ function vDash(){
     <div class="small muted mt">ไฟล์ส่วนตัวไม่ถูกแตะ: AGENTS.md · pstack-models.md · serve-restricted.jsonc · โหมดที่ปิดไว้ (.disabled) จะได้เนื้อหาใหม่แต่คงสถานะปิด</div>
     <div class="mt flex">
       <button class="btn" data-act="update-check">ตรวจว่ามีอะไรใหม่</button>
-      <button class="btn gold" data-act="update-run">อัพเดตทั้งหมด</button>
+      <button class="btn" data-act="update-run">อัพเดตทั้งหมด</button>
+      <button class="btn gold" data-act="sync-all">🔄 ซิงค์ทั้งหมด (อัพเดต + planningAgents + mirror)</button>
     </div>
     <div id="updBox" class="mt">${updBoxHtml()}</div>
-    <div class="small muted mt">แก้ agent แล้วอัพเดต — อย่าลืมกด "อัพเดต mirror" ในแท็บ Buddha (BAZERs-EXTENSION-*) ด้วย</div>
+    <div class="small muted mt">"อัพเดตทั้งหมด" จะปรับ mirror และ planningAgents ให้ตรงกับ bundle ให้เอง · AGENTS.md และ pstack-models.md เป็นไฟล์ส่วนตัว ระบบไม่ทับ (รีเซ็ตได้จากปุ่มในแท็บของโหมดนั้น)</div>
+  </div>` : ''}
+  ${S.setup && S.setup.bundle ? `
+  <div class="card">
+    <h3>🧾 ไฟล์ส่วนตัวจาก template</h3>
+    <div class="small muted">AGENTS.md (กฎระดับเครื่อง) และ pstack-models.md (โมเดลต่อ role) เป็นไฟล์ที่ผู้ใช้แก้เองได้ ระบบจะไม่ทับให้เอง — กดรีเซ็ตได้เมื่อต้องการกลับไปค่าเริ่มต้นจาก bundle</div>
+    <div class="verify-list mt">
+      ${(S.templates || []).map(t => `<div class="vrow">${led(t.status === 'present' ? 'ok' : 'warn')}<div class="grow"><b class="mono">${esc(t.key)}</b><div class="small muted">${t.status === 'present' ? 'มีอยู่แล้ว' : 'ยังไม่มี — จะสร้างจาก template'}</div></div><button class="btn sm" data-act="reset-template" data-name="${esc(t.key)}">รีเซ็ตจาก template</button></div>`).join('') || '<div class="muted small">—</div>'}
+    </div>
   </div>` : ''}
   ${S.remind && S.remind.exists ? `<div class="card"><h3>↻ remindToUpdate</h3><div class="small muted" style="white-space:pre-wrap">${esc(S.remind.preview)}</div></div>` : ''}
   ${verifyPanel()}`;
@@ -760,7 +769,7 @@ function mirrorCard(){
     </div>`).join('') || '<div class="muted small">—</div>';
   return `
   <div class="card">
-    <h3>🪞 Mirror โหมด → skills ${bad ? `<span class="badge warn">ต้องอัพเดต ${bad}</span>` : '<span class="badge ok">ตรงครบ</span>'}</h3>
+    <h3>🪞 Mirror โหมด → skills ${bad ? `<span class="badge warn">ต้องอัพเดต ${bad}</span>` : '<span class="badge ok">ตรงครบ</span>'}${S.flow ? ` <span class="badge ${S.flow.ok ? 'ok' : 'warn'}">BAZER FLOW v${esc(String(S.flow.bundle || '—'))}${S.flow.ok ? '' : ' · เครื่องยังไม่ตรง'}</span>` : ''}</h3>
     <div class="small muted">ให้โหมดนี้และโหมดอื่น "เรียก" โหมดหลักได้ด้วยการโหลด skill <span class="mono">BAZERs-EXTENSION-*</span> — mirror ถูกซ่อนจากการ auto-invoke แต่โหลดด้วย ID ได้ · ต้นทางคือไฟล์ agent ที่ติดตั้งอยู่ (ถ้าไม่มี ใช้จาก bundle) · สำรองก่อนเขียนทุกไฟล์</div>
     <div class="verify-list mt">${rows}</div>
     <div class="mt flex">
@@ -1113,6 +1122,8 @@ function updBoxHtml(){
       <span class="badge gold">ใหม่ ${c.new || 0}</span>
       <span class="badge">เหมือน ${c.same || 0}</span>
       ${UP.launchSkipped ? '<span class="badge red">ข้าม: ไฟล์ launch (ยังไม่ตั้ง launchDir)</span>' : ''}
+      ${(UP.templates || []).filter(t => t.status !== 'present').map(t => `<span class="badge red">ยังไม่มี ${esc(t.key)}</span>`).join('')}
+      ${(UP.config && !UP.config.ok) ? `<span class="badge red">planningAgents ขาด ${esc((UP.config.missing || []).join(', '))}</span>` : ''}
     </div>
     <div class="verify-list mt" style="max-height:280px;overflow:auto">${rows}</div>`;
 }
@@ -1436,6 +1447,14 @@ document.addEventListener('click', async e => {
       }
       UP = null;
       act('update-apply', {}, 'อัพเดตทับไฟล์ที่ต่าง/ใหม่ทั้งหมด? (สำรองอัตโนมัติก่อนทุกไฟล์)');
+      break;
+    }
+    case 'sync-all': {
+      act('sync-all', {}, 'ซิงค์ทั้งหมด: อัพเดตจาก bundle + ปรับ planningAgents + อัพเดต mirror แล้วตรวจความครบ?');
+      break;
+    }
+    case 'reset-template': {
+      act('reset-template', { name: t.dataset.name }, 'เขียนทับ ' + t.dataset.name + ' ด้วยค่าเริ่มต้นจาก bundle? (สำรองของเดิมก่อน)');
       break;
     }
     case 'agent-save': {

@@ -68,6 +68,11 @@ function makeLaunch() {
   };
 }
 const LAUNCH = makeLaunch();
+
+/* flow + planningAgents — ต้นทางเดียวของรายการนี้ (แก้ที่นี่ที่เดียว) */
+const PLAN_AGENTS = ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'];
+/* marker ในไฟล์โหมด Buddha: <!-- BAZER-FLOW: v1 --> — regex อ่านเลขเวอร์ชันเพื่อเทียบ bundle กับเครื่อง */
+const FLOW_MARKER_RE = /<!--\s*BAZER-FLOW:\s*v(\d+)\s*-->/;
 const BUNDLE = (() => {
   const local = path.join(__dirname, 'bundle');
   if (fs.existsSync(path.join(local, 'skills'))) return local;
@@ -670,7 +675,7 @@ async function runVerify() {
       const plist = arrs.plugins || arrs.plugin || [];
       let pa = [];
       for (const x of (Array.isArray(plist) ? plist : [])) { const o = Array.isArray(x) ? x[1] : x?.options; if (o?.planningAgents) { pa = o.planningAgents; break; } }
-      const need = ['buddha', 'arena', 'snack', 'poteto-mode'];
+      const need = PLAN_AGENTS.filter(n => n !== 'plan');
       const miss = need.filter(n => !pa.includes(n));
       if (!pa.length) add('warn', 'planningAgents ของ Plannotator', 'ไม่พบค่า — กดเปิด/บันทึกปลั๊กอินในแท็บ Plannotator เพื่อเขียนใหม่');
       else if (miss.length) add('warn', 'planningAgents ยังขาดโหมด', miss.join(', ') + ' — เปิดปลั๊กอินใหม่ในแท็บ Plannotator');
@@ -684,6 +689,17 @@ async function runVerify() {
     const bad = ms.filter(x => !x.synced);
     if (!bad.length) add('ok', 'mirror โหมด (BAZERs-EXTENSION-*)', `${ms.length} ตัวตรงกับต้นทาง`);
     else add('warn', `mirror โหมดต้องอัพเดต ${bad.length} ตัว`, bad.map(b => b.name).join(', ') + ' — กด "อัพเดต mirror" ในแท็บ Buddha');
+  }
+
+  // 7d BAZER FLOW (marker ต้องตรงกันระหว่าง bundle กับไฟล์ที่ติดตั้ง)
+  {
+    const bBud = readText(path.join(BUNDLE, 'agents', 'buddha.md')) || '';
+    const iBud = readText(path.join(P.agentsDir, 'buddha.md')) || '';
+    const bv = (bBud.match(FLOW_MARKER_RE) || [])[1] || null;
+    const iv = (iBud.match(FLOW_MARKER_RE) || [])[1] || null;
+    if (!bv) add('warn', 'BAZER FLOW', 'ไม่พบ marker ใน bundle/agents/buddha.md');
+    else if (iv !== bv) add('warn', `BAZER FLOW v${bv}`, `โหมด Buddha ในเครื่อง${iv ? ' เป็น v' + iv : ' ยังไม่มี marker'} — กด "ซิงค์ทั้งหมด" ที่แท็บภาพรวม`);
+    else add('ok', `BAZER FLOW v${bv}`, 'โหมด Buddha ตรงกับ bundle');
   }
 
   // 8 plannotator
@@ -771,7 +787,8 @@ function packUpdateItems() {
   addFiles('agents', path.join(BUNDLE, 'agents'), P.agentsDir, '.md');
   addFiles('commands', path.join(BUNDLE, 'commands'), P.commandsDir, '.md');
   if (fs.existsSync(path.join(BUNDLE, 'plugins'))) addDirs('plugins', path.join(BUNDLE, 'plugins'), path.join(P.config, 'plugins'));
-  if (CFG.launchDir) addFiles('launch', path.join(__dirname, 'launch-template'), CFG.launchDir);
+  const ldir = CFG.launchDir || path.join(HOME, 'opencode-launch');
+  if (fs.existsSync(ldir)) addFiles('launch', path.join(__dirname, 'launch-template'), ldir);
   return out;
 }
 function packStatus(it) {
@@ -786,6 +803,23 @@ function packStatus(it) {
   }
   if (!fs.existsSync(it.dst)) return 'new';
   return readText(it.src) === readText(it.dst) ? 'same' : 'diff';
+}
+function templateDrift() {
+  return [
+    { key: 'AGENTS.md', dst: P.agentsMd },
+    { key: 'pstack-models.md', dst: P.pstackModels },
+  ].map(({ key, dst }) => ({ key, status: fs.existsSync(dst) ? 'present' : 'missing' }));
+}
+function configDrift() {
+  try {
+    const arrs = parseJSONC(P.opencodeJsonc).obj || {};
+    const plist = arrs.plugins || arrs.plugin || [];
+    let pa = [];
+    for (const x of (Array.isArray(plist) ? plist : [])) { const o = Array.isArray(x) ? x[1] : x?.options; if (o?.planningAgents) { pa = o.planningAgents; break; } }
+    const arr = Array.isArray(pa) ? pa : [];
+    const missing = PLAN_AGENTS.filter(n => !arr.includes(n));
+    return { planningAgents: arr, missing, ok: arr.length > 0 && missing.length === 0 };
+  } catch { return { planningAgents: [], missing: PLAN_AGENTS.slice(), ok: false }; }
 }
 
 const ACTIONS = {
@@ -1109,7 +1143,7 @@ const ACTIONS = {
     if (!Array.isArray(arr)) arr = [];
     const nameOf = x => typeof x === 'string' ? x : Array.isArray(x) ? String(x[0] || '') : String(x?.package || '');
     arr = arr.filter(x => !nameOf(x).includes('plannotator'));
-    const PLAN_OPTS = { workflow: 'plan-agent', planningAgents: ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'] };
+    const PLAN_OPTS = { workflow: 'plan-agent', planningAgents: PLAN_AGENTS };
     if (enable) {
       if (key === 'plugin') arr.push(['@plannotator/opencode@latest', PLAN_OPTS]);
       else arr.push({ package: '@plannotator/opencode@latest', options: PLAN_OPTS });
@@ -1542,18 +1576,24 @@ const ACTIONS = {
     const items = packUpdateItems().map(it => ({ cat: it.cat, name: it.name, status: packStatus(it) }));
     const counts = { new: 0, diff: 0, same: 0 };
     for (const it of items) counts[it.status]++;
+    const templates = safe(templateDrift, []);
+    const cfg = configDrift();
+    const tmplMissing = templates.filter(t => t.status !== 'present').map(t => t.key);
     return {
       counts,
       total: items.length,
       changed: items.filter(i => i.status !== 'same'),
-      launchSkipped: !CFG.launchDir,
-      message: `ตรวจแล้ว — ต่าง ${counts.diff} · ใหม่ ${counts.new} · เหมือน ${counts.same}`,
+      templates,
+      config: cfg,
+      launchSkipped: !CFG.launchDir && !fs.existsSync(path.join(HOME, 'opencode-launch')),
+      message: `ตรวจแล้ว — ต่าง ${counts.diff} · ใหม่ ${counts.new} · เหมือน ${counts.same}`
+        + (tmplMissing.length ? ` · template ยังไม่มี: ${tmplMissing.join(', ')}` : '')
+        + (cfg.ok ? '' : ` · planningAgents ขาด: ${cfg.missing.join(', ')}`),
     };
   },
 
   'update-apply': async () => {
     const todo = packUpdateItems().map(it => ({ ...it, status: packStatus(it) })).filter(it => it.status !== 'same');
-    if (!todo.length) return { message: 'ทุกอย่างเป็นเวอร์ชันล่าสุดอยู่แล้ว — ไม่มีอะไรต้องอัพเดต', applied: 0 };
     const bk = createBackup('update-pack');
     let n = 0;
     for (const it of todo) {
@@ -1565,7 +1605,60 @@ const ACTIONS = {
       } catch {}
     }
     bk.finalize();
-    return { message: `อัพเดตแล้ว ${n} รายการ (สำรองอัตโนมัติก่อนเขียน)${!CFG.launchDir ? ' — ข้ามไฟล์ launch (ยังไม่ได้ตั้ง launchDir)' : ''}`, applied: n };
+    const extra = [];
+    try { await ACTIONS['mirror-agents']({}); extra.push('mirror'); } catch { extra.push('mirror ข้าม (error)'); }
+    try { if (!configDrift().ok) { await ACTIONS['refresh-config']({}); extra.push('planningAgents'); } } catch {}
+    const tail = extra.length ? ' + ' + extra.join(' · ') : '';
+    if (!n) return { message: `ไม่มีไฟล์ต้องอัพเดต${tail ? ' (ปรับให้แล้ว:' + tail + ')' : ''}`, applied: 0 };
+    return { message: `อัพเดตแล้ว ${n} รายการ (สำรองอัตโนมัติก่อนเขียน)${tail}`, applied: n };
+  },
+
+  'refresh-config': async ({ dryRun }) => {
+    const r = parseJSONC(P.opencodeJsonc);
+    const obj = r.ok && r.obj ? r.obj : { $schema: 'https://opencode.ai/config.json' };
+    const key = obj.plugin && !obj.plugins ? 'plugin' : 'plugins';
+    let arr = Array.isArray(obj[key]) ? obj[key] : [];
+    let found = false;
+    arr = arr.map(x => {
+      if (!JSON.stringify(x).includes('plannotator')) return x;
+      found = true;
+      const name = Array.isArray(x) ? String(x[0]) : (typeof x === 'string' ? x : x.package);
+      const prev = Array.isArray(x) ? (x[1] || {}) : (typeof x === 'string' ? {} : (x.options || {}));
+      const next = { ...prev, workflow: 'plan-agent', planningAgents: PLAN_AGENTS };
+      return key === 'plugin' ? [name, next] : { package: name, options: next };
+    });
+    if (!found) throw new Error('ไม่พบปลั๊กอิน Plannotator ใน config — เปิดปลั๊กอินก่อน (แท็บ Plannotator)');
+    obj[key] = arr;
+    if (dryRun) return { message: `ทดสอบ: planningAgents → ${PLAN_AGENTS.join(', ')}`, before: configDrift() };
+    const bk = createBackup('refresh-config');
+    bk.add(P.opencodeJsonc);
+    writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
+    bk.finalize();
+    return { message: `รีเฟรช config แล้ว — planningAgents: ${PLAN_AGENTS.join(', ')} (มีผลกับ session ใหม่)` };
+  },
+
+  'reset-template': async ({ name, dryRun }) => {
+    const map = {
+      'AGENTS.md': { src: path.join(BUNDLE, 'config', 'AGENTS.md.template'), dst: P.agentsMd },
+      'pstack-models.md': { src: path.join(BUNDLE, 'config', 'pstack-models.template.md'), dst: P.pstackModels, extract: true },
+    };
+    const it = map[String(name)];
+    if (!it) throw new Error('ไม่รู้จัก template: ' + name);
+    const out = it.extract ? pstackTemplateContent() : (readText(it.src) ?? '');
+    if (!out) throw new Error('อ่าน template ไม่ได้: ' + name);
+    if (dryRun) return { message: `ทดสอบ: จะเขียน ${name} จาก template`, content: out };
+    const bk = createBackup('reset-template');
+    bk.add(it.dst); writeAtomic(it.dst, out); bk.finalize();
+    return { message: `รีเซ็ต ${name} จาก template แล้ว (สำรองของเดิมไว้ — กู้คืนได้ในแท็บประวัติ)` };
+  },
+
+  'sync-all': async () => {
+    const log = [];
+    try { const u = await ACTIONS['update-apply']({}); log.push(u.message); } catch (e) { log.push('อัพเดต: ' + e.message); }
+    try { const c = await ACTIONS['refresh-config']({}); log.push(c.message); } catch (e) { log.push('config: ' + e.message); }
+    try { const m = await ACTIONS['mirror-agents']({}); log.push(m.message); } catch (e) { log.push('mirror: ' + e.message); }
+    const v = await runVerify();
+    return { message: 'ซิงค์ทั้งหมด — ' + log.join(' · '), verify: v.summary };
   },
 
   /* misc */
@@ -1644,6 +1737,7 @@ async function gatherState() {
     ...safe(() => fs.readdirSync(P.agentsDir).filter(f => f.endsWith('.md')), []),
   ])];
   s.setup = { bundle: fs.existsSync(path.join(BUNDLE, 'skills')), firstRun: !fs.existsSync(P.opencodeJsonc) || (s.skills.total || 0) < 10 };
+  s.templates = safe(templateDrift, []);
   const rmd = CFG.launchDir ? readText(path.join(CFG.launchDir, 'remindToUpdate.md')) : null;
   s.remind = rmd ? { exists: true, preview: rmd.split(/\r?\n/).filter(l => l.trim()).slice(0, 12).join('\n').slice(0, 420) } : { exists: false };
   try {
@@ -1663,7 +1757,15 @@ async function gatherState() {
       reg: Array.isArray(plist) && plist.some(x => String(typeof x === 'string' ? x : x?.package || '').includes('bazer-fire')),
     };
     s.mirror = safe(mirrorStatus, []);
-  } catch { s.plg = { planningAgents: [], buddha: false, arena: false, snack: false, poteto: false }; s.fire = { file: false, reg: false }; s.mirror = []; }
+    s.cfgDrift = configDrift();
+    {
+      const bBud = readText(path.join(BUNDLE, 'agents', 'buddha.md')) || '';
+      const iBud = readText(path.join(P.agentsDir, 'buddha.md')) || '';
+      const bv = (bBud.match(FLOW_MARKER_RE) || [])[1] || null;
+      const iv = (iBud.match(FLOW_MARKER_RE) || [])[1] || null;
+      s.flow = { bundle: bv, installed: iv, ok: !!bv && bv === iv };
+    }
+  } catch { s.plg = { planningAgents: [], buddha: false, arena: false, snack: false, poteto: false }; s.fire = { file: false, reg: false }; s.mirror = []; s.cfgDrift = { planningAgents: [], missing: PLAN_AGENTS.slice(), ok: false }; s.flow = { bundle: null, installed: null, ok: false }; }
   return s;
 }
 function safe(fn, fallback) { try { return fn(); } catch { return fallback; } }
