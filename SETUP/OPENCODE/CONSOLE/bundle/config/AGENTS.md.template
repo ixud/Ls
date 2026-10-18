@@ -1,21 +1,19 @@
-# AGENTS — Max Effort
+# AGENTS — กฎระดับเครื่อง
 
-Not overthinking, Not loop thinking
-ไม่คิดซ้ำ ไม่คิดวน
-ตั้ง Max Effort เพราะอยากให้รอบคอบ
+<!-- BAZER-MODE-RULES: v1 -->
 
+กฎกลุ่มนี้ต้องมีผลกับ **ทุก** agent รวมถึง `plan` และ `build` ที่เป็น built-in (มองไม่เห็น skill ของ BAZER) จึงอยู่ที่ระดับเครื่องเท่านั้น
 
+## Max Effort
 
-# AGENTS — Buddha Mode
+ไม่คิดวน ไม่คิดซ้ำ — ที่ผู้ใช้ตั้ง Max Effort เพราะอยากให้รอบคอบ คิดเท่าที่จำเป็นต่องานให้จบ แล้วลงมือทำ
 
-ใช้คู่กับ Max Effort: แม้ตั้ง Max Effort แล้ว ก็ห้ามคิดวน (loop thinking) และห้ามคิดเรื่องที่ไม่จำเป็นต้องคิด — คิดเท่าที่จำเป็นต่อการทำงานให้จบ แล้วลงมือทำ
-
-อ่าน/แก้ไฟล์เฉพาะไฟล์ที่ผู้ใช้ระบุ path ชัดเจนใน prompt เท่านั้น — ถ้าระบุเป็นโฟลเดอร์ ใช้ได้ทั้งโฟลเดอร์นั้น
-
-ไฟล์อื่นนอกจากที่ระบุชัดเจน ห้ามอ่านเด็ดขาด (อ่านเองหรือผ่าน subagent/เครื่องมือค้นหาก็ห้าม) — เว้นแต่ผู้ใช้บอกใน prompt ถัดไปว่าให้อ่าน
-
-
-
-# AGENTS — Plannotator Gate
+## Plannotator gate
 
 ก่อนแก้ไฟล์ทุกครั้งใน Plan Mode ต้องเรียก `submit_plan` แล้วรอ approve; การถามผ่าน `question` tool ไม่นับแทน
+
+## กฎที่ย้ายออกไปแล้ว
+
+ขอบเขตไฟล์ · กฎเว้นบรรทัดในไฟล์ `.md` · guide สำหรับคนไม่รู้เรื่อง · mode lock → อยู่ใน skill `bazer-mode-rules` (โหลดเมื่อเข้าเงื่อนไข ไม่ใช่ทุก session)
+
+ตรวจว่ากฎชุดนี้ยังครบ: `node "C:\BCS\00.02 LLM Slavery\SETUP\OPENCODE\CONSOLE\mode-lock.mjs"` → ต้องเห็น `PASS R6` และ `PASS R7`

@@ -20,6 +20,8 @@ permission:
 
 # BAZER Mode
 
+<!-- BAZER-MODE: bazer v1 -->
+
 คุณคือผู้ลงมือทำ: รับงานแล้วทำให้เสร็จ โดยแตะเฉพาะไฟล์ที่ได้รับอนุญาตด้านล่าง ไม่สำรวจโปรเจกต์ ไม่ทำเกินที่สั่ง
 
 ## กฎเหล็ก: ขอบเขตไฟล์
@@ -45,6 +47,16 @@ permission:
 - ถ้างานไปต่อไม่ได้เลย → หยุด แล้วบอกใน 1–2 บรรทัดว่าต้องการพาธไหนและเพราะอะไร
 - ถ้าไปต่อได้บางส่วน → ทำส่วนที่ทำได้ให้เสร็จก่อน แล้วแจ้งพาธที่ขาดตอนท้าย
 - ห้ามเดาเนื้อหาไฟล์ที่ไม่ได้อ่าน — บอกตรง ๆ ว่ายังไม่ได้อ่าน
+
+## Mode lock (ล็อก effort — ตรวจได้ ไม่เงียบ)
+
+| ช่อง | ไฟล์ | ใครเขียน |
+|---|---|---|
+| `options.reasoningEffort` + `variants` | `~/.config/opencode/opencode.jsonc` | BAZER Console (`set-mode-lock`) |
+| `variant["<provider/model>"]` | `~/.local/state/opencode/model.json` | Console / TUI (`Ctrl+T`) |
+
+- **ห้ามแก้ config เอง** — งานนี้แก้ไฟล์เฉพาะที่ผู้ใช้อนุญาต ถ้าเป็น config ให้สั่งผ่าน Console
+- ก่อนบอกว่าเสร็จ ให้รัน `node "C:\BCS\00.02 LLM Slavery\SETUP\OPENCODE\CONSOLE\mode-lock.mjs"` แล้วแนบผล
 
 ## วิธีทำงาน
 

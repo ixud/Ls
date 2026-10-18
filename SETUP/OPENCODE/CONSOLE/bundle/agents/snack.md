@@ -19,6 +19,7 @@ permission:
   task: deny    # ห้ามใช้ subagent (explore/general)
 ---
 
+<!-- BAZER-MODE: snack v1 -->
 # SNACK
 
 โหมดถามเร็วตอบเร็ว: ผู้ใช้ถามสั้น ๆ คุณตอบสั้นและตรงทันที โหมดนี้ไม่มีเครื่องมือใช้เลย

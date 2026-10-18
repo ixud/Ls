@@ -10,6 +10,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runLockCheck } from './mode-lock.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_VERSION = '1.4.0';
@@ -21,6 +22,7 @@ const DEFAULTS = {
   launchDir: '',          // เว้นว่าง = ตรวจอัตโนมัติ (หา opencode-serve.vbs ข้างโฟลเดอร์แอป) หรือให้ Setup สร้างให้
   buildDir: '',           // เว้นว่าง = ใช้โฟลเดอร์ bundle ที่แนบมากับแอป
   projectConfigs: [],     // เพิ่ม path ไฟล์ opencode.json ของโปรเจกต์ที่อยากให้ตรวจสถานะ plugin ได้
+  modeLock: { on: false, effort: 'max', model: '' },  // สวิตช์ล็อก effort — เปิด/ปิดได้ในแท็บ "ล็อก & โมเดล"
 };
 const CFG_FILE = path.join(__dirname, 'console.config.json');
 let CFG = { ...DEFAULTS };
@@ -41,6 +43,7 @@ const P = {
   opencodeJsonc: path.join(HOME, '.config', 'opencode', 'opencode.jsonc'),
   serveRestricted: path.join(HOME, '.config', 'opencode', 'serve-restricted.jsonc'),
   cliJson: path.join(HOME, '.config', 'opencode', 'cli.json'),
+  tuiJson: path.join(HOME, '.config', 'opencode', 'tui.json'),
   agentsMd: path.join(HOME, '.config', 'opencode', 'AGENTS.md'),
   agentsDir: path.join(HOME, '.config', 'opencode', 'agents'),
   commandsDir: path.join(HOME, '.config', 'opencode', 'commands'),
@@ -432,16 +435,26 @@ function sameSet(a, b) { const A = new Set(a), B = new Set(b); if (A.size !== B.
 
 function gatherModel() {
   const { obj } = parseJSONC(P.opencodeJsonc);
-  const model = obj?.model || '';
+  const model = typeof obj?.model === 'string' ? obj.model
+    : (obj?.model?.providerID ? `${obj.model.providerID}/${obj.model.model}` : '');
   const [prov, ...rest] = model.split('/');
   const mid = rest.join('/');
-  const md = obj?.provider?.[prov]?.models?.[mid] || {};
-  const effort = md?.options?.reasoningEffort || (md?.variants && Object.values(md.variants)[0]?.reasoningEffort) || 'default';
+  /* OpenCode 2 normalize คีย์ V1 (provider) → providers ให้เอง — ตัวอ่านต้องรับทั้งสองรูป ไม่งั้นรายงานเท็จ */
+  const md = obj?.providers?.[prov]?.models?.[mid] || obj?.provider?.[prov]?.models?.[mid] || {};
+  const rawVariants = md?.variants;
+  const variants = Array.isArray(rawVariants)
+    ? Object.fromEntries(rawVariants.map(v => [v?.id, v?.settings || {}]))
+    : (rawVariants && typeof rawVariants === 'object' ? rawVariants : {});
+  const ids = Object.keys(variants);
+  const variantEfforts = ids.map(id => variants[id]?.reasoningEffort).filter(Boolean);
+  const effort = md?.options?.reasoningEffort || md?.settings?.reasoningEffort || variantEfforts[0] || 'default';
   let modelJsonVariant = null;
   const mj = parseJSONC(P.modelJson);
   if (mj.ok && mj.obj?.variant) modelJsonVariant = mj.obj.variant[model] || null;
   const mismatch = !!model && modelJsonVariant !== null && modelJsonVariant !== effort;
-  return { current: model, effort, variants: md?.variants || {}, modelJsonVariant, mismatch };
+  const variantsMissing = ids.length === 0;
+  const variantDrift = ids.length > 0 && (variantEfforts.length !== ids.length || new Set(variantEfforts).size > 1);
+  return { current: model, effort, variants, variantEfforts, variantsMissing, variantDrift, modelJsonVariant, mismatch };
 }
 
 function gatherSkills() {
@@ -659,11 +672,35 @@ async function runVerify() {
     }
   }
 
-  // 5 effort sync
+  // 5 effort sync + mode lock
   {
     const m = gatherModel();
-    if (m.mismatch) add('warn', 'effort ไม่ตรงกัน', `config: ${m.effort} · model.json: ${m.modelJsonVariant} — ใช้ปุ่มซิงค์ในแท็บ "ล็อก & โมเดล"`);
-    else add('ok', 'effort ตรงกัน', `model ${m.current || '?'} · effort ${m.effort}`);
+    const lock = (() => { try { return JSON.parse(fs.readFileSync(CFG_FILE, 'utf8').replace(/^\uFEFF/, '')).modeLock || null; } catch { return null; } })();
+    const lockOn = !!lock?.on;
+    const want = lock?.effort || 'max';
+    if (!lockOn) {
+      add('info', 'mode lock ปิด', `effort ${m.effort} · model.json ${m.modelJsonVariant ?? '?'} — เปิดสวิตช์ในแท็บ "ล็อก & โมเดล" เพื่อบังคับ effort`);
+    } else if (m.variantsMissing || m.variantDrift || m.mismatch || m.effort !== want) {
+      add('fail', 'effort ไม่ล็อก', `config ${m.effort} · model.json ${m.modelJsonVariant ?? '?'} · variants ${Object.keys(m.variants).length} — กด "ล็อกเลย" ในแท็บ ล็อก & โมเดล`);
+    } else {
+      add('ok', 'effort ล็อกอยู่', `model ${m.current} · effort ${m.effort} · variants ${Object.keys(m.variants).length}`);
+    }
+
+  // 5b — ตัวตรวจเดียวกับ CLI (mode-lock.mjs) เพื่อไม่ให้มีตรรกะสองชุด
+    const ml = safe(() => runLockCheck(), null);
+    if (!ml) add('warn', 'mode lock ตรวจไม่ได้', 'mode-lock.mjs อ่านไม่สำเร็จ');
+    else if (ml.ok) add('ok', 'mode lock ครบ', ml.summary);
+    else {
+      const fails = ml.items.filter(i => i.status === 'FAIL').map(i => `${i.rule}: ${i.detail}`);
+      add(ml.lockOn ? 'fail' : 'warn', 'mode lock หลุด', fails.join(' · '));
+    }
+  }
+
+  // 5c — TUI settings: OpenCode 2 อ่าน tui.json (cli.json เป็นของ V1)
+  {
+    if (fs.existsSync(P.tuiJson)) add('ok', 'TUI config (tui.json)', P.tuiJson);
+    else if (fs.existsSync(P.cliJson)) add('warn', 'cli.json ถูกเมินใน OpenCode 2', 'TUI อ่าน ~/.config/opencode/tui.json — กด "ย้าย cli.json → tui.json"');
+    else add('info', 'ยังไม่มี tui.json', 'TUI ใช้ค่า default');
   }
 
   // 6 skills
@@ -919,6 +956,60 @@ function configDrift() {
 }
 
 const ACTIONS = {
+  /* mode lock — สวิตช์เดียว เขียนครบทุกช่องที่ชนะ แล้วปิดท้ายด้วยการตรวจ */
+  'check-mode-lock': async () => {
+    const r = runLockCheck();
+    return { message: `mode lock: ${r.summary}`, result: r };
+  },
+  'set-mode-lock': async ({ on = true, effort = 'max', model } = {}) => {
+    const want = String(effort || 'max');
+    const cfg = parseJSONC(P.opencodeJsonc);
+    if (!cfg.ok) throw new Error('opencode.jsonc อ่านไม่ได้: ' + cfg.error);
+    const obj = cfg.obj || {};
+    const modelRef = model || (typeof obj.model === 'string' ? obj.model
+      : (obj.model?.providerID ? `${obj.model.providerID}/${obj.model.model}` : ''));
+    if (!/^[^/\s]+\/.+$/.test(modelRef)) throw new Error('ยังไม่รู้ว่าจะล็อกโมเดลไหน — ต้องเป็น provider/model');
+    const [prov, ...rest] = modelRef.split('/');
+    const mid = rest.join('/');
+    const bk = createBackup(on ? 'set-mode-lock' : 'unlock-mode-lock');
+    bk.add(P.opencodeJsonc);
+    obj.model = modelRef;
+    const useV2 = !!obj.providers;
+    if (useV2) obj.providers = obj.providers || {};
+    else obj.provider = obj.provider || {};
+    const bucket = useV2 ? (obj.providers[prov] = obj.providers[prov] || {}) : (obj.provider[prov] = obj.provider[prov] || {});
+    bucket.models = bucket.models || {};
+    const md = bucket.models[mid] = bucket.models[mid] || {};
+    if (on) {
+      md.options = md.options || {};
+      md.options.reasoningEffort = want;
+      /* object map ใต้ provider ถูก OpenCode 2 normalize เป็น variants[] {id,settings} ให้เอง — พิสูจน์ด้วย opencode debug config */
+      md.variants = { low: { reasoningEffort: want }, high: { reasoningEffort: want }, max: { reasoningEffort: want } };
+    } else {
+      delete md.variants;
+      if (md.options) { delete md.options.reasoningEffort; if (!Object.keys(md.options).length) delete md.options; }
+      if (!Object.keys(md).length) delete bucket.models[mid];
+      if (!Object.keys(bucket.models).length) delete bucket.models;
+      if (!Object.keys(bucket).length) { if (useV2) delete obj.providers[prov]; else delete obj.provider[prov]; }
+    }
+    writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
+    let synced = false;
+    try {
+      const mj = parseJSONC(P.modelJson);
+      if (mj.ok && mj.obj) {
+        mj.obj.variant = mj.obj.variant || {};
+        mj.obj.variant[modelRef] = on ? want : 'default';
+        bk.add(P.modelJson);
+        writeAtomic(P.modelJson, JSON.stringify(mj.obj, null, 2));
+        synced = true;
+      }
+    } catch {}
+    bk.finalize();
+    patchConfig({ modeLock: { on: !!on, effort: want, model: modelRef } });
+    const chk = runLockCheck();
+    return { message: `${on ? 'ล็อก' : 'ปลดล็อก'} ${modelRef} · effort ${on ? want : 'default'}${synced ? ' + ซิงค์ model.json' : ''} — ${chk.summary} (มีผลกับ session ใหม่)` };
+  },
+
   /* lock */
   'set-lock': async ({ mode, restart }) => {
     const templates = {
@@ -1029,9 +1120,24 @@ const ACTIONS = {
     return { message: `ตั้งโมเดล ${model} · effort ${eff}${extra} — มีผลกับ session ใหม่` };
   },
 
+  /* OpenCode 2 อ่าน TUI settings จาก tui.json ไม่ใช่ cli.json (docs: "TUI-specific settings" + legacy keys migrated) */
+  'migrate-tui': async () => {
+    const src = parseJSONC(P.cliJson);
+    const cur = fs.existsSync(P.tuiJson) ? parseJSONC(P.tuiJson) : { ok: true, obj: {} };
+    const base = (cur.ok && cur.obj) ? cur.obj : {};
+    const from = (src.ok && src.obj) ? src.obj : {};
+    const next = { $schema: 'https://opencode.ai/tui.json', ...from, ...base };
+    const bk = createBackup('migrate-tui');
+    if (fs.existsSync(P.cliJson)) bk.add(P.cliJson);
+    if (fs.existsSync(P.tuiJson)) bk.add(P.tuiJson);
+    writeAtomic(P.tuiJson, JSON.stringify(next, null, 2) + '\n');
+    bk.finalize();
+    return { message: `เขียน ${P.tuiJson} แล้ว (จาก cli.json ${Object.keys(from).length} คีย์) — cli.json เก็บไว้เป็น legacy` };
+  },
+
   'save-text': async ({ target, content }) => {
     const map = {
-      cli: { file: P.cliJson, kind: 'json', label: 'cli.json' },
+      cli: { file: P.tuiJson, kind: 'json', label: 'tui.json', also: P.cliJson },
       'pstack-models': { file: P.pstackModels, kind: 'text', label: 'pstack-models.md' },
       'agents-md': { file: P.agentsMd, kind: 'text', label: 'AGENTS.md' },
     };
@@ -1039,10 +1145,13 @@ const ACTIONS = {
     if (!t) throw new Error('target ไม่ถูกต้อง');
     if (t.kind === 'json') { try { JSON.parse(content); } catch (e) { throw new Error('JSON ผิดรูปแบบ: ' + e.message); } }
     const bk = createBackup('save-' + target);
+    if (t.also && fs.existsSync(t.also)) bk.add(t.also);
     bk.add(t.file);
     writeAtomic(t.file, content);
+    /* TUI ของ OpenCode 2 อ่าน tui.json — เขียน cli.json คู่กันไว้ให้ของเดิมไม่พัง */
+    if (t.also) { try { writeAtomic(t.also, content); } catch {} }
     bk.finalize();
-    return { message: `บันทึก ${t.label} แล้ว (สำรองเดิมไว้)` };
+    return { message: `บันทึก ${t.label} แล้ว${t.also ? ' (+ cli.json legacy)' : ''} (สำรองเดิมไว้)` };
   },
 
   /* server */
@@ -1203,10 +1312,13 @@ const ACTIONS = {
 
   /* agents / commands */
   'agent-toggle': async ({ file, enable }) => {
-    const base = path.basename(file);
-    const from = path.join(P.agentsDir, base);
+    const base = path.basename(file).replace(/\.disabled$/, '');
+    const active = path.join(P.agentsDir, base);
+    const disabled = active + '.disabled';
+    const from = enable ? (fs.existsSync(active) ? active : disabled) : active;
     if (!fs.existsSync(from)) throw new Error('ไม่พบไฟล์: ' + base);
-    const to = enable ? from.replace(/\.disabled$/, '') : from + '.disabled';
+    const to = enable ? active : disabled;
+    if (from === to) return { message: `agent ${base} ${enable ? 'เปิด' : 'ปิด'}อยู่แล้ว` };
     fs.renameSync(from, to);
     return { message: `${enable ? 'เปิด' : 'ปิด'} agent ${base} แล้ว` };
   },
@@ -1223,10 +1335,13 @@ const ACTIONS = {
   },
 
   'command-toggle': async ({ file, enable }) => {
-    const base = path.basename(file);
-    const from = path.join(P.commandsDir, base);
+    const base = path.basename(file).replace(/\.disabled$/, '');
+    const active = path.join(P.commandsDir, base);
+    const disabled = active + '.disabled';
+    const from = enable ? (fs.existsSync(active) ? active : disabled) : active;
     if (!fs.existsSync(from)) throw new Error('ไม่พบไฟล์: ' + base);
-    const to = enable ? from.replace(/\.disabled$/, '') : from + '.disabled';
+    const to = enable ? active : disabled;
+    if (from === to) return { message: `คำสั่ง ${base} ${enable ? 'เปิด' : 'ปิด'}อยู่แล้ว` };
     fs.renameSync(from, to);
     return { message: `${enable ? 'เปิด' : 'ปิด'} คำสั่ง ${base} แล้ว` };
   },
@@ -1865,6 +1980,7 @@ async function gatherState() {
     };
     s.mirror = safe(mirrorStatus, []);
     s.cfgDrift = configDrift();
+    s.modeLock = safe(() => runLockCheck(), null);
     {
       const bBud = readText(path.join(BUNDLE, 'agents', 'buddha.md')) || '';
       const iBud = readText(path.join(P.agentsDir, 'buddha.md')) || '';

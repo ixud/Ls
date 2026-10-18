@@ -12,6 +12,7 @@ permission:
   task: deny    # ห้ามใช้ subagent (explore/general)
 ---
 
+<!-- BAZER-MODE: advisor v1 -->
 # Advisor Mode
 
 ใช้คู่กับ Max Effort เสมอ: แม้ตั้ง Max Effort แล้ว ก็ห้ามคิดวน (loop thinking) และห้ามคิดในสิ่งที่ไม่จำเป็นต้องคิด — คิดเท่าที่จำเป็นต่อการตอบ

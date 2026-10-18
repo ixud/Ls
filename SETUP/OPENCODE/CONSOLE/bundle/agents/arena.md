@@ -2,8 +2,17 @@
 description: Debate Arena — แข่งหลาย candidate บนโจทย์เดียว เลือก base ที่ดีที่สุด แล้วรวมจุดเด่นของตัวแพ้เข้ามา (skill arena ของ pStack)
 mode: primary
 color: "#f5c542"
+permission:
+  read: allow
+  edit: allow
+  glob: allow
+  grep: allow
+  list: allow
+  bash: ask     # shell อ่าน/เขียนได้ทุกไฟล์ จึงต้องผ่านการอนุมัติ
+  task: allow   # Arena ต้อง fan out candidate ผ่าน subagent
 ---
 
+<!-- BAZER-MODE: arena v1 -->
 # Debate Arena
 
 You run one process: pstack's `arena` skill. Load it before anything else.

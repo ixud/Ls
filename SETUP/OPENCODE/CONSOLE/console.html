@@ -253,7 +253,7 @@ async function act(id, params={}, confirmText){
     }
     else { toast(r.message || 'สำเร็จ'); }
     await refresh();
-    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent'];
+    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent','set-mode-lock','check-mode-lock','migrate-tui'];
     if(after.includes(id)) runVerify(false);
   }catch(e){ toast('ผิดพลาด: ' + e.message, true); }
 }
@@ -444,6 +444,15 @@ function vLock(){
     </div>
     <label class="chk mt"><input type="checkbox" id="mSync" checked> ซิงค์ <span class="mono">model.json</span> ด้วย — กัน variant ที่กดใน TUI ทับค่าที่ตั้ง</label>
     <div class="mt"><button class="btn gold" data-act="model-save">บันทึกโมเดล + effort</button></div>
+    <div class="hair"></div>
+    <label class="chk"><input type="checkbox" id="mlOn" ${(S.modeLock&&S.modeLock.lockOn)?'checked':''}> บังคับ effort ทุก variant — mode lock (TUI กด Ctrl+T แล้วยังได้ค่าเดิม)</label>
+    <div class="flex mt">
+      <button class="btn gold" data-act="mode-lock-apply">ล็อกเลย (เขียนทุกช่อง)</button>
+      <button class="btn ghost" data-act="mode-lock-check">ตรวจว่า ล็อกอยู่ไหม</button>
+      <button class="btn ghost" data-act="migrate-tui">ย้าย cli.json → tui.json</button>
+    </div>
+    <div class="small muted mt">${(S.modeLock&&S.modeLock.summary)?('สถานะ: <span class="mono">'+esc(S.modeLock.summary)+'</span>'):'ยังไม่ได้ตรวจ'}</div>
+    <div class="small muted mt">เขียน <span class="mono">opencode.jsonc</span> + <span class="mono">model.json</span> แล้วตรวจซ้ำอัตโนมัติ ด้วยตัวตรวจชุดเดียวกับ CLI (<span class="mono">mode-lock.mjs</span>)</div>
     <div class="small muted mt">เขียนลง <span class="mono">opencode.jsonc</span> (model + variants บังคับทุก variant) และ <span class="mono">model.json</span> (variant ต่อโมเดล) — มีผลกับ session ใหม่</div>
   </div>`;
 }
@@ -1293,6 +1302,13 @@ document.addEventListener('click', async e => {
       effort: document.getElementById('mEffort').value,
       sync: document.getElementById('mSync').checked,
     }); break;
+    case 'mode-lock-apply': act('set-mode-lock', {
+      on: document.getElementById('mlOn') ? document.getElementById('mlOn').checked : true,
+      effort: document.getElementById('mEffort').value,
+      model: document.getElementById('mModel').value.trim(),
+    }); break;
+    case 'mode-lock-check': act('check-mode-lock'); break;
+    case 'migrate-tui': act('migrate-tui'); break;
     case 'srv-health': act('health-check'); break;
     case 'srv-restart': act('restart-server', {}, 'รีสตาร์ท server 4096? (Cline ที่กำลังทำงานอยู่อาจสะดุดชั่วครู่)'); break;
     case 'srv-service': act('restart-service', {}, 'รีสตาร์ท opencode service?'); break;
