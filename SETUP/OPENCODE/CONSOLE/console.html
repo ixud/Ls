@@ -247,7 +247,10 @@ async function act(id, params={}, confirmText){
   if(confirmText && !confirm(confirmText)) return;
   try{
     const r = await api('/api/action', { post: { id, ...params } });
-    if(r.ok === false){ toast('ผิดพลาด: ' + (r.message||''), true); }
+    if(r.ok === false){
+      const stale = /ไม่รู้จัก action/.test(String(r.message||''));
+      toast(stale ? 'แอปที่เปิดอยู่ยังเป็นโค้ดเก่า — ปิด-เปิด BAZER Console ใหม่แล้วกดอีกครั้ง' : 'ผิดพลาด: ' + (r.message||''), true);
+    }
     else { toast(r.message || 'สำเร็จ'); }
     await refresh();
     const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent'];
