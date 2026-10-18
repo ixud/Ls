@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 /* ---------------------------------- config ---------------------------------- */
 
@@ -58,14 +58,21 @@ const P = {
   runtime: path.join(__dirname, 'console.runtime.json'),
   html: path.join(__dirname, 'console.html'),
 };
+/* ต้นทางเดียวของโฟลเดอร์ launch — ทุกที่ที่ต้องรู้ที่อยู่ไฟล์ launch ต้องเรียกฟังก์ชันนี้เท่านั้น
+   launchDir ว่าง = ใช้โฟลเดอร์มาตรฐานเดียวกับที่ setup-apply ใช้ (~/opencode-launch)
+   ห้ามปล่อยเป็นชื่อไฟล์ลอย ๆ (path.join('', name)) เพราะจะไปอิง CWD ของ process
+   ทำให้ตัวตรวจบอก "ไฟล์ launch หาย" ทั้งชุดทั้งที่ไฟล์อยู่ครบในโฟลเดอร์มาตรฐาน */
+function launchDirResolved() { return CFG.launchDir || path.join(HOME, 'opencode-launch'); }
+const LAUNCH_NAMES = {
+  serveVbs: 'opencode-serve.vbs',
+  lockDeepseekJsonc: 'lock-deepseek-only.jsonc',
+  lockProviderJsonc: 'lock-provider-only.jsonc',
+  lockDeepseekVbs: 'lock-deepseek-only.vbs',
+  lockProviderVbs: 'lock-provider-only.vbs',
+};
 function makeLaunch() {
-  return {
-    serveVbs: path.join(CFG.launchDir || '', 'opencode-serve.vbs'),
-    lockDeepseekJsonc: path.join(CFG.launchDir || '', 'lock-deepseek-only.jsonc'),
-    lockProviderJsonc: path.join(CFG.launchDir || '', 'lock-provider-only.jsonc'),
-    lockDeepseekVbs: path.join(CFG.launchDir || '', 'lock-deepseek-only.vbs'),
-    lockProviderVbs: path.join(CFG.launchDir || '', 'lock-provider-only.vbs'),
-  };
+  const d = launchDirResolved();
+  return Object.fromEntries(Object.entries(LAUNCH_NAMES).map(([k, f]) => [k, path.join(d, f)]));
 }
 const LAUNCH = makeLaunch();
 
@@ -215,11 +222,11 @@ function listBackups() {
       });
   } catch { return []; }
 }
-const ALLOWLIST_ROOTS = [P.config, path.join(HOME, '.agents'), P.stateDir, P.plannotatorDir, CFG.launchDir].filter(Boolean);
+const ALLOWLIST_ROOTS = [P.config, safe(() => fs.realpathSync.native(P.config), null), path.join(HOME, '.agents'), P.stateDir, P.plannotatorDir, launchDirResolved()].filter(Boolean);
 function isAllowedPath(p) {
   const r = path.resolve(p).toLowerCase();
   if (/[\\/]\.opencode[\\/]/.test(r)) return true; // ไฟล์ใน .opencode ของโปรเจกต์ (จัดการผ่านแท็บโปรเจกต์)
-  return ALLOWLIST_ROOTS.some(root => r.startsWith(path.resolve(root).toLowerCase()));
+  return ALLOWLIST_ROOTS.some(root => { const b = path.resolve(root).toLowerCase(); return r === b || r.startsWith(b + path.sep); });
 }
 
 /* โปรเจกต์ที่เคยใช้ OpenCode — สแกนจากฐานข้อมูล SQLite ของ OpenCode */
@@ -604,6 +611,13 @@ async function runVerify() {
     add(bad.length ? 'fail' : 'ok', 'ไฟล์ config อ่านได้ทั้งหมด', bad.length ? bad.join(' · ') : 'parse ผ่านทุกไฟล์');
   }
 
+  // 1b config root — จริงหรือเป็นลิงก์ (junction): ต้องรู้ว่าไฟล์จริงอยู่ที่ไหน
+  {
+    const real = safe(() => fs.realpathSync.native(P.config), '');
+    if (real && path.resolve(real).toLowerCase() !== path.resolve(P.config).toLowerCase())
+      add('info', 'config root เป็นลิงก์ (junction)', P.config + ' → ' + real + ' — ไฟล์จริงอยู่ปลายทาง path เดียวกันทั้งสองทาง (ไม่ใช่สำเนา)');
+  }
+
   // 2 server
   let serverV = null;
   {
@@ -699,7 +713,19 @@ async function runVerify() {
     const iv = (iBud.match(FLOW_MARKER_RE) || [])[1] || null;
     if (!bv) add('warn', 'BAZER FLOW', 'ไม่พบ marker ใน bundle/agents/buddha.md');
     else if (iv !== bv) add('warn', `BAZER FLOW v${bv}`, `โหมด Buddha ในเครื่อง${iv ? ' เป็น v' + iv : ' ยังไม่มี marker'} — กด "ซิงค์ทั้งหมด" ที่แท็บภาพรวม`);
-    else add('ok', `BAZER FLOW v${bv}`, 'โหมด Buddha ตรงกับ bundle');
+    else add('ok', `BAZER FLOW v${bv}`, 'โหมด Buddha ตรงกับ bundle (สเปค: FLOW.md)');
+  }
+
+  // 7e ไฟล์ส่วนตัวจาก template (AGENTS.md / pstack-models.md) — เดิมตรวจแค่ว่า "มีไฟล์ไหม" ของใหม่ใน template จึงมองไม่เห็น
+  {
+    const ts = safe(templateDrift, []);
+    const miss = ts.filter(t => t.status === 'missing');
+    const stale = ts.filter(t => t.status === 'stale');
+    const custom = ts.filter(t => t.status === 'custom');
+    if (miss.length) add('warn', `ไฟล์จาก template ยังไม่มี ${miss.length} ตัว`, miss.map(t => t.key).join(', ') + ' — จะสร้างให้ตอนติดตั้ง/อัพเดต');
+    else if (stale.length) add('warn', `template ใน bundle ใหม่กว่าไฟล์ในเครื่อง ${stale.length} ตัว`, stale.map(t => `${t.key} ยังขาด: ${t.missing.slice(0, 3).join(' / ')}${t.missing.length > 3 ? ` (+${t.missing.length - 3})` : ''}`).join(' · ') + ' — กด "รีเซ็ตจาก template" ในแท็บภาพรวม (ของเดิมถูกสำรองก่อนเขียน)');
+    else if (custom.length) add('info', 'ไฟล์จาก template ถูกแก้เอง', custom.map(t => t.key).join(', ') + ' — ระบบไม่ทับ (หัวข้อ/role ครบตาม bundle แล้ว)');
+    else add('ok', 'ไฟล์จาก template ตรงกับ bundle', ts.map(t => `${t.key} (${t.tplHash})`).join(' · '));
   }
 
   // 8 plannotator
@@ -715,9 +741,19 @@ async function runVerify() {
   {
     const lnk = fs.existsSync(STARTUP_LNK);
     add(lnk ? 'ok' : 'info', 'Autostart server ตอนล็อกอิน', lnk ? 'มีทางลัดใน Startup' : 'ปิดอยู่ (เปิดได้ในแท็บ Server)');
-    const missing = Object.entries(LAUNCH).filter(([k, f]) => !fs.existsSync(f)).map(([k]) => k);
-    if (missing.length) add('warn', 'ไฟล์ launch บางตัวหาย', missing.join(', ') + ' — ดูเทมเพลตใน guide');
-    else add('ok', 'ไฟล์ launch ครบ', 'serve vbs + lock scripts');
+    const la = safe(launchAudit, { items: [], template: [], extra: [] });
+    const missing = la.items.filter(x => !x.exists);
+    const noTpl = la.items.filter(x => !x.inTemplate);
+    const mate = la.items.filter(x => x.mate && x.mateMissing);
+    const wrongLock = la.items.filter(x => x.mate && x.writesLockFile === false);
+    const unref = la.items.filter(x => x.inTemplate && x.refs === 0);
+    if (missing.length) add('warn', 'ไฟล์ launch บางตัวหาย', missing.map(x => x.name).join(', ') + ' — กด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวมเพื่อสร้างกลับจาก launch-template (ไม่ทับไฟล์เดิม)');
+    else if (noTpl.length) add('warn', 'ไฟล์ launch นอกเทมเพลต (อัพเดตไม่ถึง)', noTpl.map(x => x.name).join(', ') + ' — "อัพเดตทั้งหมด" จะไม่แตะไฟล์นี้ ต้องเพิ่มใน launch-template ก่อน');
+    else add('ok', 'ไฟล์ launch ครบและอยู่ในเทมเพลต', `${la.items.length} ไฟล์ · เทมเพลต ${la.template.length} ไฟล์`);
+    if (mate.length) add('warn', 'สคริปต์ล็อกขาดไฟล์คู่', mate.map(x => `${x.name} → ไม่พบ ${x.mate}`).join(' · ') + ' — ดับเบิลคลิกแล้วล็อกไม่เปลี่ยน');
+    if (wrongLock.length) add('warn', 'สคริปต์ล็อกเขียนผิดไฟล์', wrongLock.map(x => x.name).join(', ') + ` — แอปอ่าน ${path.basename(P.serveRestricted)} จะไม่เห็นค่าที่สคริปต์เขียน`);
+    if (la.extra.length) add('info', 'ไฟล์ในโฟลเดอร์ launch ที่ไม่อยู่ในเทมเพลต', la.extra.join(', ') + ' — ของคุณเอง ระบบไม่แตะ');
+    if (unref.length) add('info', 'ไฟล์ launch ที่โค้ดไม่เรียกเอง', unref.map(x => x.name).join(', ') + ' — เป็นสคริปต์ให้ผู้ใช้ดับเบิลคลิกเอง ไม่ใช่ไฟล์ค้าง');
   }
 
   const summary = { ok: items.filter(i => i.level === 'ok').length, warn: items.filter(i => i.level === 'warn').length, fail: items.filter(i => i.level === 'fail').length };
@@ -787,7 +823,7 @@ function packUpdateItems() {
   addFiles('agents', path.join(BUNDLE, 'agents'), P.agentsDir, '.md');
   addFiles('commands', path.join(BUNDLE, 'commands'), P.commandsDir, '.md');
   if (fs.existsSync(path.join(BUNDLE, 'plugins'))) addDirs('plugins', path.join(BUNDLE, 'plugins'), path.join(P.config, 'plugins'));
-  const ldir = CFG.launchDir || path.join(HOME, 'opencode-launch');
+  const ldir = launchDirResolved();
   if (fs.existsSync(ldir)) addFiles('launch', path.join(__dirname, 'launch-template'), ldir);
   return out;
 }
@@ -804,11 +840,71 @@ function packStatus(it) {
   if (!fs.existsSync(it.dst)) return 'new';
   return readText(it.src) === readText(it.dst) ? 'same' : 'diff';
 }
-function templateDrift() {
+/* เทียบไฟล์ส่วนตัวในเครื่อง (AGENTS.md / pstack-models.md) กับ template ใน bundle
+   สถานะ: missing = ยังไม่มี · same = ตรงกับ template · stale = template มีหัวข้อ/role ที่ไฟล์ในเครื่องยังไม่มี
+   custom = ผู้ใช้แก้เองแต่หัวข้อ/role ครบตาม template (ระบบไม่ทับ — บอกได้แค่ว่า "ต่าง" ไม่ใช่ "เก่า") */
+function normKey(s) { return String(s).replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase(); }
+function topicSet(md, kind) {
+  const out = new Set();
+  for (const line of String(md).split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    if (kind === 'pstack') {
+      const m = line.match(/^([^:#]{3,60}):\s*\S/);
+      if (m) out.add(m[1].trim());
+    } else {
+      const m = line.match(/^#{1,3}\s+(.+?)\s*$/);
+      if (m) out.add(m[1].trim());
+    }
+  }
+  return out;
+}
+function hash8(s) { return crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 8); }
+function templateSpec() {
   return [
-    { key: 'AGENTS.md', dst: P.agentsMd },
-    { key: 'pstack-models.md', dst: P.pstackModels },
-  ].map(({ key, dst }) => ({ key, status: fs.existsSync(dst) ? 'present' : 'missing' }));
+    { key: 'AGENTS.md', dst: P.agentsMd, kind: 'md', content: () => readText(path.join(BUNDLE, 'config', 'AGENTS.md.template')) },
+    { key: 'pstack-models.md', dst: P.pstackModels, kind: 'pstack', content: () => pstackTemplateContent() },
+  ];
+}
+function templateDrift() {
+  return templateSpec().map(({ key, dst, kind, content }) => {
+    const tpl = content();
+    const cur = readText(dst);
+    const base = { key, dst, tplHash: tpl ? hash8(tpl) : null, missing: [] };
+    if (!tpl) return { ...base, status: cur === null ? 'missing' : 'custom', note: 'อ่าน template จาก bundle ไม่ได้' };
+    if (cur === null) return { ...base, status: 'missing' };
+    if (cur === tpl) return { ...base, status: 'same' };
+    const want = topicSet(tpl, kind), have = new Set([...topicSet(cur, kind)].map(normKey));
+    const missing = [...want].filter(t => !have.has(normKey(t)));
+    return { ...base, status: missing.length ? 'stale' : 'custom', missing };
+  });
+}
+
+/* ไฟล์ launch — ตรวจ 4 อย่างที่ไม่มีในโค้ดเดิม:
+   (1) มีอยู่จริง (2) อยู่ใน launch-template ไหม (= อัพเดตถึงไหม) (3) สคริปต์ล็อกมีไฟล์ .jsonc คู่กันไหม
+   (4) สคริปต์ล็อกเขียนทับชื่อไฟล์เดียวกับที่แอปใช้จริงไหม · refs = โค้ดเรียกไฟล์นี้เองกี่ครั้ง (0 = ให้ผู้ใช้ดับเบิลคลิกเอง) */
+function launchAudit() {
+  const dir = launchDirResolved();
+  const tplDir = path.join(__dirname, 'launch-template');
+  const listDir = d => { try { return fs.readdirSync(d).filter(f => fs.statSync(path.join(d, f)).isFile()); } catch { return []; } };
+  const tpl = listDir(tplDir);
+  let self = ''; try { self = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8'); } catch {}
+  const lockBase = path.basename(P.serveRestricted);
+  const items = Object.entries(LAUNCH).map(([key, file]) => {
+    const name = path.basename(file);
+    const exists = fs.existsSync(file);
+    const txt = exists ? (readText(file) || '') : '';
+    const lockVbs = /^lock-.*\.vbs$/i.test(name);
+    const mate = lockVbs ? name.replace(/\.vbs$/i, '.jsonc') : null;
+    return {
+      key, name, exists,
+      inTemplate: tpl.includes(name),
+      refs: (self.match(new RegExp('LAUNCH\\.' + key + '\\b', 'g')) || []).length,
+      mate,
+      mateMissing: mate && exists ? !fs.existsSync(path.join(path.dirname(file), mate)) : false,
+      writesLockFile: mate && exists ? txt.includes(lockBase) : null,
+    };
+  });
+  return { dir, items, template: tpl, extra: listDir(dir).filter(f => !tpl.includes(f)), skipped: !CFG.launchDir && !fs.existsSync(dir) };
 }
 function configDrift() {
   try {
@@ -951,11 +1047,11 @@ const ACTIONS = {
 
   /* server */
   'restart-server': async () => {
-    if (!CFG.launchDir) throw new Error('ยังไม่ได้ตั้ง launchDir — ตั้งใน console.config.json หรือกด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวม');
-    if (!fs.existsSync(LAUNCH.serveVbs)) throw new Error('ไม่พบ opencode-serve.vbs — ไฟล์ launch หาย');
+    const ldir = launchDirResolved();
+    if (!fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ไม่พบ opencode-serve.vbs ใน ${ldir} — ไปกด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน (หรือตั้ง launchDir ใน console.config.json)`);
     await ps('Get-NetTCPConnection -LocalPort 4096 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }', 15000);
     await new Promise(r => setTimeout(r, 900));
-    spawn('wscript.exe', [LAUNCH.serveVbs], { detached: true, stdio: 'ignore', windowsHide: true, cwd: CFG.launchDir }).unref();
+    spawn('wscript.exe', [LAUNCH.serveVbs], { detached: true, stdio: 'ignore', windowsHide: true, cwd: ldir }).unref();
     let version = null;
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 800));
@@ -983,14 +1079,15 @@ const ACTIONS = {
   },
 
   autostart: async ({ on }) => {
-    if (on && !CFG.launchDir) throw new Error('ยังไม่ได้ตั้ง launchDir — กด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวมก่อน');
+    const ldir = launchDirResolved();
+    if (on && !fs.existsSync(LAUNCH.serveVbs)) throw new Error(`ยังไม่มี opencode-serve.vbs ใน ${ldir} — กด "ติดตั้งเสร็จสรรพ" ที่แท็บภาพรวมก่อน`);
     if (on) {
       const cmdLn = [
         `$ws=New-Object -ComObject WScript.Shell`,
         `$sc=$ws.CreateShortcut('${STARTUP_LNK.replace(/'/g, "''")}')`,
         `$sc.TargetPath='C:\\Windows\\System32\\wscript.exe'`,
         `$sc.Arguments='"${LAUNCH.serveVbs}"'`,
-        `$sc.WorkingDirectory='${CFG.launchDir.replace(/'/g, "''")}'`,
+        `$sc.WorkingDirectory='${ldir.replace(/'/g, "''")}'`,
         `$sc.Description='OpenCode background server (http://127.0.0.1:4096) for Cline'`,
         `$sc.Save()`,
       ].join('; ');
@@ -1153,7 +1250,7 @@ const ACTIONS = {
     bk.add(P.opencodeJsonc);
     writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
     bk.finalize();
-    return { message: `${enable ? 'เปิด' : 'ปิด'} ปลั๊กอิน Plannotator ใน global config แล้ว (โหมด plan-agent · planningAgents: plan, buddha, arena, snack, poteto-mode) — มีผลกับ session ใหม่` };
+    return { message: `${enable ? 'เปิด' : 'ปิด'} ปลั๊กอิน Plannotator ใน global config แล้ว (โหมด plan-agent · planningAgents: ${PLAN_AGENTS.join(', ')}) — มีผลกับ session ใหม่` };
   },
 
   plannotator: async ({ op }) => {
@@ -1451,7 +1548,7 @@ const ACTIONS = {
       }
     }
     steps.push({ id: 'lock-file', label: 'ไฟล์ล็อก server (serve-restricted.jsonc)', detail: fs.existsSync(P.serveRestricted) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างค่าเริ่มต้นแบบปลดล็อก (สลับโหมดได้ในแท็บ ล็อก & โมเดล)', will: !fs.existsSync(P.serveRestricted) });
-    const launchTarget = CFG.launchDir || path.join(HOME, 'opencode-launch');
+    const launchTarget = launchDirResolved();
     const serveExists = fs.existsSync(path.join(launchTarget, 'opencode-serve.vbs'));
     let launchMissing = 0;
     try { launchMissing = fs.readdirSync(path.join(__dirname, 'launch-template')).filter(f => !fs.existsSync(path.join(launchTarget, f))).length; } catch {}
@@ -1477,7 +1574,7 @@ const ACTIONS = {
       const key = obj.plugin && !obj.plugins ? 'plugin' : 'plugins';
       let arr2 = Array.isArray(obj[key]) ? obj[key] : [];
       arr2 = arr2.filter(x => !JSON.stringify(x).includes('plannotator'));
-      const opts = { workflow: 'plan-agent', planningAgents: ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'] };
+      const opts = { workflow: 'plan-agent', planningAgents: PLAN_AGENTS };
       arr2.push(key === 'plugin' ? ['@plannotator/opencode@latest', opts] : { package: '@plannotator/opencode@latest', options: opts });
       obj[key] = arr2;
       const bk = createBackup('setup-plugins');
@@ -1553,7 +1650,7 @@ const ACTIONS = {
       log.push('serve-restricted.jsonc');
     }
     if (has('launch')) {
-      const target = CFG.launchDir || path.join(HOME, 'opencode-launch');
+      const target = launchDirResolved();
       fs.mkdirSync(target, { recursive: true });
       let nL = 0;
       try {
@@ -1578,16 +1675,17 @@ const ACTIONS = {
     for (const it of items) counts[it.status]++;
     const templates = safe(templateDrift, []);
     const cfg = configDrift();
-    const tmplMissing = templates.filter(t => t.status !== 'present').map(t => t.key);
+    const tmplBad = templates.filter(t => t.status === 'missing' || t.status === 'stale');
     return {
       counts,
       total: items.length,
       changed: items.filter(i => i.status !== 'same'),
       templates,
       config: cfg,
+      launch: safe(launchAudit, { items: [], template: [], extra: [] }),
       launchSkipped: !CFG.launchDir && !fs.existsSync(path.join(HOME, 'opencode-launch')),
       message: `ตรวจแล้ว — ต่าง ${counts.diff} · ใหม่ ${counts.new} · เหมือน ${counts.same}`
-        + (tmplMissing.length ? ` · template ยังไม่มี: ${tmplMissing.join(', ')}` : '')
+        + (tmplBad.length ? ` · ต้องดู: ${tmplBad.map(t => t.key + (t.status === 'stale' ? ' (template ใหม่กว่า)' : ' (ยังไม่มี)')).join(', ')}` : '')
         + (cfg.ok ? '' : ` · planningAgents ขาด: ${cfg.missing.join(', ')}`),
     };
   },
@@ -1657,15 +1755,22 @@ const ACTIONS = {
     try { const u = await ACTIONS['update-apply']({}); log.push(u.message); } catch (e) { log.push('อัพเดต: ' + e.message); }
     try { const c = await ACTIONS['refresh-config']({}); log.push(c.message); } catch (e) { log.push('config: ' + e.message); }
     try { const m = await ACTIONS['mirror-agents']({}); log.push(m.message); } catch (e) { log.push('mirror: ' + e.message); }
+    const templates = safe(templateDrift, []);
+    const stale = templates.filter(t => t.status === 'stale' || t.status === 'missing');
+    if (stale.length) {
+      log.push(`ไฟล์ส่วนตัวยังต่างจาก template ${stale.length} ตัว: ` + stale.map(t => t.key).join(', ')
+        + ' — ระบบไม่ทับให้เอง'
+        + (stale.some(t => t.status === 'stale') ? ' · กด "รีเซ็ตจาก template" ในแท็บภาพรวมถ้าต้องการของใหม่ (สำรองก่อนเขียน)' : ' · กดติดตั้ง/อัพเดตเพื่อสร้างให้'));
+    }
     const v = await runVerify();
-    return { message: 'ซิงค์ทั้งหมด — ' + log.join(' · '), verify: v.summary };
+    return { message: 'ซิงค์ทั้งหมด — ' + log.join(' · '), verify: v.summary, templates, launch: safe(launchAudit, { items: [], template: [], extra: [] }) };
   },
 
   /* misc */
   'open-folder': async ({ key }) => {
     const map = {
       console: __dirname, bundle: BUNDLE, config: P.config, skills: P.skillsDir, agents: P.agentsDir, commands: P.commandsDir,
-      state: P.stateDir, launch: CFG.launchDir, build: CFG.buildDir, plannotator: P.plannotatorDir,
+      state: P.stateDir, launch: launchDirResolved(), build: CFG.buildDir, plannotator: P.plannotatorDir,
       cache: P.cacheNpm, backups: P.backups, claude: P.claudeSkills,
     };
     const dir = map[key];
@@ -1701,8 +1806,9 @@ async function gatherState() {
   const s = {
     app: { version: APP_VERSION, port: CFG.port, node: process.version, startedAt: STARTED_AT },
     paths: {
-      config: P.config, launchDir: CFG.launchDir, buildDir: CFG.buildDir, skillsDir: P.skillsDir,
+      config: P.config, launchDir: launchDirResolved(), buildDir: CFG.buildDir, skillsDir: P.skillsDir,
       agentsDir: P.agentsDir, commandsDir: P.commandsDir, plannotatorDir: P.plannotatorDir, backups: P.backups,
+      configReal: safe(() => fs.realpathSync.native(P.config), P.config),
     },
     server: { up: false, version: null, mismatch: false },
     opencodeCli: null,
@@ -1738,7 +1844,8 @@ async function gatherState() {
   ])];
   s.setup = { bundle: fs.existsSync(path.join(BUNDLE, 'skills')), firstRun: !fs.existsSync(P.opencodeJsonc) || (s.skills.total || 0) < 10 };
   s.templates = safe(templateDrift, []);
-  const rmd = CFG.launchDir ? readText(path.join(CFG.launchDir, 'remindToUpdate.md')) : null;
+  s.launch = safe(launchAudit, { dir: launchDirResolved(), items: [], template: [], extra: [], skipped: true });
+  const rmd = readText(path.join(launchDirResolved(), 'remindToUpdate.md'));
   s.remind = rmd ? { exists: true, preview: rmd.split(/\r?\n/).filter(l => l.trim()).slice(0, 12).join('\n').slice(0, 420) } : { exists: false };
   try {
     const arrs = parseJSONC(P.opencodeJsonc).obj || {};

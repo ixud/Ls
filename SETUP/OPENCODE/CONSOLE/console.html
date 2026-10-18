@@ -390,9 +390,16 @@ function vDash(){
   ${S.setup && S.setup.bundle ? `
   <div class="card">
     <h3>🧾 ไฟล์ส่วนตัวจาก template</h3>
-    <div class="small muted">AGENTS.md (กฎระดับเครื่อง) และ pstack-models.md (โมเดลต่อ role) เป็นไฟล์ที่ผู้ใช้แก้เองได้ ระบบจะไม่ทับให้เอง — กดรีเซ็ตได้เมื่อต้องการกลับไปค่าเริ่มต้นจาก bundle</div>
+    <div class="small muted">AGENTS.md (กฎระดับเครื่อง) และ pstack-models.md (โมเดลต่อ role) เป็นไฟล์ที่ผู้ใช้แก้เองได้ ระบบจะไม่ทับให้เอง — แต่จะ<b>บอกให้ทราบ</b>ว่าไฟล์ในเครื่องยังขาดหัวข้อ/role ที่ template ใน bundle มีอยู่ไหม (สถานะ "template ใหม่กว่า") แล้วกดรีเซ็ตได้เมื่อต้องการกลับไปค่าเริ่มต้นจาก bundle</div>
     <div class="verify-list mt">
-      ${(S.templates || []).map(t => `<div class="vrow">${led(t.status === 'present' ? 'ok' : 'warn')}<div class="grow"><b class="mono">${esc(t.key)}</b><div class="small muted">${t.status === 'present' ? 'มีอยู่แล้ว' : 'ยังไม่มี — จะสร้างจาก template'}</div></div><button class="btn sm" data-act="reset-template" data-name="${esc(t.key)}">รีเซ็ตจาก template</button></div>`).join('') || '<div class="muted small">—</div>'}
+      ${(S.templates || []).map(t => {
+        const cls = t.status === 'stale' ? 'warn' : (t.status === 'missing' ? 'warn' : 'ok');
+        const txt = t.status === 'same' ? 'ตรงกับ template ใน bundle'
+          : t.status === 'stale' ? `template ใหม่กว่า — ยังขาด: ${(t.missing || []).join(' / ')}`
+          : t.status === 'custom' ? 'คุณแก้เอง (หัวข้อครบตาม bundle) — ระบบไม่ทับ'
+          : (t.note || 'ยังไม่มี — จะสร้างจาก template');
+        return `<div class="vrow">${led(cls)}<div class="grow"><b class="mono">${esc(t.key)}</b><div class="small muted">${esc(txt)}${t.tplHash ? ` · template ${esc(t.tplHash)}` : ''}</div></div><button class="btn sm" data-act="reset-template" data-name="${esc(t.key)}">รีเซ็ตจาก template</button></div>`;
+      }).join('') || '<div class="muted small">—</div>'}
     </div>
   </div>` : ''}
   ${S.remind && S.remind.exists ? `<div class="card"><h3>↻ remindToUpdate</h3><div class="small muted" style="white-space:pre-wrap">${esc(S.remind.preview)}</div></div>` : ''}
@@ -442,7 +449,25 @@ function vLock(){
 }
 
 function vServer(){
-  const files = S.files.launch.map(f => `<div class="vrow">${led(f.exists?'ok':'fail')}<div><b class="mono">${esc(f.name)}</b><div class="small muted">${f.exists?'พบ':'ไม่พบ — ไฟล์ launch อาจหาย'}</div></div></div>`).join('');
+  const la = (S.launch && S.launch.items) || [];
+  const rows = la.length ? la : (S.files.launch || []).map(f => ({ name: f.name, exists: f.exists, plain: true }));
+  const files = rows.map(f => {
+    const bits = [];
+    if (f.plain) bits.push(f.exists ? 'พบ' : 'ไม่พบ — ไฟล์ launch อาจหาย');
+    else {
+      bits.push(f.inTemplate ? 'อยู่ในเทมเพลต (อัพเดตถึง)' : 'ไม่อยู่ในเทมเพลต — อัพเดตไม่ถึง');
+      if (f.mate) bits.push(f.mateMissing ? 'ไม่พบ ' + f.mate : 'มี ' + f.mate + ' ครบ');
+      if (f.inTemplate && f.refs === 0) bits.push('โค้ดไม่เรียกเอง — ดับเบิลคลิกใช้');
+    }
+    return `<div class="vrow">${led(f.exists?'ok':'fail')}<div><b class="mono">${esc(f.name)}</b><div class="small muted">${esc(bits.join(' · '))}</div></div></div>`;
+  }).join('');
+  const laWarn = [];
+  if (la.length) {
+    if (la.some(f => !f.exists)) laWarn.push('มีไฟล์หาย — กด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวมเพื่อสร้างกลับ');
+    if (la.some(f => !f.inTemplate)) laWarn.push('มีไฟล์ที่ไม่อยู่ใน launch-template — ปุ่มอัพเดตจะไม่แตะไฟล์นั้น');
+    if (la.some(f => f.mate && f.mateMissing)) laWarn.push('สคริปต์ล็อกขาดไฟล์ .jsonc คู่กัน — ดับเบิลคลิกแล้วล็อกไม่เปลี่ยน');
+    if (la.some(f => f.mate && f.writesLockFile === false)) laWarn.push('สคริปต์ล็อกเขียนไฟล์คนละชื่อกับที่แอปใช้ — แอปจะไม่เห็นค่าที่เขียน');
+  }
   return `
   <div class="grid">
     <div class="card"><h3>สถานะ server 4096</h3>
@@ -477,6 +502,7 @@ function vServer(){
   <div class="card">
     <h3>ไฟล์ launch (โฟลเดอร์ ${esc(S.paths.launchDir)})</h3>
     <div class="verify-list">${files}</div>
+    ${laWarn.length ? `<div class="warnbox mt">${laWarn.map(w=>esc(w)).join('<br>')}</div>` : ''}
     <div class="mt"><button class="btn sm ghost" data-act="open" data-key="launch">เปิดโฟลเดอร์ launch</button></div>
   </div>
   <details>
@@ -1125,7 +1151,8 @@ function updBoxHtml(){
       <span class="badge gold">ใหม่ ${c.new || 0}</span>
       <span class="badge">เหมือน ${c.same || 0}</span>
       ${UP.launchSkipped ? '<span class="badge red">ข้าม: ไฟล์ launch (ยังไม่ตั้ง launchDir)</span>' : ''}
-      ${(UP.templates || []).filter(t => t.status !== 'present').map(t => `<span class="badge red">ยังไม่มี ${esc(t.key)}</span>`).join('')}
+      ${(UP.templates || []).filter(t => t.status === 'missing' || t.status === 'stale').map(t => `<span class="badge red">${t.status === 'stale' ? 'template ใหม่กว่า: ' + esc(t.key) : 'ยังไม่มี ' + esc(t.key)}</span>`).join('')}
+      ${(UP.launch && UP.launch.items || []).filter(f => !f.exists || !f.inTemplate).length ? `<span class="badge gold">ไฟล์ launch ต้องดู ${(UP.launch.items || []).filter(f => !f.exists || !f.inTemplate).length} ไฟล์</span>` : ''}
       ${(UP.config && !UP.config.ok) ? `<span class="badge red">planningAgents ขาด ${esc((UP.config.missing || []).join(', '))}</span>` : ''}
     </div>
     <div class="verify-list mt" style="max-height:280px;overflow:auto">${rows}</div>`;

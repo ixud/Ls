@@ -4,6 +4,8 @@
 
 ชุดนี้คือสำเนาของ pstack เวอร์ชัน 0.15.25 (จาก cursor/plugins) ที่ดัดแปลงให้รันบน OpenCode เต็มรูปแบบ ยังมี features ครบเท่าต้นฉบับ ต่างกันแค่กลไกบางอย่างของ Cursor ถูกแทนด้วยกลไกของ OpenCode
 
+**เอกสารโฟลว์ของทั้งชุดอยู่ที่ [`../../FLOW.md`](../../FLOW.md)** — อธิบายว่าอะไรคุมอะไร (git → BAZER Console → ไฟล์ในเครื่อง → OpenCode), BAZER FLOW v1 (7 เฟสของโหมด Buddha), โหมดเรียกกันผ่าน mirror `BAZERs-EXTENSION-*` และลำดับที่ต้องทำหลัง `git pull` ส่วนคู่มือแบบไม่ต้องเขียนโค้ดคือ [`../../GUIDE.md`](../../GUIDE.md)
+
 
 ## ชุดนี้คืออะไร
 
@@ -17,7 +19,7 @@ pstack คือชุด "ทักษะ" (skills) ที่สอน AI agent
 | โฟลเดอร์ | มีอะไร | ปลายทางตอนติดตั้ง |
 |---|---|---|
 | `skills/` | 54 skills รวม playbooks ของ poteto-mode | `~/.agents/skills/` |
-| `agents/` | agent 3 ตัวของ OpenCode (poteto-mode, poteto-agent, comment-sicko) | `~/.config/opencode/agents/` |
+| `agents/` | agent 8 ตัวของชุดนี้ (advisor, arena, bazer, buddha, comment-sicko, poteto-agent, poteto-mode, snack) — โหมด `buddha` คือโหมดที่เดิน BAZER FLOW v1 และโหมดอื่นถูก "เรียก" ผ่าน mirror `BAZERs-EXTENSION-*` | `~/.config/opencode/agents/` |
 | `commands/` | slash command `/poteto-mode` | `~/.config/opencode/commands/` |
 | `config/` | template ไฟล์ตั้งค่าโมเดล | `~/.agents/pstack-models.md` |
 | `docs/`, `README.md` | เอกสารต้นฉบับของ pstack (ยังอ้าง Cursor — ดูหมายเหตุ) | ไม่ต้องติดตั้ง |

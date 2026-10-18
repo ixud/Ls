@@ -17,7 +17,7 @@
 - [🖥️ เปิด OpenCode Server ให้ Cline ใช้ (รันเองอัตโนมัติตอนเปิดเครื่อง)](#️-เปิด-opencode-server-ให้-cline-ใช้-รันเองอัตโนมัติตอนเปิดเครื่อง)
 - [🎭 เปิดโหมด Arena / โหมด Plan ด้วย CLI](#-เปิดโหมด-arena--โหมด-plan-ด้วย-cli)
 - [🖥️ BAZER Console — จัดการทุกอย่างใน GUI (กดเดียว)](#️-bazer-console--จัดการทุกอย่างใน-gui-กดเดียว)
-- [🎯 Bazer Mode — วางแผนอัตโนมัติ + Arena + Plannotator](#-bazer-mode--วางแผนอัตโนมัติ--arena--plannotator)
+- [🎯 Buddha Mode — วางแผน + Arena + สร้าง (BAZER FLOW v1)](#-buddha-mode--วางแผน--arena--สร้าง-bazer-flow-v1)
 - [📌 Server bridge — ปักหมุดเวอร์ชัน v1.19.2](#-server-bridge--ปักหมุดเวอร์ชัน-v1192)
 - [🗄️ ไฟล์ข้อมูล — ห้ามแก้ด้วยมือ](#️-ไฟล์ข้อมูล--ห้ามแก้ด้วยมือ)
 - [✅ สูตรสำเร็จ 4 แบบ (ทำตามได้เลย)](#-สูตรสำเร็จ-4-แบบ-ทำตามได้เลย)
@@ -479,46 +479,22 @@ Invoke-RestMethod -Method DELETE "http://127.0.0.1:4096/session/$($s.id)" -Heade
 อยากเห็นกับตาสุดท้าย: เข้าโหมด arena (Tab) → กด Tab ไป plan → สั่งวางแผนเรื่องง่าย ๆ แล้วดูว่า Plannotator เปิดหน้าจอรีวิวแผนไหม
 
 
-### 🧰 เทมเพลตสร้างโหมด Arena ใหม่ (ถ้าไฟล์หาย)
+### 🧰 สร้างไฟล์โหมด Arena เอง (เฉพาะเครื่องที่ไม่มี BAZER Console)
 
-ไฟล์นิยามของโหมด Arena อยู่ที่ `~/.config/opencode/agents/arena.md` — บน Windows **BAZER Console ติดตั้งให้อัตโนมัติแล้ว** (การ์ด "ติดตั้งเสร็จสรรพ" — หรือติดตั้ง/แก้เฉพาะโหมดได้ที่แท็บ pStack → agents)
+**ต้นทางเดียวของ prompt ทุกโหมดคือ `CONSOLE\bundle\agents\*.md` ในชุดนี้** — โหมด Arena คือ `CONSOLE\bundle\agents\arena.md` อย่าคัดลอกเนื้อหาโหมดมาเก็บไว้หลายที่ เพราะจะเพี้ยนกันแบบเงียบ ๆ (บล็อกเดิมในหัวข้อนี้เคยเป็นสำเนาที่ล้าสมัย)
 
-บน macOS สร้างใหม่ด้วยบล็อกด้านล่าง (อยากสร้างโหมดใหม่แบบให้ระบบถามทีละขั้น มีคำสั่งสำเร็จชื่อ `opencode agent create`)
+บน Windows **BAZER Console ติดตั้งให้อัตโนมัติแล้ว** (การ์ด "ติดตั้งเสร็จสรรพ" แท็บภาพรวม — หรือติดตั้ง/แก้เฉพาะโหมดได้ที่แท็บ pStack → agents)
 
-**macOS (Terminal):**
+บน macOS หรือเครื่องที่ไม่มีแอป คัดลอกไฟล์จาก bundle ตรง ๆ (ได้เนื้อหาตรงกับต้นทางเสมอ):
 
 ```bash
 mkdir -p ~/.config/opencode/agents
-cat > ~/.config/opencode/agents/arena.md <<'EOF'
----
-description: Debate Arena — แข่งหลาย candidate บนโจทย์เดียว เลือก base ที่ดีที่สุด แล้วรวมจุดเด่นของตัวแพ้เข้ามา (skill arena ของ pStack)
-mode: primary
-color: "#f5c542"
----
-
-# Debate Arena
-
-You run one process: pStack's `arena` skill. Load it before anything else.
-
-## Startup
-
-- First action of every session: load the `arena` skill with the skill tool and read it in full.
-- Follow its phases in order: Frame, Fan out, Cross-judge, Pick a base, Graft, Verify. Open the todolist it asks for before launching candidates.
-- If the skill fails to load, say so and stop. Do not improvise an arena from memory.
-
-## OpenCode harness mappings
-
-- Candidates and judges run as subagents: use the `task` tool with `subagent_type: "general"`.
-- Drop parameters your `task` tool does not support (for example a per-seat `model`); those seats run on this agent's model. Say which seats ran on which model in the output.
-- pStack per-role model settings live in `~/.agents/pstack-models.md`. If the file is missing, use the defaults the skill names and note that.
-- The skill's Cursor-only instructions (cloud agents, worktrees) translate to local equivalents: give each candidate its own output folder, under the project or a temp directory.
-
-## Report
-
-- Keep the synthesis note the skill asks for: base and why, cross-judge verdict, each graft with its source, what was rejected and why, convergence or dropouts, and the verification result.
-- Write in the user's language (Thai when they write Thai).
-EOF
+cp "<โฟลเดอร์ชุดนี้>/CONSOLE/bundle/agents/arena.md" ~/.config/opencode/agents/arena.md
 ```
+
+อยากสร้างโหมดใหม่แบบให้ระบบถามทีละขั้น มีคำสั่งสำเร็จชื่อ `opencode agent create`
+
+**ข้อควรรู้ก่อนแก้ไฟล์ agent ด้วยมือ:** ปุ่ม "อัพเดตทั้งหมด" และ "ซิงค์ทั้งหมด" ในแท็บภาพรวม **ทับไฟล์ agent ในเครื่องด้วยเนื้อหาจาก bundle** — ถ้าแก้ `~/.config/opencode/agents/arena.md` เอง การแก้จะหายเมื่อกดอัพเดต ให้แก้ที่ `CONSOLE\bundle\agents\arena.md` แล้วกดอัพเดตแทน (ปิดไว้ `.disabled` จะได้เนื้อหาใหม่แต่คงสถานะปิด)
 
 
 ## 🖥️ BAZER Console — จัดการทุกอย่างใน GUI (กดเดียว)
@@ -533,11 +509,12 @@ BAZER Console คือแอปหน้าจอในเครื่อง �
 
 | แท็บ | ทำอะไร |
 |---|---|
-| ภาพรวม | ไฟสถานะทุกจุด + ปุ่ม **ตรวจความครบ** + การ์ด **ติดตั้งเสร็จสรรพ** สำหรับเครื่องใหม่ |
+| ภาพรวม | ไฟสถานะทุกจุด + ปุ่ม **ตรวจความครบ** + การ์ด **ติดตั้งเสร็จสรรพ** สำหรับเครื่องใหม่ + การ์ด **อัพเดตเวอร์ชัน** (ตรวจว่ามีอะไรใหม่ / อัพเดตทั้งหมด / **🔄 ซิงค์ทั้งหมด** = อัพเดต + planningAgents + mirror ในปุ่มเดียว) + การ์ด **ไฟล์ส่วนตัวจาก template** (AGENTS.md · pstack-models.md — มีปุ่ม **รีเซ็ตจาก template** ต่อไฟล์) |
 | ล็อก & โมเดล | สลับโหมดล็อก 3 แบบ (ล็อกแน่น / provider เดียว / ปลดล็อก) + รีสตาร์ท server ให้, แก้ blacklist, ตั้งโมเดลหลัก + effort (ซิงค์ model.json กัน variant ทับ) |
 | Server & Cline | ตรวจสุขภาพ/รีสตาร์ท server 4096, เปิด-ปิด autostart, แก้ cli.json |
 | pStack | Apply ชุด build, ตั้งโมเดลต่อ role (รวม arena lists แบบหลายโมเดล), จัดการ skills/agents/commands (แก้ prompt agent ได้ในตัว), อัปเดตผ่าน npx skills |
-| Bazer | ศูนย์ของโหมด Bazer — สถานะการติดตั้ง, ขั้นตอนของโหมด, โมเดล Arena ของ Bazer (chip editor เฉพาะ), แก้ prompt bazer.md |
+| Bazer | ศูนย์ของโหมด Bazer — สถานะการติดตั้ง, วิธีทำงานของโหมด, ใช้เมื่อไหร่, แก้ prompt bazer.md |
+| Buddha | ศูนย์ของโหมด Buddha — สถานะติดตั้ง + ป้าย **BAZER FLOW v1**, การ์ด **ขั้นตอนของโหมด** (ทำงานในเซสชันเดียว ไม่สลับ agent), การ์ด **Arena session**, การ์ด **Mirror โหมด → skills** (ปุ่ม **อัพเดต mirror ทั้งหมด**), แก้ prompt buddha.md |
 | Snack | ศูนย์ของโหมด Snack — สถานะการติดตั้ง + จุดตั้งค่า |
 | โปรเจกต์ | สแกนว่าเครื่องเคยใช้ OpenCode ที่โฟลเดอร์ไหน + จัดการ agent.md แยกรายโปรเจกต์ (ติดตั้ง/ปิด-ลบ/แก้ไขในตัว) |
 | Plannotator | เปิด-ปิดปลั๊กอิน, แก้ config.json, จัดการคำสั่ง, เปิดคลังแผน |
@@ -549,35 +526,83 @@ BAZER Console คือแอปหน้าจอในเครื่อง �
 
 
 
-## 🎯 Bazer Mode — วางแผนอัตโนมัติ + Arena + Plannotator
+## 🎯 Buddha Mode — วางแผน + Arena + สร้าง (BAZER FLOW v1)
 
-โหมดใหม่ (สีแดงค่อนส้ม) สำหรับงานที่อยากได้ครบวงจร: รับ prompt อะไรก็ตาม → วางแผนการใช้ Arena → ยื่น Plannotator ด่านแรก (อนุมัติแล้วเข้า Arena Mode) → รัน Arena แข่งแนวทาง → สรุปเป็นแผนเดียว → ยื่น Plannotator ด่านสอง → อนุมัติแล้วลุยสร้าง
+โหมด Buddha ทำงานครบวงจรใน **เซสชันเดียว**: รับ prompt อะไรก็ตาม → วางแผนว่าจะใช้ Arena Mode ยังไง → ด่าน 1 Plannotator → รัน Arena ในเซสชันนี้ → รวมผลเป็นแผน implementation → ด่าน 2 Plannotator → อนุมัติแล้วลงมือสร้าง
 
-**เข้าโหมด:** กด Tab เลือก `bazer` ในหน้าจอ TUI หรือสั่งครั้งเดียวด้วย `opencode run --agent bazer "โจทย์ของคุณ"`
+**เข้าโหมด:** กด Tab เลือก `buddha` ในหน้าจอ TUI หรือสั่งครั้งเดียวด้วย `opencode run --agent buddha "โจทย์ของคุณ"`
 
-ลำดับที่โหมดนี้ทำ (มี **สองด่านอนุมัติ**):
+**แผนที่ dependency ทั้งหมด** (git → BAZER Console → ไฟล์ในเครื่อง → OpenCode) และสเปคโฟลว์ฉบับเต็มอยู่ที่ `FLOW.md` (ไฟล์ข้างกันในโฟลเดอร์นี้) — หัวข้อนี้สรุปเฉพาะที่ผู้ใช้ต้องรู้
 
-1. **วิเคราะห์ + วางแผน Arena** — อ่านโจทย์ + สำรวจ (อ่านอย่างเดียว) แล้วร่าง "แผน Arena": candidates 2-3 ทางที่ต่างกันจริง + rubric + โมเดลที่จะใช้
-2. **ด่าน 1 · Plannotator** — ยื่นแผน Arena ให้อนุมัติ — ในหน้าจอ Approve เลือกสลับ agent เป็น **arena** (ปุ่มและตัวเลือกทั้งหมดเป็นของ Plannotator เอง) = ไฟเขียวเข้า Arena Mode · ถ้า approve แบบไม่สลับ Bazer จะรัน arena ให้ภายในเซสชันเอง (fallback)
-3. **Arena Mode** — arena รับช่วงต่อ รัน Fan out → Cross-judge → Pick a base → Graft → Verify (ไฟล์ชั่วคราวลง temp เท่านั้น)
-4. **ด่าน 2 · Plannotator** — arena รวมผลเป็นแผน implementation ฉบับเดียว (base + graft + ขั้นตอน + วิธีพิสูจน์) แล้วยื่นแผนเอง — arena ถูกใส่ไว้ใน `planningAgents` ให้ยื่นได้
-5. **ตัดสินใจ (features ปกติ)** — feedback → แก้แล้วยื่นใหม่ · อนุมัติ → สลับเป็น **build** แล้วลุยสร้างต่ออัตโนมัติ (ข้อความ "Proceed with implementation")
 
-หมายเหตุ: `planningAgents` ของปลั๊กอินตั้งเป็น `plan, bazer, arena, snack` — ทุกโหมดนี้ยื่นแผนเข้า Plannotator ได้
+### 🧭 7 เฟสของ BAZER FLOW v1 (ห้ามข้ามลำดับ)
 
-**ตั้งโมเดลของ Arena:** BAZER Console → แท็บ **Bazer** (chip editor เฉพาะ — เร็วที่สุด) หรือแท็บ **pStack** → กด "ดึงรายชื่อโมเดลทั้งหมด" แล้วเพิ่ม/ลบโมเดลใน role (เลือกหลายโมเดลพร้อมกันได้):
+| เฟส | ทำอะไร | ทางออก |
+|---|---|---|
+| **G1-A** | วางแผน "ใช้ Arena Mode ยังไง": โจทย์ · candidates 2-3 ทางที่ต่างเชิงโครงสร้าง · rubric · ข้อจำกัด (ห้ามแตะโปรเจกต์) | ยื่นด่าน 1 |
+| **G1-B** | แผนฉบับเต็มตาม workflow เดิมของ Plannotator | รวมในด่าน 1 เดียวกัน |
+| **G1-C** | อนุมัติ ("Approve and Build") = ไปต่อเฟส Arena — **ไม่สลับ agent ไม่เข้า build** | |
+| **P3** | โหลด skill `BAZERs-EXTENSION-Arena` แล้วรันในเซสชันนี้: Fan out → Cross-judge → Pick a base → Graft → Verify (ไฟล์ชั่วคราวลง `%TEMP%\bazer\<slug>\`) | |
+| **G2-A** | วางแผน "เอาไปใช้กับโค้ดจริงยังไง": base ที่เลือก + เหตุผล · grafts · ไฟล์/จุดที่แตะ · ความเสี่ยง · วิธีพิสูจน์ | ยื่นด่าน 2 |
+| **G2-B** | แผน implementation ฉบับเดียว | รวมในด่าน 2 |
+| **G2-C** | อนุมัติ = ลงมือสร้าง (ในเซสชันนี้ หรือผู้ใช้สลับเป็น build เอง) | |
 
-- `arena runners` — ตอนเรียก arena เดี่ยว ๆ
-- `bazer arena runners` — ตอน arena ในโหมด Bazer (แยกจากตัวบนได้)
+กติกาที่ระบบบังคับ: ห้ามยื่นด่าน 2 ก่อน P3 จบ (ต้องมีผล Arena ประกอบ) · ห้ามแตะไฟล์โปรเจกต์ก่อน G2-C ยกเว้นไฟล์ชั่วคราวใน `%TEMP%\bazer\` · หลังอนุมัติแต่ละด่าน Buddha ไม่สลับ agent เอง ให้เดินเฟสถัดไปในเซสชันเดิม · ถ้าสั่ง "ข้าม arena" ให้ยื่นแผนเดียวจบที่ด่าน 1 แล้วไป G2-C
+
+หมายเหตุเรื่องปุ่มในหน้าอนุมัติ: ปุ่มและตัวเลือกทั้งหมดเป็นของ Plannotator เอง — ถ้าผู้ใช้เลือกสลับเป็น `arena` เองในหน้าอนุมัติ ให้ทำตาม `arena.md` ในเซสชันนั้น (ไม่ใช่ค่าเริ่มต้นของ BAZER FLOW v1)
+
+
+### 🪞 โหมด "เรียก" กันได้อย่างไร — mirror (BAZERs-EXTENSION-*)
+
+Buddha ไม่สลับ agent — มันโหลด skill **mirror** ชื่อ `BAZERs-EXTENSION-Arena` แล้วเดินตามเนื้อหาทั้งหมดของโหมด Arena ในเซสชันเดิม
+
+- mirror ทุกตัวถูก **generate** จาก agent ตัวจริงใน `%USERPROFILE%\.config\opencode\agents\` (ถ้ายังไม่ติดตั้ง ใช้จาก `CONSOLE\bundle\agents\` แทน) แล้วเขียนไปที่ `%USERPROFILE%\.agents\skills\BAZERs-EXTENSION-*\SKILL.md`
+- **ห้ามแก้ไฟล์ mirror ด้วยมือ** — มันจะถูกทับ แก้ที่ `CONSOLE\bundle\agents\*.md` แล้วกดอัพเดตเท่านั้น
+- ปุ่ม **"อัพเดต mirror ทั้งหมด"** อยู่ในแท็บ Buddha · ขั้นตอน "อัพเดตทั้งหมด" และ "ซิงค์ทั้งหมด" ในแท็บภาพรวมก็รัน mirror ให้เองด้วย
+
+**ตัวตรวจว่าเครื่องตรงกับต้นทางไหม:** ไฟล์ `CONSOLE\bundle\agents\buddha.md` มี marker `<!-- BAZER-FLOW: v1 -->` ตัวแอปเทียบ marker นี้ระหว่าง bundle กับไฟล์ที่ติดตั้งในเครื่อง — ตรงกันเมื่อไรจะขึ้นป้ายเขียว **BAZER FLOW v1** ในแท็บ Buddha และในปุ่ม "ตรวจความครบ"
+
+
+### 🔄 หลัง git pull ทำ 5 ขั้นนี้ (สรุปจาก FLOW.md หัวข้อ 4)
+
+1. ปิด-เปิด BAZER Console ใหม่ (ตัวแอปอ่านโค้ดครั้งเดียวตอนเปิด)
+2. แท็บภาพรวม → **ตรวจว่ามีอะไรใหม่** → **อัพเดตทั้งหมด**
+3. แท็บ Buddha → **อัพเดต mirror ทั้งหมด** (ถ้าข้อ 2 ทำให้แล้ว จะขึ้นว่าตรงครบ)
+4. กด **⚡ ตรวจความครบ** — ต้องเขียวทุกข้อ
+5. ปิด-เปิด OpenCode (session ใหม่จึงได้ config/agent/สกิลใหม่)
+
+ทางลัด: แท็บภาพรวม → **🔄 ซิงค์ทั้งหมด** ทำข้อ 2 + `planningAgents` + mirror ในปุ่มเดียว แล้วตามด้วยข้อ 4–5
+
+**ไฟล์ส่วนตัวสองไฟล์ที่ระบบไม่ทับให้เอง:** `AGENTS.md` (กฎระดับเครื่อง) และ `pstack-models.md` (โมเดลต่อ role) ถูกสร้างครั้งเดียวจาก `CONSOLE\bundle\config\*.template` — ถ้า bundle อัปเดต ไฟล์ในเครื่องจะไม่ขยับ กด **"รีเซ็ตจาก template"** ในการ์ด "ไฟล์ส่วนตัวจาก template" (แท็บภาพรวม) เมื่อต้องการกลับค่าเริ่มต้น (กติกาเต็มอยู่ที่ `FLOW.md` §0)
+
+
+### ⚙️ ตั้งโมเดลของ Arena / แก้ prompt
+
+**ตั้งโมเดลของ Arena:** BAZER Console → แท็บ **Buddha** หรือ **Arena Mode** (การ์ด "Arena session" — อ่านค่าเดียวกันทั้งสองแท็บ) หรือแท็บ **pStack** → กด "ดึงรายชื่อโมเดลทั้งหมด" แล้วเพิ่ม/ลบโมเดลใน role (เลือกหลายโมเดลพร้อมกันได้):
+
+- `arena runners` — ตัวแข่ง (ใช้ทั้งตอนเรียก arena เดี่ยว ๆ และตอน Arena ในเซสชัน Buddha)
 - `arena cross-judge pool` — ผู้ตัดสิน
 
-ตั้งได้สองที่: แท็บ **pStack** (การ์ด models) หรือแท็บ **Bazer** (chip editor เฉพาะของ Bazer — เร็วที่สุด)
+> บรรทัดเก่า `bazer arena runners` เลิกใช้แล้ว — ถ้าไฟล์ `~/.agents/pstack-models.md` ยังมีอยู่ แท็บ Buddha จะขึ้นปุ่ม "ย้ายค่าไป arena runners" ให้
 
-**แก้ prompt ของโหมด:** BAZER Console → แท็บ **Bazer** → การ์ด "✏️ แก้ prompt ของโหมด (bazer.md)" — หรือแก้ agent ตัวอื่น ๆ ได้ที่แท็บ **pStack** → agents (กด "✏️ แก้ไข") และระดับโปรเจกต์ที่แท็บ **โปรเจกต์**
-
-**ไฟลุกใน TUI (ปลั๊กอิน bazer-fire):** ในเซสชัน Bazer จะมีแอนิเมชัน 🔥 กะพริบตลอดเวลาที่แถว prompt footer (ใต้ชื่อโหมด) แทนการนิ่งเฉย — **BAZER Console ติดตั้งให้อัตโนมัติแล้ว** (คัดลอกไป `~/.config/opencode/plugins/bazer-fire/` + ลงทะเบียนใน `opencode.jsonc`) · ถ้าอยากถอน: ลบโฟลเดอร์นี้ + ลบบรรทัด `"./plugins/bazer-fire"` ออกจาก `opencode.jsonc` แล้วรีสตาร์ท OpenCode
+**แก้ prompt ของโหมด:** BAZER Console → แท็บ **Buddha** → การ์ด "✏️ แก้ prompt ของโหมด (buddha.md)" — หรือแก้ agent ตัวอื่น ๆ ได้ที่แท็บ **pStack** → agents (กด "✏️ แก้ไข") และระดับโปรเจกต์ที่แท็บ **โปรเจกต์** (จำไว้: การกดอัพเดตจะทับไฟล์ในเครื่องด้วยเนื้อหาจาก bundle)
 
 หมายเหตุ: โหมดนี้กินโทเคนมากกว่าปกติเพราะมี Arena — สั่ง "ข้าม arena" ได้ถ้างานเล็ก
+
+
+### 🧱 Bazer Mode ต่างจาก Buddha Mode ตรงไหน
+
+สองโหมดนี้ชื่อคล้ายกันแต่คนละงาน — อย่าสับสน
+
+| | **Buddha Mode** (`buddha`) | **Bazer Mode** (`bazer`) |
+|---|---|---|
+| ภาพรวม | วางแผน + Arena + สร้าง | ลงมือทำแบบจำกัดไฟล์ |
+| แตะไฟล์เมื่อไร | ไม่แตะไฟล์โปรเจกต์ก่อนอนุมัติด่าน 2 | แตะเฉพาะไฟล์ที่ผู้ใช้ระบุ path ในข้อความเท่านั้น |
+| ใช้ Arena | ใช้ (เฟส G1-A ถึง G2-C) | ไม่ใช้ |
+| เหมาะกับ | งานใหญ่ที่ยังไม่รู้แนวทาง | งานที่รู้แล้วว่าจะแก้ไฟล์ไหน |
+| ปลั๊กอิน 🔥 | — | แอนิเมชันไฟลุกใน TUI |
+
+**ไฟลุกใน TUI (ปลั๊กอิน bazer-fire):** ในเซสชัน **Bazer** จะมีแอนิเมชัน 🔥 กะพริบตลอดเวลาที่แถว prompt footer (ใต้ชื่อโหมด) แทนการนิ่งเฉย — **BAZER Console ติดตั้งให้อัตโนมัติแล้ว** (คัดลอกไป `~/.config/opencode/plugins/bazer-fire/` + ลงทะเบียนใน `opencode.jsonc`) · ถ้าอยากถอน: ลบโฟลเดอร์นี้ + ลบบรรทัด `"./plugins/bazer-fire"` ออกจาก `opencode.jsonc` แล้วรีสตาร์ท OpenCode
 
 
 
@@ -657,7 +682,9 @@ Server 4096 (สะพานให้ Cline ใช้โมเดล) ของ�
 - ก่อนแก้ไฟล์ทุกครั้ง ให้บอกก่อนว่าจะแก้อะไร
 ```
 
-จากนั้นปิด-เปิดโปรแกรมใหม่ — AI จะเห็นกฎนี้อัตโนมัติ (AGENTS.md ระดับเครื่อง BAZER Console สร้างให้ตอนติดตั้ง — และจัดการกฎ/agent แยกรายโปรเจกต์ได้ที่แท็บ "โปรเจกต์")
+จากนั้นปิด-เปิดโปรแกรมใหม่ — AI จะเห็นกฎนี้อัตโนมัติ (AGENTS.md ระดับเครื่อง BAZER Console สร้างให้ **ครั้งเดียว** ตอนติดตั้งจาก `CONSOLE\bundle\config\AGENTS.md.template` — และจัดการกฎ/agent แยกรายโปรเจกต์ได้ที่แท็บ "โปรเจกต์")
+
+**สำคัญ:** `AGENTS.md` และ `pstack-models.md` เป็น **ไฟล์ส่วนตัว** — การกด "อัพเดตทั้งหมด" หรือ "ซิงค์ทั้งหมด" จะ **ไม่ทับ** สองไฟล์นี้ ถ้าในชุดใหม่แก้ template สองไฟล์นี้ ไฟล์ในเครื่องจะยังเป็นของเดิมจนกว่าจะกด **"รีเซ็ตจาก template"** ในการ์ด "ไฟล์ส่วนตัวจาก template" (แท็บภาพรวม) — ปุ่ม "ตรวจความครบ" จะขึ้นเป็นข้อ `info` ให้เห็นเมื่อเนื้อหาในเครื่องต่างจากต้นทาง (กติกาเต็มอยู่ที่ `FLOW.md` §0)
 
 
 ### 3) สร้างคำสั่งลัดของตัวเอง
@@ -908,7 +935,9 @@ fi
 | Global config | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\opencode.json` | `~/.config/opencode/opencode.json` |
 | Global ปุ่มลัด/ธีม | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\tui.json` | `~/.config/opencode/tui.json` |
 | Global กฎ AI | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\AGENTS.md` | `~/.config/opencode/AGENTS.md` |
-| โหมด Arena ที่สร้างเอง | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\agents\arena.md` | `~/.config/opencode/agents/arena.md` |
+| โหมดที่ BAZER Console ติดตั้ง (Arena · Buddha · Bazer · Snack · poteto-mode และอื่น ๆ) | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\agents\` | `~/.config/opencode/agents/` |
+| mirror ของโหมด (BAZERs-EXTENSION-*) — generate ห้ามแก้ด้วยมือ | `C:\Users\<ชื่อผู้ใช้>\.agents\skills\BAZERs-EXTENSION-*\SKILL.md` | `~/.agents/skills/BAZERs-EXTENSION-*/SKILL.md` |
+| ไฟล์ส่วนตัวจาก template (สร้างครั้งเดียว ไม่ถูกทับ) | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\AGENTS.md` · `C:\Users\<ชื่อผู้ใช้>\.agents\pstack-models.md` | `~/.config/opencode/AGENTS.md` · `~/.agents/pstack-models.md` |
 | ปลั๊กอินไฟ Bazer (`bazer-fire`) | `C:\Users\<ชื่อผู้ใช้>\.config\opencode\plugins\bazer-fire\` | `~/.config/opencode/plugins/bazer-fire/` |
 | Project config | `<โปรเจกต์>\opencode.json` | `<project>/opencode.json` |
 | Project กฎ AI | `<โปรเจกต์>\AGENTS.md` | `<project>/AGENTS.md` |

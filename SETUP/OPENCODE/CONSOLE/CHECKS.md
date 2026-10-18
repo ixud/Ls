@@ -1,8 +1,9 @@
-# CHECKS — บันทึกผลตรวจ (bug scan 3 รอบ)
+# CHECKS — บันทึกผลตรวจ (bug scan 3 รอบ · รอบ 4/5 งานเอกสาร)
 
-วันที่: 18 ต.ค. 2026 · เครื่อง: Windows / OpenCode V2 · โฟลเดอร์: `SETUP/OPENCODE/CONSOLE`
+วันที่: 18 ต.ค. 2026 · เครื่อง: Windows / OpenCode V2 · โฟลเดอร์: `SETUP/OPENCODE/CONSOLE` · ครอบถึง commit **889fad3** (Console v1.3.0) + รอบ 4/5 ของงาน BAZER FLOW v1
 วิธีรัน: ทดสอบใน sandbox (`%TEMP%\bazer-console-test`) โดยตั้ง `USERPROFILE` ปลอม เพื่อไม่แตะ config จริงของเครื่อง
 คำสั่งหลัก: `node --check console.mjs` · เรียก API ของแอปที่รันใน sandbox (`/api/state`, `/api/verify`, `/api/action`)
+กติกา: ทุกครั้งที่รันชุดตรวจ ให้ `git rev-parse --short HEAD` แล้วเขียน hash ลงบรรทัดวันที่ — ถ้า hash ไม่ตรงกับ HEAD ปัจจุบัน ให้ถือว่าผลในไฟล์นี้ยังไม่ครอบโค้ดรุ่นใหม่
 
 
 ## รอบ 1 — static
@@ -44,6 +45,25 @@
 | verify หลังซ่อม | `planningAgents` ok · mirror ok · `BAZER FLOW v1` ok |
 
 
+## รอบ 4 — งานเอกสาร BAZER FLOW v1 (static · รันจริงรอบนี้)
+
+เครื่อง: Windows · Node v24.16.0 · repo `C:\BCS\00.02 LLM Slavery` branch `air` HEAD `889fad3` · สคริปต์ตรวจอยู่ในโฟลเดอร์งานของ arena (`%TEMP%\bazer\buddha-flow-gap\docs-verify\`)
+
+| ตรวจ | คำสั่ง | ผล |
+|---|---|---|
+| บล็อก "ก่อน" ของ GUIDE ทั้ง 6 ช่วง ปรากฏครั้งเดียวในไฟล์จริง | `node "%TEMP%\bazer\buddha-flow-gap\docs-verify\check-anchors.cjs"` | 5/6 ตรงครั้งเดียว · อีก 1 (ท้ายช่วง R1 = `EOF` + ปิดเฟนซ์) ปรากฏ 8 ครั้ง จึงไม่ใช้เป็น anchor — แทนที่ **ทั้งช่วง 482–521** ในครั้งเดียวแทน |
+| ชื่อปุ่ม/ป้ายที่เอกสารอ้างมีจริงใน UI | `node "%TEMP%\bazer\buddha-flow-gap\docs-verify\check-labels.cjs"` | 24/24 พบ (`⚡ ตรวจความครบ` · `ติดตั้งเสร็จสรรพ - ทั้งหมด` · `ตรวจว่ามีอะไรใหม่` · `อัพเดตทั้งหมด` · `🔄 ซิงค์ทั้งหมด` · `ไฟล์ส่วนตัวจาก template` · `รีเซ็ตจาก template` · `อัพเดต mirror ทั้งหมด` · `ย้ายค่าไป arena runners` · `BAZER FLOW v` · `ข้าม arena` …) |
+| path ที่เอกสารอ้างมีจริง | `Test-Path` ทุกพาธที่อ้างในเอกสารที่แก้ | ผ่านทุกพาธ · และ `SETUP\OPENCODE\CONSOLE\bundle\..\FLOW.md` = **False** → ยืนยันว่าจาก `CONSOLE/bundle/` ต้องเป็น `../../FLOW.md` ไม่ใช่ `../FLOW.md` |
+| code fence สมดุลทุกไฟล์ที่แก้ | `node "%TEMP%\bazer\buddha-flow-gap\docs-verify\check-fences.cjs"` | 5/5 balanced |
+| `console.config.json` มีคีย์ `modelSets` จริง | `Select-String -Path "SETUP\OPENCODE\CONSOLE\console.config.json" -Pattern modelSets` | พบ 2 ชุด · โค้ดอ่านที่ `console.mjs:1302` (เขียน) และ `console.mjs:1828` (state) |
+
+
+## รอบ 5 — ข้ออ้างของเอกสารกับไฟล์จริง (ยังไม่ได้รัน)
+
+- ตัวตรวจเอกสาร ↔ ตัวจริง ยังไม่มีในแอป: ถ้า GUIDE/README/FLOW ถูกแก้ทีหลังจนประโยคที่อ้างถึงโหมด/ปุ่มหายไป ระบบจะไม่เตือน
+- ยังต้องรันบนเครื่องจริง: เปิดแอปใหม่ → กด "ตรวจความครบ" → ข้อ template ส่วนตัว ต้องเป็น `ok`/`info` และข้อไฟล์ launch ต้องเป็น `ok` หลังกดติดตั้ง (รอบนี้ยังไม่ได้รันบนเครื่องจริง)
+
+
 ## บั๊กที่เจอระหว่างสแกนและแก้แล้ว
 
 | อาการ | ต้นเหตุ | แก้ |
@@ -56,8 +76,20 @@
 | mirror มี marker ซ้ำ 2 บรรทัด | generator เติม marker เพิ่มจากที่มีใน body | ถอดการเติมออก — ใช้ marker ที่อยู่ในเนื้อหาโดยตรง |
 
 
+### คำอ้างเดิมในไฟล์นี้ที่ไม่ตรงกับโค้ด (แก้บันทึก)
+
+ตารางข้างบนเขียนว่า `planningAgents` ถูก "รวมเป็น `PLAN_AGENTS` ตัวเดียว" — ตรวจซ้ำที่ HEAD `889fad3` ด้วยคำสั่งนี้
+
+```powershell
+git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "planningAgents: \['plan'","plan, buddha, arena"
+```
+
+ผลจริง: โค้ด **ยัง hardcode รายชื่อซ้ำอีก 2 ที่** — `console.mjs:1156` (ข้อความตอบกลับ) และ `console.mjs:1480` (`planningAgents: ['plan','buddha','arena','snack','poteto-mode']`) — นอกเหนือจากต้นทางเดียว `PLAN_AGENTS` ที่บรรทัด 73 คำอ้าง "ตัวเดียว" จึงยังไม่จริง ต้องรอการแก้โค้ดในรอบนี้
+
+
 ## ยังค้าง (ต้องทำต่อ)
 
-- รัน verify บนเครื่องจริงหลังรีสตาร์ท BAZER Console (sandbox ไม่มี server 4096 จึงมี fail ที่คาดไว้)
-- ทดสอบโฟลว์จริง 1 เคสใน Buddha Mode: ด่าน 1 → อนุมัติ → Arena ในเซสชัน → ด่าน 2 → อนุมัติ → สร้าง
-- สืบที่มาของ `%USERPROFILE%\.config\opencode-profiles\default\**` (ยังไม่มีอะไรควบคุม — ต้องรู้ก่อนว่าใครเขียน)
+- **ปิดแล้ว (18 ต.ค. 2026):** ที่มาของ `%USERPROFILE%\.config\opencode-profiles\default\**` — `%USERPROFILE%\.config\opencode` เป็น **junction** ชี้ไปที่โฟลเดอร์นั้น (reparse tag `0xa0000003` · สร้าง 16/10/2026 13:38 · ไฟล์ `AGENTS.md` ทั้งสองทางมี File ID เดียวกัน) — เป็นโฟลเดอร์เดียวกันจริง ไม่ใช่สำเนา จึงไม่มีอะไรต้องควบคุมเพิ่ม
+- ยังค้าง: ทดสอบโฟลว์จริง 1 เคสใน Buddha Mode: ด่าน 1 → อนุมัติ → Arena ในเซสชัน → ด่าน 2 → อนุมัติ → สร้าง
+- ยังค้าง: รัน "รอบ 4/5" บนเครื่องจริง (ปิด-เปิดแอปใหม่ก่อน ตัวแอปอ่านโค้ดครั้งเดียวตอนเปิด)
+- ยังค้าง: งานยังไม่ขึ้น remote — branch `air` นำหน้า `fire/air` อยู่ 4 commit (ยังไม่ push) เครื่องอื่นจึงยังไม่ได้ของ (ดู `FLOW.md` §4)
