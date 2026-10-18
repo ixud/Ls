@@ -64,6 +64,26 @@
 - ยังต้องรันบนเครื่องจริง: เปิดแอปใหม่ → กด "ตรวจความครบ" → ข้อ template ส่วนตัว ต้องเป็น `ok`/`info` และข้อไฟล์ launch ต้องเป็น `ok` หลังกดติดตั้ง (รอบนี้ยังไม่ได้รันบนเครื่องจริง)
 
 
+## รอบ 6 — เครื่องจริง + clone ใหม่ + เดินโฟลว์ Buddha จริง (รันจริงรอบนี้ · Console v1.4.0)
+
+เครื่อง: Windows · Node v24.16.0 · repo `C:\BCS\00.02 LLM Slavery` branch `air` HEAD `c90c358` (Console v1.4.0)
+
+| ตรวจ | คำสั่ง | ผล |
+|---|---|---|
+| ไวยากรณ์หลัง merge แพตช์ 3 ชุด (base B + graft A + graft C) | `node --check console.mjs` | exit 0 · สคริปต์ใน `console.html` parse ผ่าน |
+| sandbox ฉากปกติ / ไฟล์หาย / สคริปต์ล็อกขาดคู่ | รันแอปใน `%TEMP%\bazer\verify-mine2` ด้วย `USERPROFILE` ปลอม แล้ว `GET /api/verify` | ไฟล์ launch ครบ = `ok ไฟล์ launch ครบและอยู่ในเทมเพลต 5 ไฟล์ · เทมเพลต 5 ไฟล์` · ไฟล์หาย = `warn` ระบุชื่อไฟล์ · สคริปต์ล็อกขาด `.jsonc` = `warn` · **ไม่มี** คำเตือน "เขียนผิดไฟล์" เมื่อไฟล์ยังไม่มี (แก้ false positive รอบนี้) |
+| ตัวตรวจ template เทียบเนื้อหา | ลบหัวข้อ `# AGENTS — Plannotator Gate` ออกจากสำเนา AGENTS.md ใน sandbox | `warn template ใน bundle ใหม่กว่าไฟล์ในเครื่อง 1 ตัว · AGENTS.md ยังขาด: AGENTS - Plannotator Gate` · `state.templates` = `status:stale, missing:[...], tplHash:51371db1` |
+| ขอบเขต allowlist (โฟลเดอร์ข้างเคียง) | วาง `pwn.txt` ใน `.config\opencode-studio\` แล้ว `POST {id:'restore-backup',set:'zz-boundary'}` | `กู้คืนแล้ว 0 รายการ (ข้าม 1 นอก allowlist)` · เนื้อหาไฟล์ยังเป็น `PWNED-ORIGINAL` (ก่อนแก้: กู้คืนได้ = เขียนทับโฟลเดอร์ข้างเคียงได้) |
+| `restart-server` / `autostart` เมื่อ `launchDir` ว่าง | POST ทั้งสอง action ใน sandbox | ไม่ throw แล้ว — ข้อความบอกโฟลเดอร์จริง `...\opencode-launch` และชี้ปุ่มถัดไป |
+| **เครื่องใหม่ clone จริง** (Step 03) | `git clone <repo> %TEMP%\bazer\clone-test\repo` → รันแอปจากสำเนา (USERPROFILE ปลอม) → `setup-preview` → `setup-apply` (11 ขั้น) → `update-check` → `state` + `verify` | ติดตั้ง +63 skills · mirror **6/6 synced** · `flow {bundle:1,installed:1,ok:true}` · planningAgents ครบ · template `same` ทั้งคู่ · launch 5/5 · `update-check` = ต่าง 0 / ใหม่ 0 / เหมือน 69 · verify `ok 10 / warn 2 / fail 1` (fail = server 4096 ไม่ได้เปิด) |
+| **เครื่องจริง** หลังปิด-เปิดแอปใหม่ (v1.4.0 · pid 37748) | เปิดผ่าน `BAZER Console.vbs` → `GET /api/verify` | `ok 8 / warn 3 / fail 1` · มี `info config root เป็นลิงก์ (junction)` ใหม่ · `paths.configReal` = `...\opencode-profiles\default` · template = `custom` ทั้งคู่ (ไม่ขึ้น "ยังไม่มี" แล้ว) · launch warn บอกโฟลเดอร์จริง `C:\Users\Bazer\opencode-launch` |
+| **เดินโฟลว์ Buddha จริง 1 เคส** (ในเซสชันเดียวกัน) | ด่าน 1 `submit_plan` → อนุมัติ → Arena 3 candidates + กรรมการ 3 → ด่าน 2 | ครบ 7 เฟส · คะแนน candidate A 55 / B 64 / C 44 → base = B + graft จาก A และ C → ด่าน 2 อนุมัติ → สร้าง + commit `c90c358` |
+
+**บั๊กที่โฟลว์จริงเปิดออก (แก้แล้วรอบนี้):** หลังอนุมัติด่าน 1 เครื่องมือ `submit_plan` **หายไปจากเซสชัน** (ออกจาก plan mode) → สเปคเดิมที่บอกให้ยื่นด่าน 2 ด้วย `submit_plan` ใช้ไม่ได้จริง · แก้ที่ `bundle/agents/buddha.md` + `FLOW.md` §3 ให้ยื่นด่าน 2 ด้วย Plannotator CLI (`plannotator annotate <plan.md> --gate --json --require-approval --result-file <result.json>`) เมื่อไม่มีปุ่มในแชท และย้ำว่าห้ามข้ามด่าน · อัปเดตไฟล์ที่ติดตั้ง + mirror ผ่าน `update-apply` แล้ว (ตรวจแล้วว่าทั้งสองไฟล์มีบรรทัดใหม่)
+
+**หมายเหตุบนเครื่องจริงที่ยังไม่ปิด:** `warn effort ไม่ตรงกัน — config: default · model.json: max` (OpenCode เขียน `~/.local/state/opencode/model.json` เองตอนใช้งาน ไม่เกี่ยวกับงานนี้ — กดซิงค์ได้ที่แท็บ "ล็อก & โมเดล") และไฟล์ launch ยังไม่ถูกติดตั้งบนเครื่องนี้ (กด "ติดตั้งเสร็จสรรพ" เมื่อต้องการ)
+
+
 ## บั๊กที่เจอระหว่างสแกนและแก้แล้ว
 
 | อาการ | ต้นเหตุ | แก้ |
@@ -90,6 +110,7 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 ## ยังค้าง (ต้องทำต่อ)
 
 - **ปิดแล้ว (18 ต.ค. 2026):** ที่มาของ `%USERPROFILE%\.config\opencode-profiles\default\**` — `%USERPROFILE%\.config\opencode` เป็น **junction** ชี้ไปที่โฟลเดอร์นั้น (reparse tag `0xa0000003` · สร้าง 16/10/2026 13:38 · ไฟล์ `AGENTS.md` ทั้งสองทางมี File ID เดียวกัน) — เป็นโฟลเดอร์เดียวกันจริง ไม่ใช่สำเนา จึงไม่มีอะไรต้องควบคุมเพิ่ม
-- ยังค้าง: ทดสอบโฟลว์จริง 1 เคสใน Buddha Mode: ด่าน 1 → อนุมัติ → Arena ในเซสชัน → ด่าน 2 → อนุมัติ → สร้าง
-- ยังค้าง: รัน "รอบ 4/5" บนเครื่องจริง (ปิด-เปิดแอปใหม่ก่อน ตัวแอปอ่านโค้ดครั้งเดียวตอนเปิด)
-- ยังค้าง: งานยังไม่ขึ้น remote — branch `air` นำหน้า `fire/air` อยู่ 4 commit (ยังไม่ push) เครื่องอื่นจึงยังไม่ได้ของ (ดู `FLOW.md` §4)
+- **ปิดแล้ว (18 ต.ค. 2026):** ทดสอบโฟลว์จริง 1 เคสใน Buddha Mode — ครบ 7 เฟส (ด่าน 1 → อนุมัติ → Arena ในเซสชัน 3 candidates + กรรมการ 3 → ด่าน 2 → อนุมัติ → สร้าง) ดู "รอบ 6" · พร้อมแก้สเปคจุดที่ใช้ไม่ได้จริง (ด่าน 2 ผ่าน Plannotator CLI เมื่อไม่มี `submit_plan`)
+- **ปิดแล้ว (18 ต.ค. 2026):** รันบนเครื่องจริงหลังปิด-เปิดแอปใหม่ (v1.4.0) + ทดสอบ clone ใหม่จริง (Step 03) — ดู "รอบ 6"
+- ยังค้าง: งานยังไม่ขึ้น remote — branch `air` นำหน้า `fire/air` (ยังไม่ push) เครื่องอื่นจึงยังไม่ได้ของ (ดู `FLOW.md` §4)
+- ยังค้าง: ตัวตรวจ "เอกสาร ↔ ตัวจริง" ยังไม่มีในแอป (ถ้า GUIDE/README/FLOW ถูกแก้ทีหลังจนประโยคที่อ้างถึงโหมด/ปุ่มหายไป ระบบจะไม่เตือน) — รอบนี้ใช้สคริปต์ใน `%TEMP%\bazer\buddha-flow-gap\docs-verify\` ตรวจแทน ถ้าต้องการให้ตรวจได้ทุกเครื่อง ควรย้ายสคริปต์ชุดนี้เข้า repo แล้วเรียกจากปุ่มในแท็บภาพรวม
