@@ -10,6 +10,12 @@ Which includes strange and difficult poses.
 If you think it's too much, you don't have to read it.
 BAZER Console (the CONSOLE folder) can help you.
 
+> แนะนำให้ก๊อป SETUP\OPENCODE\BAZER CONSOLE - WINDOWS.lnk ไว้บน DESKTOP ของคุณ (ในกรณีที่คุณใช้ระบบปฏิบัติการ WINDOWS)
+
+
+> It is recommended to copy SETUP\OPENCODE\BAZER CONSOLE - WINDOWS.lnk to your DESKTOP. (Incase you use WINDOWS Operational System)
+
+
 **โฟลเดอร์ในชุดนี้ / Folders in this pack:**
 
 - `CONSOLE/` — **BAZER Console** — ดับเบิลคลิก `BAZER Console.vbs` ตัวเดียวจบ: ติดตั้งทุกอย่างในคลิกเดียวจาก bundle ที่แนบมา (config, skills ~54, agents, commands, ปลั๊กอิน Plannotator + bazer-fire 🔥)
