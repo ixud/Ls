@@ -15,6 +15,7 @@ BAZER Console (the CONSOLE folder) can help you.
 - `CONSOLE/` — **BAZER Console** — ดับเบิลคลิก `BAZER Console.vbs` ตัวเดียวจบ: ติดตั้งทุกอย่างในคลิกเดียวจาก bundle ที่แนบมา (config, skills ~54, agents, commands, ปลั๊กอิน Plannotator + bazer-fire 🔥)
 - ไฟล์โหมดทั้งหมด (agents + skills + ปลั๊กอิน bazer-fire) อยู่ใน `CONSOLE/bundle` เป็นแหล่งเดียว — แก้ที่ bundle แล้วเปิด BAZER Console → แท็บภาพรวม → "อัพเดตทั้งหมด" เพื่อลงเครื่อง
 - `GUIDE.md` — คู่มือฉบับ non-code: ไฟล์ตั้งค่าคืออะไร อยู่ตรงไหน ทำไมต้องมี (อ่านเมื่ออยากเข้าใจเบื้องหลัง)
+- `FLOW.md` — แผนที่ dependency (git → BAZER Console → เครื่อง → OpenCode) + สเปคบังคับของ BUDDHA FLOW v1
 
 - `CONSOLE/` — **BAZER Console** — double-click `BAZER Console.vbs`: one click installs everything from the attached bundle (config, ~54 skills, agents, commands, Plannotator + bazer-fire plugins)
 - All mode files (agents, skills, the bazer-fire plugin) live in `CONSOLE/bundle` as the single source — edit there, then press update in BAZER Console (Overview tab) to install
@@ -77,7 +78,7 @@ You can follow her at www.no.lol
 
 ## BUDDHA MODE
 
-เป็นการรวมร่างของสอง MODE ที่พูดถึง
+เป็นการรวมร่างของสอง MODE ที่พูดถึง (สเปคบังคับ 7 เฟส + แผนที่ไฟล์: [`FLOW.md`](./FLOW.md))
 
 It is a fusion of these two modes. 
 
@@ -122,6 +123,15 @@ This mode is to command the model.
 4. If the USER wants you to read another MODEL > the USER will tell you in the next turn, but if the USER doesn't tell you, don't insist. If the USER wants you to read another MODEL > the USER will tell you in the next turn. But if the USER doesn't say anything, don't insist.
 5. You can only fix the files that the USER specifies.
 
+# SNACK MODE
+
+โหมดถามเร็วตอบเร็ว
+QUICK CHAT MODE
+
+คล้าย Bazer Mode แต่ว่าเน้นเป็นม้าเร็ว ไปอ่านแล้วมาตอบ ไม่แก้ไฟล์ ขอให้คิดซะว่าเป็นการ "ถามเร็วตอบเร็ว"
+
+Similar to Bazer Mode but focused on speed. Go read and then respond. No file editing. Just think of it as a "quick question, quick answer."
+
 # ADVISOR MODE
 
 โหมดนี้ต่อยอดจาก BAZER MODE แต่ว่าเปลี่ยนรายละเอียดนิดหน่อย กลายเป็น...
@@ -142,7 +152,3 @@ This mode builds on BAZER MODE but with slight changes in the details, becoming.
 
 This mode is for replacing the Non-Code Chatbot, which you usually order with the FRONTIER MODEL. However, if the context you want the MODEL to help with exceeds the quota of a Free Account, please order OPENCODE instead.
 
-# SNACK MODE
-
-โหมดถามเร็วตอบเร็ว
-QUICK CHAT MODE
