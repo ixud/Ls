@@ -2,7 +2,7 @@
 
 ศูนย์ควบคุม config ของ OpenCode — กดเดียวจัดการทุกอย่างที่ปกติต้องเปิดไฟล์แก้เอง ทำงานในเครื่องคุณเท่านั้น (127.0.0.1) เป็นแอปหน้าจอเล็ก ๆ ที่เปิดผ่านเบราว์เซอร์
 
-สเปคของโหมด/โฟลว์/การติดตั้ง (ต้นทาง → ปลายทาง, BAZER FLOW v1) อยู่ที่ **`../FLOW.md`** — README นี้ไม่คัดลอกตารางเหล่านั้นมา เพื่อไม่ให้ไม่ตรงกัน
+สเปคของโหมด/โฟลว์/การติดตั้ง (ต้นทาง → ปลายทาง, BAZER FLOW v2) อยู่ที่ **`../FLOW.md`** — README นี้ไม่คัดลอกตารางเหล่านั้นมา เพื่อไม่ให้ไม่ตรงกัน
 
 **วิธีเปิด:** ดับเบิลคลิก **`BAZER Console.vbs`** ในโฟลเดอร์นี้
 
@@ -17,7 +17,7 @@
 
 เปิดแอป → แท็บ "ภาพรวม" → การ์ด "🚀 ติดตั้งเสร็จสรรพ" → กดปุ่ม "ติดตั้งเสร็จสรรพ - ทั้งหมด"
 
-ระบบติดตั้งให้ครบในคลิกเดียว: config, skills (ชุด pStack ~54 ตัว), agents (Bazer, arena, Snack, poteto-mode และอื่น ๆ), commands, ปลั๊กอิน (Plannotator + bazer-fire 🔥), ไฟล์ล็อก + ตัวเปิด server 4096, AGENTS.md และ pstack-models.md — ทุกการเขียนมีการสำรองก่อนเสมอ กดซ้ำได้ปลอดภัย
+ระบบติดตั้งให้ครบในคลิกเดียว: config, skills (ชุด pStack ~54 ตัว), agents (Bazer, Buddha, builder, arena, Snack, poteto-mode และอื่น ๆ), commands, ปลั๊กอิน (Plannotator + bazer-fire 🔥 + bazer-flow), ไฟล์ล็อก + ตัวเปิด server 4096, AGENTS.md และ pstack-models.md — ทุกการเขียนมีการสำรองก่อนเสมอ กดซ้ำได้ปลอดภัย
 
 
 **แท็บต่าง ๆ ทำอะไร:**
@@ -28,7 +28,7 @@
 | **ล็อก & โมเดล** | สลับโหมดล็อก server 3 แบบ (ล็อกแน่น / provider เดียว / ปลดล็อก) พร้อมรีสตาร์ท server ให้, แก้ blacklist, ตั้งโมเดล + effort พร้อมซิงค์ `model.json` |
 | **Server & Cline** | ตรวจสุขภาพ/รีสตาร์ท server 4096, เปิด-ปิด autostart ตอนเปิดเครื่อง, ค่าที่ใส่ใน Cline, แก้ `cli.json` |
 | **pStack** | Apply ชุด build, **🧩 ชุดโมเดล (sets) → เลือก function ที่ชุดดูแล + Quick Select**, จัดการ skills/agents/commands (แก้ prompt ในตัวได้), อัปเดตผ่าน npx skills |
-| **โหมดผู้ช่วย (กลุ่ม)** | หนึ่งแท็บต่อโหมด — สถานะติดตั้ง, "ของที่โหมดนี้ต้องมี", แก้ prompt, สวิตช์เปิด/ปิด: **Bazer** (ลงมือทำแบบจำกัดไฟล์) · **Buddha** (7 เฟสบังคับตาม BAZER FLOW v1 — มีการ์ด Arena session, ป้าย **BAZER FLOW v1** ที่เทียบ marker กับ bundle ให้, และปุ่ม "อัพเดต mirror ทั้งหมด") · **Arena** (มี Arena session config) · **Snack** · **Poteto** · **Advisor** |
+| **โหมดผู้ช่วย (กลุ่ม)** | หนึ่งแท็บต่อโหมด — สถานะติดตั้ง, "ของที่โหมดนี้ต้องมี", แก้ prompt, สวิตช์เปิด/ปิด: **Bazer** (ลงมือทำแบบจำกัดไฟล์) · **Buddha** (BAZER FLOW v2 — ทุกเฟสในเซสชันเดียว ไม่สลับ agent, การ์ด Arena session, ป้าย **BAZER FLOW v2** ที่เทียบ marker กับ bundle, การ์ด **BAZER FLOW v2 · Plan gate + builder**, และปุ่ม "อัพเดต mirror ทั้งหมด") · **Builder** (subagent ตัวเดียวสำหรับ Plan Mode) · **Arena** (มี Arena session config) · **Snack** · **Poteto** · **Advisor** |
 | **Subagent (กลุ่ม)** | **Comment Sicko** (ตัวตรวจคอมเมนต์) · **Poteto Agent** (ลูกมือของ poteto-mode) — สถานะ วิธีถูกเรียก เปิด/ปิด และแก้ prompt |
 | **โปรเจกต์** | สแกนว่าเครื่องเคยใช้ OpenCode ที่โฟลเดอร์ไหน + จัดการ agent รายโปรเจกต์ |
 | **Plannotator** | เปิด-ปิดปลั๊กอิน, แก้ `config.json`, จัดการคำสั่ง, เปิดคลังแผน |
@@ -42,7 +42,9 @@
 
 **ห้ามแก้ไฟล์ mirror ด้วยมือ** — ไฟล์ `BAZERs-EXTENSION-*\SKILL.md` ถูก generate จาก agent ตัวจริงในเครื่อง (ถ้ายังไม่ติดตั้ง ใช้จาก bundle) และจะถูกทับทุกครั้งที่อัพเดต
 
-**BAZER FLOW v1 (โฟลว์บังคับของ Buddha Mode):** Buddha เดิน 7 เฟสในเซสชันเดียว — G1-A/G1-B/G1-C (ด่าน 1) → P3 (Arena ในเซสชัน) → G2-A/G2-B/G2-C (ด่าน 2) — สเปคและแผนที่ dependency ทั้งหมดอยู่ที่ `../FLOW.md` · ไฟล์ `bundle/agents/buddha.md` มี marker `<!-- BAZER-FLOW: v1 -->` และปุ่ม "ตรวจความครบ" จะเทียบ marker ระหว่าง bundle กับไฟล์ที่ติดตั้งให้ (ขึ้นป้าย BAZER FLOW v1 ในแท็บ Buddha เมื่อตรงกัน)
+**BAZER FLOW v2 (โฟลว์บังคับของ Buddha Mode + Plan Mode):** Buddha เดินทุกเฟสในเซสชันและ agent เดียว — B1 GATE 1 (แผน Arena) → B2 Arena inside → B3 GATE 2 (แผนสร้าง) → B4 Built inside — ไม่มีการสลับ agent · Plan Mode ใช้ `builder` subagent ตัวเดียวหลังอนุมัติ (Plan ไม่เขียนไฟล์เอง) · กติกาถูกบังคับจริงด้วยปลั๊กอิน `bazer-flow` (ก่อนอนุมัติเขียนไฟล์นอก `%TEMP%\bazer\` ไม่ได้, `task(builder)` ไม่ได้) — ติดตั้ง/ซ่อม/ปิดได้จากปุ่มในการ์ด BAZER FLOW v2 (แท็บ Buddha หรือ Plannotator) · สเปคทั้งหมดอยู่ที่ `../FLOW.md` §3 · marker `<!-- BAZER-FLOW: v2 -->` ใน `bundle/agents/buddha.md` ถูกเทียบกับไฟล์ที่ติดตั้ง · ตรวจ logic ของ gate ด้วย `node flow-check.mjs`
+
+**ค่าเริ่มต้นหลังติดตั้ง:** `tui.json` ได้ `keybinds.messages_copy = ["ctrl+alt+m","ctrl+alt+o"]` (เฉพาะเมื่อยังไม่มีค่า — ค่าที่ผู้ใช้แก้เองไม่ถูกทับ) และมี shortcut **BAZER CONSOLE - WINDOW** ที่ `SETUP/OPENCODE` ชี้ portable launcher `BAZER CONSOLE - WINDOW.vbs` (ตัว `.vbs` ใช้ได้ทันทีหลัง clone; ไฟล์ `.lnk` ถูกสร้างใหม่ต่อเครื่องและไม่ขึ้น git)
 
 การ์ด **Arena session** (แท็บ Arena และ Buddha อ่านค่าเดียวกัน) เขียนบรรทัด `arena runners` + `arena cross-judge pool` ใน `~/.agents/pstack-models.md` — ไฟล์เก่าที่มีบรรทัด `bazer arena runners` จะมีปุ่มย้ายค่าให้ในแท็บ Buddha · จัดทั้งไฟล์เป็น **ชุดโมเดล (sets)** ได้ที่แท็บ pStack → การ์ด "🧩 ชุดโมเดล & Functions"
 
@@ -68,7 +70,7 @@
 
 | ไฟล์ | อ่านเมื่อไหร่ |
 |---|---|
-| `../FLOW.md` | อยากรู้ว่า "อะไรคุมอะไร" — ต้นทาง → ปลายทาง, ใครเขียนไฟล์ไหน, BAZER FLOW v1, และลำดับที่ต้องทำหลัง git pull |
+| `../FLOW.md` | อยากรู้ว่า "อะไรคุมอะไร" — ต้นทาง → ปลายทาง, ใครเขียนไฟล์ไหน, BAZER FLOW v2, และลำดับที่ต้องทำหลัง git pull |
 | `../GUIDE.md` | คู่มือแบบไม่ต้องเขียนโค้ด — ตำแหน่งไฟล์ทั้งหมดของ OpenCode และวิธีใช้ทุกโหมด |
 | `CHECKS.md` | ผลตรวจล่าสุดของตัวแอป + บั๊กที่แก้แล้ว |
 

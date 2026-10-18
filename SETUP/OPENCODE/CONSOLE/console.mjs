@@ -14,7 +14,7 @@ import { runLockCheck } from './mode-lock.mjs';
 import { createSettingsApi } from './tui-settings/src/api.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 
 /* ---------------------------------- config ---------------------------------- */
 
@@ -38,7 +38,7 @@ try {
 } catch {}
 for (const a of process.argv.slice(2)) { const m = a.match(/^--port=(\d+)$/); if (m) CFG.port = +m[1]; }
 
-const HOME = os.homedir();
+const HOME = process.env.BAZER_CONSOLE_HOME || os.homedir();
 const P = {
   config: path.join(HOME, '.config', 'opencode'),
   opencodeJsonc: path.join(HOME, '.config', 'opencode', 'opencode.jsonc'),
@@ -82,7 +82,12 @@ const LAUNCH = makeLaunch();
 
 /* flow + planningAgents — ต้นทางเดียวของรายการนี้ (แก้ที่นี่ที่เดียว) */
 const PLAN_AGENTS = ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'];
-/* marker ในไฟล์โหมด Buddha: <!-- BAZER-FLOW: v1 --> — regex อ่านเลขเวอร์ชันเพื่อเทียบ bundle กับเครื่อง */
+/* BAZER FLOW v2 — plugin ที่บังคับ gate + builder สำหรับ Plan Mode */
+const FLOW_PLUGIN_ID = 'bazer-flow';
+const FLOW_GATE_MARKER = '<!-- BAZER-FLOW-GATE: v2 -->';
+/* keybind เริ่มต้นสำหรับ "copy latest" (messages.copy) — ตั้งให้เฉพาะเมื่อยังไม่มีค่า */
+const DEFAULT_COPY_KEYBINDS = ['ctrl+alt+m', 'ctrl+alt+o'];
+/* marker ในไฟล์โหมด Buddha: <!-- BAZER-FLOW: v2 --> — regex อ่านเลขเวอร์ชันเพื่อเทียบ bundle กับเครื่อง */
 const FLOW_MARKER_RE = /<!--\s*BAZER-FLOW:\s*v(\d+)\s*-->/;
 const BUNDLE = (() => {
   const local = path.join(__dirname, 'bundle');
@@ -407,6 +412,43 @@ function mirrorStatus() {
   });
 }
 
+/* BAZER FLOW v2 — สถานะติดตั้งของ plugin + builder + gate (อ่านของจริง ไม่เชื่อ config) */
+function flowPluginDir() { return path.join(P.config, 'plugins', FLOW_PLUGIN_ID); }
+function flowBuilderFile() { return path.join(P.agentsDir, 'builder.md'); }
+function flowRegistered() {
+  try {
+    const obj = parseJSONC(P.opencodeJsonc).obj || {};
+    const arr = obj.plugins || obj.plugin || [];
+    return Array.isArray(arr) && arr.some(x => String(typeof x === 'string' ? x : x?.package || '').includes(FLOW_PLUGIN_ID));
+  } catch { return false; }
+}
+function gatherFlowkit() {
+  const pluginFile = fs.existsSync(path.join(flowPluginDir(), 'index.ts'));
+  const builderPath = flowBuilderFile();
+  const builderText = readText(builderPath) || readText(builderPath + '.disabled') || '';
+  const mode = (builderText.match(/^mode:\s*(.+)$/m) || [])[1]?.trim() || '';
+  const agentsMd = readText(P.agentsMd) || '';
+  const bundleBud = readText(path.join(BUNDLE, 'agents', 'buddha.md')) || '';
+  return {
+    on: flowRegistered(),
+    pluginFile,
+    registered: flowRegistered(),
+    builder: fs.existsSync(builderPath),
+    builderDisabled: fs.existsSync(builderPath + '.disabled'),
+    builderMode: mode,
+    gateMarker: agentsMd.includes(FLOW_GATE_MARKER),
+    version: (bundleBud.match(FLOW_MARKER_RE) || [])[1] || null,
+  };
+}
+/** Real load proof: the host must list bazer.flow, not just have the file registered. */
+async function flowPluginLoaded() {
+  try {
+    const r = await ps('opencode plugin list', 12000);
+    const text = (r.out || '') + (r.err || '');
+    return /\bbazer\.flow\b/.test(text) ? true : false;
+  } catch { return null; }
+}
+
 /* ---------------------------------- gather ---------------------------------- */
 
 let cliVersionCache = { v: null, at: 0 };
@@ -704,6 +746,22 @@ async function runVerify() {
     else add('info', 'ยังไม่มี tui.json', 'TUI ใช้ค่า default');
   }
 
+  // 5d — keybind เริ่มต้น (copy latest) + shortcut
+  {
+    const tj = safe(() => parseJSONC(P.tuiJson), { ok: false, obj: null });
+    const kb = tj && tj.obj && tj.obj.keybinds ? tj.obj.keybinds.messages_copy : null;
+    if (!Array.isArray(kb) || !kb.length) add('warn', 'keybind copy latest', 'ยังไม่ได้ตั้งค่า — กด "ติดตั้งเสร็จสรรพ" หรือ "ซิงค์ทั้งหมด"');
+    else if (kb.join(',') === DEFAULT_COPY_KEYBINDS.join(',')) add('ok', 'keybind copy latest', kb.join(', '));
+    else add('info', 'keybind copy latest (แก้เอง)', kb.join(', '));
+
+    const root = path.resolve(__dirname, '..');
+    const vbs = path.join(root, 'BAZER CONSOLE - WINDOW.vbs');
+    const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
+    if (!fs.existsSync(vbs)) add('warn', 'shortcut BAZER CONSOLE', 'ไม่พบ portable launcher (BAZER CONSOLE - WINDOW.vbs)');
+    else if (!fs.existsSync(link)) add('info', 'shortcut BAZER CONSOLE', 'มี launcher แล้ว แต่ยังไม่มี .lnk — กดติดตั้ง/ซิงค์');
+    else add('ok', 'shortcut BAZER CONSOLE', 'มี .lnk + portable launcher');
+  }
+
   // 6 skills
   {
     const s = gatherSkills();
@@ -752,6 +810,24 @@ async function runVerify() {
     if (!bv) add('warn', 'BAZER FLOW', 'ไม่พบ marker ใน bundle/agents/buddha.md');
     else if (iv !== bv) add('warn', `BAZER FLOW v${bv}`, `โหมด Buddha ในเครื่อง${iv ? ' เป็น v' + iv : ' ยังไม่มี marker'} — กด "ซิงค์ทั้งหมด" ที่แท็บภาพรวม`);
     else add('ok', `BAZER FLOW v${bv}`, 'โหมด Buddha ตรงกับ bundle (สเปค: FLOW.md)');
+  }
+
+  // 7d2 BAZER FLOW v2 — kernel (plugin) + builder + gate ที่บังคับจริง
+  {
+    const fk = safe(gatherFlowkit, { on: false, pluginFile: false, registered: false, builder: false, builderMode: '', gateMarker: false, version: null });
+    const bundleV2 = fk.version === '2';
+    const loaded = fk.pluginFile && fk.registered ? await flowPluginLoaded() : null;
+    if (fk.pluginFile && fk.registered && loaded === true) add('ok', 'BAZER FLOW v2 · kernel', 'ปลั๊กอิน bazer-flow ติดตั้ง ลงทะเบียน และโหลดจริง (opencode plugin list)');
+    else if (fk.pluginFile && fk.registered) add('warn', 'BAZER FLOW v2 · kernel ยังไม่โหลด', loaded === false ? 'ลงทะเบียนแล้วแต่ host ยังไม่โหลด — รีสตาร์ท OpenCode แล้วตรวจอีกครั้ง' : 'ตรวจการโหลดไม่ได้ (opencode plugin list) — ไฟล์และ registration ครบ');
+    else if (bundleV2 && !fk.pluginFile) add('fail', 'BAZER FLOW v2 · ยังไม่ติดตั้ง kernel', 'gate ยังไม่ถูกบังคับ — กด "ติดตั้ง/ซ่อม BAZER FLOW v2" ในแท็บ Buddha');
+    else if (fk.pluginFile && !fk.registered) add('fail', 'BAZER FLOW v2 · kernel ไม่ได้ลงทะเบียน', 'มีไฟล์แต่ไม่ได้อยู่ใน plugins[] — กด "ติดตั้ง/ซ่อม" ในแท็บ Buddha');
+    else add('info', 'BAZER FLOW v2 · kernel', 'ยังไม่ติดตั้ง (โหมดเดิมยังทำงานได้)');
+    if (fk.builder && fk.builderMode === 'all') add('ok', 'builder (mode all)', 'เห็นใน Main Agents + เรียกผ่าน task ได้');
+    else if (!bundleV2) add('info', 'builder', 'ยังไม่ติดตั้ง');
+    else if (!fk.builder) add('warn', 'builder', fk.builderDisabled ? 'ปิดอยู่ (builder.md.disabled) — กด "ติดตั้ง/ซ่อม"' : 'ยังไม่ติดตั้ง — กด "ติดตั้ง/ซ่อม"');
+    else add('warn', 'builder', `mode = ${fk.builderMode || '?'} — ต้องเป็น all`);
+    if (fk.gateMarker) add('ok', 'AGENTS gate (BAZER-FLOW-GATE v2)', 'กฎระดับเครื่องมี gate ครบ');
+    else add('warn', 'AGENTS gate', 'ยังไม่มี marker — กด "ติดตั้ง/ซ่อม BAZER FLOW v2" หรือ "รีเซ็ตจาก template"');
   }
 
   // 7e ไฟล์ส่วนตัวจาก template (AGENTS.md / pstack-models.md) — เดิมตรวจแค่ว่า "มีไฟล์ไหม" ของใหม่ใน template จึงมองไม่เห็น
@@ -1564,6 +1640,128 @@ const ACTIONS = {
       : `อัพเดต mirror แล้ว ${n} ตัว (ที่เหลือตรงอยู่แล้ว${noSource ? ' · ไม่มีต้นทาง ' + noSource : ''}) — โหลดด้วย ID ได้ทันทีใน session ใหม่`;
     return { message: msg, results };
   },
+  'flow-apply': async ({ enable = true }) => {
+    const src = path.join(BUNDLE, 'plugins', FLOW_PLUGIN_ID);
+    if (!fs.existsSync(path.join(src, 'index.ts'))) throw new Error('ไม่พบ bundle/plugins/' + FLOW_PLUGIN_ID + ' — ชุดติดตั้งไม่ครบ');
+    const bk = createBackup(enable ? 'flow-apply' : 'flow-disable');
+    const log = [];
+    const pluginDir = flowPluginDir();
+    const builderPath = flowBuilderFile();
+    const builderDisabled = builderPath + '.disabled';
+
+    if (enable) {
+      bk.add(pluginDir);
+      fs.rmSync(pluginDir, { recursive: true, force: true });
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.cpSync(src, pluginDir, { recursive: true, force: true });
+      log.push('plugin');
+
+      const builderSrc = path.join(BUNDLE, 'agents', 'builder.md');
+      if (fs.existsSync(builderSrc)) {
+        bk.add(builderPath);
+        fs.mkdirSync(P.agentsDir, { recursive: true });
+        fs.copyFileSync(builderSrc, builderPath);
+        if (fs.existsSync(builderDisabled)) fs.rmSync(builderDisabled, { force: true });
+        log.push('builder');
+      }
+
+      const r = parseJSONC(P.opencodeJsonc);
+      const obj = r.ok && r.obj ? r.obj : { $schema: 'https://opencode.ai/config.json' };
+      const key = obj.plugin && !obj.plugins ? 'plugin' : 'plugins';
+      const arr = Array.isArray(obj[key]) ? obj[key] : [];
+      if (!arr.some(x => String(typeof x === 'string' ? x : x?.package || '').includes(FLOW_PLUGIN_ID))) {
+        arr.push('./plugins/' + FLOW_PLUGIN_ID);
+        obj[key] = arr;
+        bk.add(P.opencodeJsonc);
+        writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
+        log.push('register');
+      }
+
+      const agentsMd = readText(P.agentsMd) || '';
+      if (!agentsMd.includes(FLOW_GATE_MARKER)) {
+        const block = [
+          '',
+          FLOW_GATE_MARKER,
+          '## BAZER FLOW v2 gate',
+          '',
+          '- **Plan Mode:** ก่อนได้ `Plan approved!` ห้ามเขียน/แก้ไฟล์โปรเจกต์ และห้ามสั่ง `builder` ผ่าน `task` — หลังอนุมัติให้สร้างผ่าน subagent `builder` เท่านั้น',
+          '- **Buddha Mode:** ทุกเฟสอยู่ใน Buddha เซสชันเดียว ห้ามสลับ agent; ก่อนอนุมัติเขียนได้เฉพาะ `%TEMP%\\bazer\\**`',
+          '- แผนในแชตอย่างเดียวไม่นับอนุมัติ — ต้องผ่าน `submit_plan` หรือ Plannotator CLI gate และได้ผล approved',
+          '',
+        ].join('\n');
+        bk.add(P.agentsMd);
+        writeAtomic(P.agentsMd, (agentsMd.replace(/\s+$/, '') + '\n' + block));
+        log.push('AGENTS gate');
+      }
+    } else {
+      const r = parseJSONC(P.opencodeJsonc);
+      const obj = r.ok && r.obj ? r.obj : null;
+      if (obj) {
+        const key = obj.plugin && !obj.plugins ? 'plugin' : 'plugins';
+        const arr = Array.isArray(obj[key]) ? obj[key] : [];
+        const next = arr.filter(x => !String(typeof x === 'string' ? x : x?.package || '').includes(FLOW_PLUGIN_ID));
+        if (next.length !== arr.length) {
+          obj[key] = next;
+          bk.add(P.opencodeJsonc);
+          writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
+          log.push('unregister');
+        }
+      }
+      if (fs.existsSync(builderPath)) {
+        bk.add(builderPath);
+        fs.renameSync(builderPath, builderDisabled);
+        log.push('builder off');
+      }
+    }
+
+    bk.finalize();
+    try { if (!configDrift().ok) await ACTIONS['refresh-config']({}); } catch {}
+    try { await ACTIONS['mirror-agents']({}); log.push('mirror'); } catch {}
+    patchConfig({ flowkit: { on: !!enable } });
+    const tail = log.length ? log.join(' · ') : 'ไม่มีอะไรต้องเปลี่ยน';
+    return { message: `${enable ? 'ติดตั้ง/ซ่อม' : 'ปิด'} BAZER FLOW v2 แล้ว (${tail}) — มีผลกับ session ใหม่`, flowkit: gatherFlowkit() };
+  },
+
+  'flow-toggle': async ({ enable }) => ACTIONS['flow-apply']({ enable: !!enable }),
+
+  'tui-defaults': async ({ dryRun }) => {
+    const file = P.tuiJson;
+    const r = parseJSONC(file);
+    if (fs.existsSync(file) && !r.ok) throw new Error('tui.json parse ไม่ได้ — ไม่เขียนทับ: ' + (r.error || 'unknown'));
+    const obj = r.ok && r.obj ? r.obj : { $schema: 'https://opencode.ai/tui.json' };
+    obj.keybinds = obj.keybinds && typeof obj.keybinds === 'object' && !Array.isArray(obj.keybinds) ? obj.keybinds : {};
+    const cur = obj.keybinds.messages_copy;
+    if (Array.isArray(cur) && cur.length) return { message: `keybind copy latest มีค่าแล้ว (${cur.join(', ')}) — ไม่ทับ`, value: cur };
+    obj.keybinds.messages_copy = DEFAULT_COPY_KEYBINDS.slice();
+    if (dryRun) return { message: `ทดสอบ: messages_copy → ${DEFAULT_COPY_KEYBINDS.join(', ')}`, content: obj };
+    const bk = createBackup('tui-defaults');
+    bk.add(file);
+    writeAtomic(file, JSON.stringify(obj, null, 2) + '\n');
+    bk.finalize();
+    return { message: `ตั้งค่า keybind copy latest = ${DEFAULT_COPY_KEYBINDS.join(', ')} ใน tui.json แล้ว (มีผลกับ TUI รอบใหม่)` };
+  },
+
+  'shortcut-apply': async ({ dryRun }) => {
+    const root = path.resolve(__dirname, '..');
+    const target = path.join(root, 'BAZER CONSOLE - WINDOW.vbs');
+    const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
+    if (!fs.existsSync(target)) throw new Error('ไม่พบ portable launcher: ' + target);
+    if (dryRun) return { message: 'ทดสอบ: จะสร้าง ' + link };
+    const q = (s) => String(s).replace(/'/g, "''");
+    const script = [
+      '$w = New-Object -ComObject WScript.Shell',
+      `$s = $w.CreateShortcut('${q(link)}')`,
+      `$s.TargetPath = '${q(target)}'`,
+      `$s.WorkingDirectory = '${q(root)}'`,
+      '$s.IconLocation = "$env:SystemRoot\\System32\\wscript.exe,0"',
+      "$s.Description = 'BAZER Console'",
+      '$s.Save()',
+    ].join('; ');
+    const r = await ps(script, 20000);
+    if (r.code !== 0 || !fs.existsSync(link)) throw new Error('สร้าง shortcut ไม่สำเร็จ: ' + (r.err || r.out || 'unknown'));
+    return { message: 'สร้าง shortcut แล้ว: ' + link };
+  },
+
   'install-agent': async ({ file, dryRun }) => {
     const base = path.basename(String(file || ''));
     if (!base.endsWith('.md')) throw new Error('ต้องเป็นไฟล์ .md');
@@ -1671,6 +1869,27 @@ const ACTIONS = {
     steps.push({ id: 'agents-md', label: 'สร้างกฎ AGENTS.md ระดับเครื่อง', detail: fs.existsSync(P.agentsMd) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างจาก template', will: !fs.existsSync(P.agentsMd) });
     steps.push({ id: 'pstack-models', label: 'สร้าง pstack-models.md (โมเดลต่อ role)', detail: fs.existsSync(P.pstackModels) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างจาก template', will: !fs.existsSync(P.pstackModels) });
     {
+      const tj = safe(() => parseJSONC(P.tuiJson), { ok: false, obj: null });
+      const kb = tj && tj.obj && tj.obj.keybinds ? tj.obj.keybinds.messages_copy : null;
+      const filled = Array.isArray(kb) && kb.length > 0;
+      steps.push({
+        id: 'tui-defaults',
+        label: 'ตั้งค่า keybind เริ่มต้น (copy latest = ' + DEFAULT_COPY_KEYBINDS.join(' / ') + ')',
+        detail: filled ? `มีค่าแล้ว (${kb.join(', ')}) — ไม่ทับ` : 'จะเขียนใน ' + P.tuiJson,
+        will: !filled,
+      });
+    }
+    {
+      const root = path.resolve(__dirname, '..');
+      const link = path.join(root, 'BAZER CONSOLE - WINDOW.lnk');
+      steps.push({
+        id: 'shortcut',
+        label: 'สร้าง shortcut "BAZER CONSOLE - WINDOW"',
+        detail: fs.existsSync(link) ? 'มีอยู่แล้วที่ ' + link : 'จะสร้าง .lnk ชี้ portable launcher (clone แล้วยังใช้ได้)',
+        will: !fs.existsSync(link),
+      });
+    }
+    {
       const bfSrc = path.join(BUNDLE, 'plugins', 'bazer-fire');
       if (fs.existsSync(path.join(bfSrc, 'index.ts'))) {
         const bfDst = path.join(P.config, 'plugins', 'bazer-fire');
@@ -1683,6 +1902,17 @@ const ACTIONS = {
         } catch {}
         steps.push({ id: 'plugins-bazer-fire', label: 'ติดตั้งปลั๊กอิน bazer-fire (ไฟ 🔥 ลุกในโหมด Bazer)', detail: (bfFile && bfReg) ? 'มีอยู่แล้ว — ข้าม' : 'จะคัดลอกไป ' + bfDst + (bfReg ? '' : ' + ลงทะเบียน ./plugins/bazer-fire ใน ' + P.opencodeJsonc), will: !(bfFile && bfReg) });
       }
+    }
+    {
+      const fk = safe(gatherFlowkit, { pluginFile: false, registered: false, builder: false });
+      steps.push({
+        id: 'flow',
+        label: 'ติดตั้ง BAZER FLOW v2 (Plan gate + builder + prompt badge)',
+        detail: (fk.pluginFile && fk.registered && fk.builder)
+          ? 'มีอยู่แล้ว — ข้าม'
+          : 'จะติดตั้งปลั๊กอิน bazer-flow + agent builder + ลงทะเบียน ./plugins/bazer-flow + เติมกฎ AGENTS.md',
+        will: !(fk.pluginFile && fk.registered && fk.builder),
+      });
     }
     steps.push({ id: 'lock-file', label: 'ไฟล์ล็อก server (serve-restricted.jsonc)', detail: fs.existsSync(P.serveRestricted) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างค่าเริ่มต้นแบบปลดล็อก (สลับโหมดได้ในแท็บ ล็อก & โมเดล)', will: !fs.existsSync(P.serveRestricted) });
     const launchTarget = launchDirResolved();
@@ -1778,6 +2008,18 @@ const ACTIONS = {
         }
         log.push('ปลั๊กอิน bazer-fire');
       }
+    }
+    if (has('flow')) {
+      try { const f = await ACTIONS['flow-apply']({ enable: true }); log.push(f.message); }
+      catch (e) { log.push('flow (ข้าม — ' + e.message + ')'); }
+    }
+    if (has('tui-defaults')) {
+      try { const t = await ACTIONS['tui-defaults']({}); log.push(t.message); }
+      catch (e) { log.push('tui-defaults (ข้าม — ' + e.message + ')'); }
+    }
+    if (has('shortcut')) {
+      try { const s = await ACTIONS['shortcut-apply']({}); log.push(s.message); }
+      catch (e) { log.push('shortcut (ข้าม — ' + e.message + ')'); }
     }
     if (has('lock-file') && !fs.existsSync(P.serveRestricted)) {
       const bk3 = createBackup('setup-lock-file');
@@ -1892,6 +2134,12 @@ const ACTIONS = {
     try { const u = await ACTIONS['update-apply']({}); log.push(u.message); } catch (e) { log.push('อัพเดต: ' + e.message); }
     try { const c = await ACTIONS['refresh-config']({}); log.push(c.message); } catch (e) { log.push('config: ' + e.message); }
     try { const m = await ACTIONS['mirror-agents']({}); log.push(m.message); } catch (e) { log.push('mirror: ' + e.message); }
+    try {
+      const fk = safe(gatherFlowkit, { pluginFile: false });
+      if (fk.pluginFile || (CFG.flowkit && CFG.flowkit.on)) { await ACTIONS['flow-apply']({ enable: true }); log.push('flow (ซ่อม)'); }
+    } catch (e) { log.push('flow (ข้าม — ' + e.message + ')'); }
+    try { await ACTIONS['tui-defaults']({}); log.push('keybind (เติมค่าเริ่มต้นถ้ายังว่าง)'); } catch {}
+    try { await ACTIONS['shortcut-apply']({}); log.push('shortcut'); } catch {}
     const templates = safe(templateDrift, []);
     const stale = templates.filter(t => t.status === 'stale' || t.status === 'missing');
     if (stale.length) {
@@ -2011,6 +2259,7 @@ async function gatherState() {
       s.flow = { bundle: bv, installed: iv, ok: !!bv && bv === iv };
     }
   } catch { s.plg = { planningAgents: [], buddha: false, arena: false, snack: false, poteto: false }; s.fire = { file: false, reg: false }; s.mirror = []; s.cfgDrift = { planningAgents: [], missing: PLAN_AGENTS.slice(), ok: false }; s.flow = { bundle: null, installed: null, ok: false }; }
+  s.flowkit = safe(gatherFlowkit, { on: false, pluginFile: false, registered: false, builder: false, builderDisabled: false, builderMode: '', gateMarker: false, version: null });
   /* ตั้งค่า OpenCode — สรุปเบา ๆ เท่านั้น (ไม่ฝัง form model ลง state ทุกครั้ง) */
   try { s.tui = await ACTIONS['tui-status']({}); } catch { s.tui = null; }
   return s;

@@ -198,3 +198,135 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 - `tests/e2e.mjs` ตัวเดิมของ Candidate B สตาร์ท `src/server.mjs` ของ candidate (ไม่มีในโปรเจกต์นี้) — เขียนใหม่ให้สตาร์ท **`console.mjs` จริง** ใน sandbox แทน จึงตรงกับวิธีตรวจของโปรเจกต์
 
 - ตัววาด `client/renderer.mjs` คงเป็น ES module (เทสต์ import ได้) แล้ว inline เข้า `console.html` ด้วย `tools/build-client.mjs` (ตัด import/export + ครอบ IIFE กันชื่อ `esc` ชน) — brief สั่ง "inline"; การมี source เดียว + build check กัน drift สองชุด
+
+
+## รอบ 6 — BAZER FLOW v2 (Buddha one-session + Plan Mode builder)
+
+วันที่: 18 ต.ค. 2026 · Console v1.5.0 · งานนี้แก้ `bundle/agents/buddha.md` → marker v2, เพิ่ม `bazer-flow` plugin + `builder` agent + Console action
+
+### Loop 1 — static / logic
+
+| ตรวจ | ผล |
+|---|---|
+| `node --check console.mjs` · `mode-lock.mjs` · `flow-check.mjs` · `bundle/plugins/bazer-flow/logic.mjs` | ผ่านทุกไฟล์ |
+| parse `<script>` ใน `console.html` ด้วย `new Function` | ผ่าน (1 script · 122,013 chars) |
+| `node flow-check.mjs` | PASS 18 · FAIL 0 · WARN 1 (ยังไม่ติดตั้งในเครื่อง) |
+| แก้ bug ที่เจอ | regex `Plan approved!foo` เคย false-positive → เติม `(?=\s|$)` · เทสต์ badge เรียก `agentFromMessages` ทั้งที่ fixture ไม่มี agent → เปลี่ยนเป็น `phaseFor('plan', ...)` |
+
+### Loop 2 — sandbox install (`BAZER_CONSOLE_HOME=%TEMP%\bazer-console-v2`)
+
+| ตรวจ | ผล |
+|---|---|
+| `flow-apply` | ok — plugin · builder · register · AGENTS gate · mirror |
+| flowkit | pluginFile/registered/builder/mode all/gateMarker = true ครบ |
+| apply ซ้ำ | ไม่เพิ่ม registration และไม่เพิ่ม gate marker (idempotent) |
+| `flow-toggle off` | ถอด registration + `builder.md.disabled` |
+| `flow-toggle on` | คืน builder + registration |
+| `/api/verify` | `BAZER FLOW v2 · kernel` ok · `builder (mode all)` ok · `AGENTS gate` ok |
+| `/api/state.flowkit` | populated |
+
+### Loop 3 — adversarial (pure gate)
+
+| เคส | ผล |
+|---|---|
+| `plan` เขียน `C:\BCS\x.ts` ก่อนอนุมัติ | deny |
+| `plan` เขียน `%TEMP%\bazer\x.ts` ก่อนอนุมัติ | allow |
+| `task(builder)` ก่อนอนุมัติ | deny |
+| `task(general)` ก่อนอนุมัติ (plan) | deny · (buddha) allow |
+| `plan` เขียนเองหลังอนุมัติ | deny (ต้องใช้ builder) |
+| `buddha` เขียนเองหลังอนุมัติ | allow |
+| bash `Set-Content` ก่อนอนุมัติ | deny · ถ้าอยู่ใน temp allow |
+| agent `build`/`builder`/ไม่รู้จัก | pass-through |
+| badge: plan 1 approval → BUILD · buddha 1 → ARENA · buddha 2 → BUILD · user prompt ใหม่ → reset | ผ่าน |
+| hook `throw` ไม่ abort tool call | **ยังไม่ยืนยันบน 2.0.30** — ต้องทดสอบ live; ถ้าไม่ abort จะรายงานว่า gate ไม่ทำงาน |
+
+### หมายเหตุ
+
+- **แก้หลังรายงาน error `Plugin must export a default definition...`**: ปลั๊กอินเดิมเขียนเป็น V1 hook map — เขียนใหม่เป็น V2 API จริง (`Plugin.define` + `ctx.agent.transform` + `ctx.tool.hook` + `ctx.permission.hook` + `ctx.session.hook`) และเปลี่ยน action `task` → `subagent` ตาม agent จริงของ 2.0.30
+- **Live gate proof**: `opencode run --agent buddha --auto` สั่งเขียน `blocked.txt` → `Write ... failed · bazer-flow: no approved plan...` และไฟล์ไม่ถูกสร้าง
+- **Live agent proof**: `/api/agent` แสดง `plan`: `edit * deny`, `subagent * deny → explore/builder allow`; `builder`: `mode=all`, `submit_plan deny`
+- badge TUI ใช้ `prompt.footer.status` (slot จริงของ 2.0.30) อ่านไฟล์ state ที่ server เขียน เพราะ TUI ไม่เห็น message parts
+- เพิ่มภายหลังตามคำสั่งผู้ใช้: **แผน GATE 1 ต้องเขียนด้วยกระบวนการ Poteto Mode** (โหลด `BAZERs-EXTENSION-Poteto` ในเซสชันเดิม ไม่ใช่สลับ agent) — แก้ `buddha.md` + reminder ใน plugin + UI/FLOW + static check; เป็นคำสั่งระดับ prompt ไม่ใช่ hard gate
+- ติดตั้งจริงในเครื่องนี้ผ่าน Console API แล้ว (ถ้าแอปเปิดอยู่) — ต้องปิด-เปิด OpenCode เพื่อโหลด plugin/agent ใหม่
+
+
+## รอบ 7 — bug scan & fix 3 loops (หลังแก้ V2 plugin API)
+
+วันที่: 18 ต.ค. 2026 · Console v1.5.0 · เป้าหมาย: ปิด bug ที่ทำให้ plugin failed + ตรวจ gate จริง
+
+### Loop 1 — static / contract
+
+| ตรวจ | ผล |
+|---|---|
+| `node --check` (`console.mjs`, `index.ts` copied to .mjs, `flow-check.mjs`, `logic.mjs`) | ผ่าน |
+| parse `<script>` ใน `console.html` | ผ่าน |
+| `node flow-check.mjs` | PASS 23 · FAIL 0 |
+| เจอ/แก้ 1 | `verify` + `flowCard` ขึ้นเขียว `builder` แม้ `builder.md` ถูกปิด → ต้อง require `builder && mode all` |
+| เจอ/แก้ 2 | V2 ใช้ action `subagent` ไม่ใช่ `task` → เพิ่ม rule + normalize tool name `subagent`→`task` ใน hook |
+| เจอ/แก้ 3 | หลัง plugin hot-reload approval ใน memory หาย → อ่าน state file กลับมา (`approvalFor`) |
+| เจอ/แก้ 4 | `writePhase` เขียนไฟล์ทุก model call → throttle ด้วย key `agent\|approved\|count` |
+| เจอ/แก้ 5 | ลบ import ที่ไม่ใช้ (`PLANNING_AGENTS` ใน flow-check) |
+
+### Loop 2 — sandbox + verify จริง
+
+| ตรวจ | ผล |
+|---|---|
+| sandbox `flow-apply` → apply ซ้ำ → off → on | PASS 20 |
+| verify หลังปิด builder | `warn builder — ปิดอยู่` (ไม่หลอกว่า ok) |
+| verify kernel ใหม่ | เรียก `opencode plugin list` และยืนยัน `bazer.flow` โหลดจริง |
+| `opencode plugin list` | `bazer.flow local .../bazer-flow/index.ts` (ไม่มีตัวซ้ำหลังลบ backup ใน `plugins/`) |
+| log | ไม่มี `LoadError` / `failed to load` |
+
+### Loop 3 — live adversarial
+
+| เคส | ผล |
+|---|---|
+| `opencode run --agent buddha --auto` สั่ง `write blocked.txt` | `Write failed · bazer-flow: no approved plan...` · ไฟล์ไม่เกิด |
+| `opencode run --agent plan --auto` สั่ง `write p.txt` | `Write failed · bazer-flow: no approved plan...` · ไฟล์ไม่เกิด |
+| `task(builder)` ก่อนอนุมัติ | เดิม CLI ไม่มี tool `task` — รอบนี้พิสูจน์เส้นทางจริงแล้ว: Plan เรียก tool `subagent` (ชื่อ V2) หลังอนุมัติ และ builder ทำงาน |
+| **E2E จริง (CLI): Plan → submit_plan → approve → builder** | `submit_plan` เปิด review, POST `/api/approve` สำเร็จ, state เป็น `approved:true,count:1`, Plan เรียก `subagent` → builder สร้าง `real.txt` = `ok` (2 bytes) |
+| หลังอนุมัติ: Plan เขียนเอง | ถูกบล็อก `approved Plan Mode must delegate writes to the builder subagent` · `direct.txt` ไม่เกิด |
+| state file | `{"agent":"buddha","approved":false,...}` / `{"agent":"plan","approved":true,"count":1}` ถูกสร้าง/อัปเดต |
+| `/api/agent` | `plan`: `edit * deny`, `subagent * deny → explore/builder allow` · `builder`: `mode=all`, `submit_plan/subagent deny` |
+
+**สรุป:** ปิด bug จาก error `Plugin must export a default definition...` แล้ว และพิสูจน์ด้วยการรันจริงว่า gate บล็อกการเขียนไฟล์ก่อนอนุมัติ
+
+- `workflow` ยังเป็น `plan-agent` ตามเดิม (ไม่แตะ mode-lock R1)
+- `builder` เป็น `mode: all` ตามคำขอ (เห็นใน Main Agents) — ผู้ใช้กดเลือกเองได้ แต่ผู้ใช้คือมนุษย์ ไม่ใช่โมเดลหลบ gate
+
+
+## รอบ 8 — default keybind + shortcut (bug scan & fix 3 loops)
+
+วันที่: 18 ต.ค. 2026 · Console v1.5.0 · เป้าหมาย: clone แล้ว "ติดตั้งเสร็จสรรพ" ได้ค่า default ครบ และ shortcut ไม่พังเมื่อย้ายเครื่อง
+
+### Loop 1 — static / sandbox action
+
+| ตรวจ | ผล |
+|---|---|
+| `node --check console.mjs` | ผ่าน |
+| sandbox `tui-defaults` | PASS 11 (สร้าง tui.json, เขียน `messages_copy`, รันซ้ำไม่ทับ) |
+| sandbox `shortcut-apply` | สร้าง `.lnk` ชี้ `BAZER CONSOLE - WINDOW.vbs` ถูกต้อง |
+| verify | `keybind copy latest` ok · `shortcut BAZER CONSOLE` ok |
+
+### Loop 2 — edge cases
+
+| เคส | ผล |
+|---|---|
+| tui.json มีค่าผู้ใช้แก้เอง (`ctrl+x`) | ไม่ทับ · ค่าอื่นคงอยู่ |
+| tui.json พัง (JSON ไม่ถูกต้อง) | **ไม่เขียนทับ** — คืน error `tui.json parse ไม่ได้` |
+| `.lnk` target/working dir | ชี้ launcher + `SETUP/OPENCODE` ถูกต้อง |
+| `*.lnk` ถูก gitignore | ใช่ — เครื่องอื่นสร้างใหม่ตอน setup |
+| portable launcher หลังย้ายโฟลเดอร์ | clone-sim: คัดลอก `.vbs` + `CONSOLE\BAZER Console.vbs` ไป temp แล้วรัน → marker ถูกสร้าง (`ok`) |
+
+### Loop 3 — setup integration
+
+| ตรวจ | ผล |
+|---|---|
+| `setup-preview` | มีขั้น `tui-defaults` และ `shortcut` |
+| `setup-apply` (steps: dirs, tui-defaults, shortcut) | PASS 7 — tui.json ถูกสร้าง, keybind ถูกเขียน, `.lnk` ถูกสร้าง |
+| verify หลัง setup | keybind ok · shortcut ok |
+| ไฟล์ที่ commit | `BAZER CONSOLE - WINDOW.vbs` (portable) + root `.gitignore`; `.lnk` ไม่ขึ้น git |
+
+**สรุป:** clone → ติดตั้งเสร็จสรรพ → ได้ keybind `ctrl+alt+m, ctrl+alt+o` และ shortcut `BAZER CONSOLE - WINDOW` โดยไม่ฝัง path ของเครื่องใดเครื่องหนึ่ง
+
+

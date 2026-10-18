@@ -37,12 +37,12 @@ You run one process: pstack's `arena` skill. Load it before anything else.
 
 ## ต่อแผนเข้า Plannotator (เฉพาะโหมดรับงานจาก Bazer)
 
-ถ้าเทิร์นนี้เข้าสู่โหมดด้วยข้อความ handoff จาก Plannotator (`Plan approved. Plan mode remains active; no implementation has been requested.`) หรือบริบทชัดว่าเป็น Arena เฟสของ BAZER FLOW (เฟส P3 ใน `bundle/agents/buddha.md`):
+ถ้าเทิร์นนี้เข้าสู่โหมดด้วยข้อความ handoff จาก Plannotator (`Plan approved. Plan mode remains active; no implementation has been requested.`) หรือบริบทชัดว่าเป็น Arena เฟสของ BAZER FLOW (**เฟส B2 ใน `bundle/agents/buddha.md`**):
 
-1. รวมผลเป็นแผน implementation ฉบับเดียว (base ที่เลือก + เหตุผล · grafts · ขั้นตอน · ไฟล์ที่แตะ · ความเสี่ยง · verification)
+1. รวมผลเป็นแผน implementation ฉบับเดียว (base ที่เลือก + เหตุผล · grafts · ขั้นตอน · ไฟล์ที่แตะ · ความเสี่ยง · verification) — Buddha GATE 2 ต้องขึ้นต้น `# GATE 2 — BUILD PLAN`
 2. ยื่นด้วย `submit_plan` แบบ `{ "edits": [{ "start": 1, "content": "<แผนเต็ม>" }] }` — โหมดนี้มีสิทธิ์ผ่าน `planningAgents`
-3. รอผล: **feedback** → แก้แล้วยื่นใหม่ (วนจนผ่าน) · **อนุมัติ** → จบ turn แล้วรายงานสรุปสั้น ๆ (ผู้ใช้อาจสลับเป็น build ต่อเอง)
+3. รอผล: **feedback** → แก้แล้วยื่นใหม่ (วนจนผ่าน) · **อนุมัติ** → เดินต่อในเซสชันเดิม (Buddha สร้างเอง; Plan Mode ส่งงาน `builder`) — ห้ามสลับ agent เอง
 
-ห้ามแก้ไฟล์โปรเจกต์ในทุกกรณี (sketches อยู่ใน temp เท่านั้น) — การสร้างเป็นงานของ build หลังอนุมัติ
+ห้ามแก้ไฟล์โปรเจกต์ในทุกกรณี (sketches อยู่ใน temp เท่านั้น) — การสร้างเป็นงานหลังอนุมัติ
 
 ถ้าเป็น arena run ปกติ (ผู้ใช้เรียกเอง ไม่ได้มาจาก Bazer) → จบที่ Report ด้านบนเท่านั้น อย่าเปิดแผนเอง

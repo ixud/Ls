@@ -13,7 +13,7 @@
 |---|---|
 | ต้นทาง → ปลายทางของทุกชั้นไฟล์ | §1 |
 | ปุ่มใน Console ทำอะไร / ไม่ทำอะไร | §2 |
-| BAZER FLOW v1 (7 เฟส) + กติกา marker | §3 |
+| BAZER FLOW v2 (Buddha เซสชันเดียว + Plan gate) + กติกา marker | §3 |
 | ลำดับหลัง `git pull` (push ก่อน แล้วค่อย pull) | §4 |
 | ตัวตรวจที่ต้องเขียว | §5 |
 
@@ -47,48 +47,47 @@
 
 | การกด | ทำอะไร | ไม่ทำอะไร |
 |---|---|---|
-| **ติดตั้งเสร็จสรรพ - ทั้งหมด** (แท็บภาพรวม) | สร้างโฟลเดอร์ + ลงทะเบียน Plannotator + คัดลอก skills/agents/commands **เฉพาะไฟล์ที่ยังไม่มี** + สร้าง AGENTS.md/pstack-models จาก template + ติดตั้ง bazer-fire + ไฟล์ launch + อัพเดต mirror | **ไม่ทับไฟล์ที่มีอยู่** (โหมดที่แก้ไว้จะไม่ถูกอัพเดต) |
+| **ติดตั้งเสร็จสรรพ - ทั้งหมด** (แท็บภาพรวม) | สร้างโฟลเดอร์ + ลงทะเบียน Plannotator + คัดลอก skills/agents/commands **เฉพาะไฟล์ที่ยังไม่มี** + สร้าง AGENTS.md/pstack-models จาก template + ติดตั้ง bazer-fire + BAZER FLOW v2 + ตั้ง keybind `messages_copy` = `ctrl+alt+m` / `ctrl+alt+o` (เฉพาะเมื่อยังไม่มีค่า) + สร้าง shortcut `BAZER CONSOLE - WINDOW` + ไฟล์ launch + อัพเดต mirror | **ไม่ทับไฟล์ที่มีอยู่** (โหมดที่แก้ไว้จะไม่ถูกอัพเดต) |
 | **ตรวจว่ามีอะไรใหม่ + อัพเดตทั้งหมด** (แท็บภาพรวม) | เทียบ bundle กับเครื่อง แล้วทับเฉพาะที่ต่าง/ใหม่: skills · agents · commands · plugins · launch (พร้อมสำรอง) แล้วรัน mirror ให้อัตโนมัติ + รีเฟรช `planningAgents` ถ้าขาด | ไม่ทับ AGENTS.md · pstack-models.md · serve-restricted.jsonc (ต้องใช้ปุ่มรีเซ็ตถ้าต้องการ) |
 | **อัพเดต mirror ทั้งหมด** (แท็บ Buddha) | เขียน `BAZERs-EXTENSION-*` จาก agent ที่ติดตั้งไว้ (fallback bundle) | ไม่แตะ agent/สกิลอื่น |
 | **🔄 ซิงค์ทั้งหมด** (แท็บภาพรวม) | รัน `update-apply` → `refresh-config` → `mirror-agents` แล้วรัน verify ให้ในคลิกเดียว | ไม่ทับ AGENTS.md · pstack-models.md (เหมือน "อัพเดตทั้งหมด") · ไม่แตะ serve-restricted.jsonc |
 | **เปิด/ปิดปลั๊กอิน Plannotator** (แท็บ Plannotator) | เขียน `plugins` + `planningAgents` ใน `opencode.jsonc` | ไม่แตะไฟล์อื่น |
+| **ติดตั้ง/ซ่อม BAZER FLOW v2** (แท็บ Buddha · Plannotator) | คัดลอก plugin `bazer-flow` + `builder.md` + ลงทะเบียน `./plugins/bazer-flow` + เติมกฎ `BAZER-FLOW-GATE v2` ใน AGENTS.md + mirror (สำรองก่อนเขียน) | ไม่ทับ Plannotator · ไม่แตะ `build` · ปิดได้ด้วยปุ่มเดียวกัน |
 
 **แก้โหมด:** แก้ที่ `CONSOLE/bundle/agents/*.md` เท่านั้น แล้วกดอัพเดต — ห้ามแก้ `~/.agents/skills/BAZERs-EXTENSION-*/SKILL.md` ตรง ๆ เพราะไฟล์นั้นถูก generate และจะถูกทับ
 
 
-## 3) BAZER FLOW v1 (บังคับ)
+## 3) BAZER FLOW v2 (บังคับ)
 
-BUDDHA MODE เดินเป็นเครื่องสถานะ 7 เฟสในเซสชันเดียว ไม่สลับ agent และไม่เข้า build ระหว่างทาง
+**Buddha เดินทุกเฟสในเซสชันเดียวและ agent เดียว — ไม่มีการสลับ agent ในทุกจุด**
 
 ```mermaid
 flowchart TD
-    n1["BUDDHA"] --> n2["G1-A Plan(notator): วางแผน 'ใช้ Arena Mode ยังไง'"]
-    n2 --> n3["G1-B Plan(notator): Original Plan Summit Workflow"]
-    n3 --> n4["G1-C อนุมัติ = ไปต่อ Arena (ไม่ใช่ build)"]
-    n4 --> n5["P3 Arena mode: original arena workflow (ในเซสชันนี้)"]
-    n5 --> n6["G2-A Plan(notator): แผน 'เอาไปใช้กับโค้ดจริงยังไง'"]
-    n6 --> n7["G2-B Plan(notator): Original Plan Summit Workflow"]
-    n7 --> n8["G2-C อนุมัติ = ลงมือสร้าง"]
+    n1["BUDDHA"] --> n2["B1 GATE 1 · Plan(notator): แผน Arena"]
+    n2 --> n3["B2 Arena inside: Fan out → Cross-judge → Pick → Graft → Verify (temp)"]
+    n3 --> n4["B3 GATE 2 · Plan(notator): แผนสร้าง"]
+    n4 --> n5["B4 Built inside: สร้างในเซสชัน Buddha นี้"]
 ```
 
 | เฟส | ต้องทำ | ทางออก |
 |---|---|---|
-| **G1-A** | โจทย์ · candidates 2-3 ทางที่ต่างเชิงโครงสร้าง · rubric · ข้อจำกัด (ห้ามแตะโปรเจกต์) | ยื่นด่าน 1 |
-| **G1-B** | แผนฉบับเต็มตาม workflow เดิมของ Plannotator | รวมในด่าน 1 เดียวกัน |
-| **G1-C** | อนุมัติ ("Approve and Build") = ไปต่อเฟส Arena **ไม่สลับ agent ไม่เข้า build** | |
-| **P3** | โหลด `BAZERs-EXTENSION-Arena` รันในเซสชันนี้: Fan out → Cross-judge → Pick a base → Graft → Verify (candidates ลง temp) | |
-| **G2-A** | base ที่เลือก + เหตุผล · grafts · ไฟล์/จุดที่แตะ · ความเสี่ยง · วิธีพิสูจน์ | ยื่นด่าน 2 |
-| **G2-B** | แผน implementation ฉบับเดียว | รวมในด่าน 2 |
-| **G2-C** | อนุมัติ = ลงมือสร้าง (ในเซสชันนี้ หรือผู้ใช้สลับเป็น build เอง) | |
+| **B1** | **เขียนแผนด้วยกระบวนการ Poteto Mode** (โหลด `BAZERs-EXTENSION-Poteto` — ไม่ใช่สลับ agent) แล้วเติมส่วน Arena: candidates 2–3 ทางต่างเชิงโครงสร้าง · rubric · ห้ามแตะโปรเจกต์ · แผนขึ้นต้น `# GATE 1 — ARENA PLAN` | `submit_plan` |
+| **B2** | โหลด `BAZERs-EXTENSION-Arena` รันในเซสชันนี้ (candidates ลง `%TEMP%\bazer\<slug>\`) | ไป B3 |
+| **B3** | แผนสร้างขึ้นต้น `# GATE 2 — BUILD PLAN` · base + grafts + ไฟล์/จุดที่แตะ + ความเสี่ยง + วิธีพิสูจน์ | `submit_plan` |
+| **B4** | อนุมัติแล้วสร้างในเซสชัน Buddha นี้ + พิสูจน์กับของจริง | จบงาน |
+
+**Plan Mode (นอก Buddha):** `Plan Mode → submit_plan → อนุมัติ → Plan ยังเป็น agent เดิม แต่สร้างผ่าน subagent `builder` เท่านั้น` — Plan ห้ามเขียนไฟล์เองแม้อนุมัติแล้ว · prompt tab แสดง `PLAN` → `BUILD` · ทางเดิม (ผู้ใช้สลับเป็น `build` เอง) ยังใช้ได้
 
 กติกาเด็ดขาด
 
-- ห้ามยื่นด่าน 2 ก่อน P3 จบ (ต้องมีผล Arena ประกอบ)
-- ห้ามแตะไฟล์โปรเจกต์ก่อน G2-C ยกเว้นไฟล์ชั่วคราวใน `%TEMP%\bazer\<slug>\`
-- หลังอนุมัติแต่ละด่าน ห้ามสลับ agent เอง ให้เดินเฟสถัดไปในเซสชันนี้ (ถ้าผู้ใช้เลือกสลับเองในหน้าอนุมัติ ให้ทำตาม `arena.md` ในเซสชันนั้น)
-- ถ้าผู้ใช้สั่ง "ข้าม arena" ให้ยื่นแผนเดียวจบที่ด่าน 1 แล้วไป G2-C
-- **ยื่นด่าน 2:** ใช้ `submit_plan` ถ้ายังมีในเซสชัน · ถ้าไม่มีแล้ว (ออกจาก plan mode หลังอนุมัติด่าน 1) ให้ยื่นด้วย Plannotator CLI `plannotator annotate <ไฟล์แผน.md> --gate --json --require-approval --result-file <ไฟล์ผล.json>` — ต้องได้อนุมัติก่อนสร้างเสมอ (ห้ามตีความว่า "ไม่มีปุ่ม = ข้ามด่านได้")
-- ตัวตรวจ: marker `<!-- BAZER-FLOW: v1 -->` ต้องปรากฏใน `bundle/agents/buddha.md` และใน mirror ของ Buddha — marker อยู่ใน **เนื้อหา** ของ `bundle/agents/buddha.md` เอง (ไม่ใช่ตัวเติมอัตโนมัติ) mirror จึงได้ไปพร้อมเนื้อหาที่ copy มา และตัวตรวจในแอปเทียบ **เลขเวอร์ชัน** ระหว่าง bundle กับไฟล์ที่ติดตั้งในเครื่อง (ตรงกัน = ป้ายเขียว `BAZER FLOW v1` ในแท็บ Buddha)
+- ห้ามสลับ agent เอง — Buddha จบทุกเฟสในตัว; Plan Mode จบผ่าน `builder`
+- **gate ถูกบังคับโดยปลั๊กอิน `bazer-flow`** (server hooks + TUI badge): ก่อนได้ `Plan approved!` เครื่องมือเขียนไฟล์นอก `%TEMP%\bazer\` และ `task(builder)` ถูกบล็อก; ติดตั้ง/ซ่อม/ปิดได้จาก BAZER Console แท็บ Buddha
+- ทุกครั้งที่ยื่นแผนใหม่ สถานะกลับเป็น pending จนอนุมัติ
+- ห้ามยื่น B3 ก่อน B2 จบ; ห้ามแตะไฟล์โปรเจกต์ก่อนอนุมัติ ยกเว้น `%TEMP%\bazer\<slug>\`
+- ถ้าผู้ใช้สั่ง "ข้าม arena" ให้ยื่นแผนเดียวจบที่ B1 แล้วสร้างหลังอนุมัติ
+- **ยื่น B3:** ใช้ `submit_plan` ถ้ายังมีในเซสชัน · ถ้าไม่มีแล้ว ให้ใช้ Plannotator CLI `plannotator annotate <ไฟล์แผน.md> --gate --json --require-approval --result-file <ไฟล์ผล.json>` — ต้องได้อนุมัติก่อนสร้างเสมอ
+- **marker:** `<!-- BAZER-FLOW: v2 -->` ต้องอยู่ทั้งใน `bundle/agents/buddha.md` และไฟล์ที่ติดตั้ง (Console เทียบเลขเวอร์ชัน + ป้ายเขียวในแท็บ Buddha) · ตัวตรวจ `mode-lock.mjs` R8
+- ตัวตรวจรวม: `node flow-check.mjs` (logic ของ gate + builder + AGENTS marker)
 
 
 ## 4) git — push ก่อน แล้วค่อย pull ที่เครื่องอื่น
@@ -115,7 +114,7 @@ git -C "<โฟลเดอร์ repo>" push            # branch air ผูก�
 - agent ทุกตัว frontmatter ผ่าน (color เป็น hex)
 - `planningAgents` ครอบโหมดจริง: `buddha`, `arena`, `snack`, `poteto-mode` (บวก `plan` ของตัว OpenCode)
 - mirror โหมด `BAZERs-EXTENSION-*` ตรงกับต้นทางทุกตัว
-- BAZER FLOW v1: marker ตรงกันระหว่าง bundle กับไฟล์ที่ติดตั้ง
+- BAZER FLOW v2: marker ตรงกันระหว่าง bundle กับไฟล์ที่ติดตั้ง + kernel (`bazer-flow`) ลงทะเบียน + `builder` mode all + AGENTS gate marker (`node flow-check.mjs` ตรวจ logic ของ gate)
 - ไฟล์ launch ครบ (serve + lock scripts) — ข้อความต้องบอก **โฟลเดอร์ที่ตรวจ** (ค่าเริ่มต้น `%USERPROFILE%\opencode-launch` เมื่อ `launchDir` ว่าง) เพื่อให้รู้ว่าต้องกดปุ่มไหนต่อ
 - template ส่วนตัว (`AGENTS.md` · `pstack-models.md`): ต้องเป็น `ok` (ตรงกับ bundle) หรือ `info` (ถูกแก้เอง — ระบบไม่ทับให้เอง ตั้งใจ) ห้ามเป็น `warn` ว่า "ยังไม่มี"
 - หมายเหตุ: "มีไฟล์" ไม่เท่ากับ "ตรงกับ bundle" — สองไฟล์นี้ถูกสร้างครั้งเดียว การอัพเดต `bundle/config/*.template` จึงไม่ถึงไฟล์ในเครื่องจนกว่าจะกด "รีเซ็ตจาก template" ตัวตรวจนี้คือที่เดียวที่ทำให้เรื่องนี้มองเห็นได้

@@ -1,0 +1,9 @@
+{
+  "name": "bazer-flow",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./tui": "./tui.tsx"
+  }
+}

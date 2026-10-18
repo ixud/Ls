@@ -12,6 +12,13 @@
 
 ก่อนแก้ไฟล์ทุกครั้งใน Plan Mode ต้องเรียก `submit_plan` แล้วรอ approve; การถามผ่าน `question` tool ไม่นับแทน
 
+<!-- BAZER-FLOW-GATE: v2 -->
+## BAZER FLOW v2 gate
+
+- **Plan Mode:** ก่อนได้ `Plan approved!` ห้ามเขียน/แก้ไฟล์โปรเจกต์ และห้ามสั่ง `builder` ผ่าน `task` — หลังอนุมัติให้สร้างผ่าน subagent `builder` เท่านั้น (Plan ไม่เขียนเอง)
+- **Buddha Mode:** ทุกเฟสอยู่ใน Buddha เซสชันเดียว ห้ามสลับ agent; ก่อนอนุมัติเขียนได้เฉพาะ `%TEMP%\bazer\**` หลังอนุมัติจึงสร้างในเซสชันได้
+- แผนที่เขียนในแชตอย่างเดียวไม่นับว่าอนุมัติ — ต้องผ่าน `submit_plan` (หรือ Plannotator CLI gate) และได้ผล approved
+
 ## กฎที่ย้ายออกไปแล้ว
 
 ขอบเขตไฟล์ · กฎเว้นบรรทัดในไฟล์ `.md` · guide สำหรับคนไม่รู้เรื่อง · mode lock → อยู่ใน skill `bazer-mode-rules` (โหลดเมื่อเข้าเงื่อนไข ไม่ใช่ทุก session)
