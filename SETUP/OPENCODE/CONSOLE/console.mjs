@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runLockCheck } from './mode-lock.mjs';
+import { createSettingsApi } from './tui-settings/src/api.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_VERSION = '1.4.0';
@@ -793,6 +794,14 @@ async function runVerify() {
     if (unref.length) add('info', 'ไฟล์ launch ที่โค้ดไม่เรียกเอง', unref.map(x => x.name).join(', ') + ' — เป็นสคริปต์ให้ผู้ใช้ดับเบิลคลิกเอง ไม่ใช่ไฟล์ค้าง');
   }
 
+  // 10 ตั้งค่า OpenCode (tui-settings) — cli.json อ่านได้ · mirror ตรง · คีย์นอก catalog คงอยู่ · keybind ผ่าน
+  {
+    try {
+      const tv = await ACTIONS['tui-verify']({});
+      for (const it of tv.items) add(it.level, 'TUI · ' + it.label, it.detail);
+    } catch (e) { add('warn', 'TUI · ตรวจตั้งค่าไม่ได้', String(e.message || e)); }
+  }
+
   const summary = { ok: items.filter(i => i.level === 'ok').length, warn: items.filter(i => i.level === 'warn').length, fail: items.filter(i => i.level === 'fail').length };
   return { at: new Date().toLocaleString('th-TH'), items, summary };
 }
@@ -955,7 +964,20 @@ function configDrift() {
   } catch { return { planningAgents: [], missing: PLAN_AGENTS.slice(), ok: false }; }
 }
 
+/* ตั้งค่า OpenCode — สร้าง API ครั้งเดียว ถ้าโฟลเดอร์ tui-settings หาย ให้แอปยังบูตได้และบอกเหตุผล */
+const TUI_API = (() => {
+  try {
+    return createSettingsApi({ cliFile: P.cliJson, tuiFile: P.tuiJson, backupsDir: P.backups, historyFile: P.history });
+  } catch (e) {
+    const fail = () => { throw new Error('โหลด tui-settings ไม่ได้ (โฟลเดอร์ tui-settings ต้องอยู่ข้าง console.mjs): ' + e.message); };
+    return Object.fromEntries(['tui-form', 'tui-save', 'tui-preview-mirror', 'tui-mirror-status', 'tui-status', 'tui-import', 'tui-restore', 'tui-verify', 'tui-backups'].map(id => [id, fail]));
+  }
+})();
+
 const ACTIONS = {
+  /* ตั้งค่า OpenCode (tui-settings) — schema-driven form + cli.json↔tui.json mirror */
+  ...TUI_API,
+
   /* mode lock — สวิตช์เดียว เขียนครบทุกช่องที่ชนะ แล้วปิดท้ายด้วยการตรวจ */
   'check-mode-lock': async () => {
     const r = runLockCheck();
@@ -1989,6 +2011,8 @@ async function gatherState() {
       s.flow = { bundle: bv, installed: iv, ok: !!bv && bv === iv };
     }
   } catch { s.plg = { planningAgents: [], buddha: false, arena: false, snack: false, poteto: false }; s.fire = { file: false, reg: false }; s.mirror = []; s.cfgDrift = { planningAgents: [], missing: PLAN_AGENTS.slice(), ok: false }; s.flow = { bundle: null, installed: null, ok: false }; }
+  /* ตั้งค่า OpenCode — สรุปเบา ๆ เท่านั้น (ไม่ฝัง form model ลง state ทุกครั้ง) */
+  try { s.tui = await ACTIONS['tui-status']({}); } catch { s.tui = null; }
   return s;
 }
 function safe(fn, fallback) { try { return fn(); } catch { return fallback; } }

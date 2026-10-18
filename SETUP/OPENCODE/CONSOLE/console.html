@@ -167,6 +167,51 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px}
 .section-title{font-size:14px;font-weight:600;margin:8px 0 2px;letter-spacing:.2px}
 details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--panel)}
 summary{cursor:pointer;color:var(--dim);font-size:13px}
+
+/* ---------- ตั้งค่า OpenCode (tui-settings) — scoped under .settings ---------- */
+.settings{display:flex;flex-direction:column;gap:12px}
+.settings-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,rgba(18,22,30,.96),rgba(18,22,30,.82));backdrop-filter:blur(8px)}
+.settings-bar .search{flex:1;min-width:200px}
+.settings .group{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 14px}
+.settings .group>header h2{font-size:13px;margin:0;color:var(--text);font-weight:600;letter-spacing:.3px;display:flex;gap:8px;align-items:baseline}
+.settings .group>header p{margin:4px 0 0;font-size:11.5px;color:var(--dim)}
+.settings .subgroup{margin-top:8px;padding:6px 10px}
+.settings .subgroup>summary{font-size:12.5px}
+.settings .rows{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.settings .row{display:flex;align-items:flex-start;gap:10px;padding:7px 4px 7px 8px;border-bottom:1px solid rgba(255,255,255,.04);border-left:2px solid transparent}
+.settings .row:last-child{border-bottom:0}
+.settings .row:hover{background:rgba(255,255,255,.02)}
+.settings .row.edited{border-left-color:var(--gold);background:rgba(245,197,66,.05)}
+.settings .row .rowhead{flex:1;min-width:0;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.settings .row .label{font-size:13px;color:var(--text)}
+.settings .row .path{font-size:11.5px;color:#cfe3ff;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:6px}
+.settings .row .card .sub,.settings .row .muted.small{margin-top:2px}
+.settings .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.settings .badge.def{color:var(--gold);border-color:rgba(245,197,66,.35);background:rgba(245,197,66,.07)}
+.settings .badge.none{color:var(--dim2)}
+.settings .badge.src{color:#9fd0ff;border-color:rgba(94,162,255,.3);background:rgba(94,162,255,.06)}
+.settings .badge.opt{color:var(--dim2)}
+.settings .ctl{flex:none;min-width:220px;display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.settings .ctl input[type=text],.settings .ctl input[type=number],.settings .ctl select,.settings .ctl .search{width:auto;min-width:150px}
+.settings .clr{all:unset;cursor:pointer;flex:none;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:var(--dim2);font-size:14px;border:1px solid var(--line)}
+.settings .clr:hover{background:rgba(255,92,92,.18);color:#ffb3b3}
+.settings .switch{position:relative;width:42px;height:23px;flex:none;cursor:pointer;display:inline-block}
+.settings .switch input{display:none}
+.settings .switch .track{position:absolute;inset:0;border-radius:999px;background:rgba(255,255,255,.12);transition:.18s;border:1px solid var(--line)}
+.settings .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#cfd6e4;transition:.18s}
+.settings .switch input:checked+.track{background:linear-gradient(135deg,var(--gold),#ffdf7e);border-color:transparent}
+.settings .switch input:checked+.track::after{left:21px;background:#17120a}
+.settings fieldset.nested{border:1px dashed var(--line);border-radius:10px;margin:0;padding:4px 10px 8px}
+.settings .kb{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end}
+.settings .kb .kb-mode{min-width:130px;width:auto}
+.settings .kb-capture{display:inline-flex}
+.settings .hint{font-size:11.5px;color:var(--dim);margin-top:6px}
+.settings .warnbox{margin-top:6px}
+.settings .boolmap,.settings .list{display:flex;flex-direction:column;gap:6px}
+.settings .bm-row,.settings .li-row,.settings .row-inline{display:flex;gap:8px;align-items:center}
+.settings .bm-row input,.settings .li-row input{flex:1}
+.settings .union{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.settings .readonly .ctl code{color:var(--dim)}
 </style>
 </head>
 <body>
@@ -187,6 +232,7 @@ summary{cursor:pointer;color:var(--dim);font-size:13px}
       <span id="navSub"></span>
       <button data-tab="projects">โปรเจกต์</button>
       <button data-tab="plannotator">Plannotator</button>
+      <button data-tab="tui">ตั้งค่า OpenCode</button>
       <button data-tab="history">ประวัติ &amp; สำรอง</button>
     </nav>
     <div class="foot">
@@ -207,7 +253,7 @@ summary{cursor:pointer;color:var(--dim);font-size:13px}
 <div id="toasts"></div>
 <script>
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
-let TAB = (()=>{ try { let t = localStorage.getItem('bazerTab') || 'dash'; if(t === 'agent:arena.md') t = 'arena'; if(t === 'agent:buddha.md') t = 'buddha'; return t; } catch { return 'dash'; } })(), S = null, VERIFY = null, MODELS = null, BP = null, FILTER = '', MS = null, AMODELS = null, SETUP = null, UP = null, ROLES = null;
+let TAB = (()=>{ try { let t = localStorage.getItem('bazerTab') || 'dash'; if(t === 'agent:arena.md') t = 'arena'; if(t === 'agent:buddha.md') t = 'buddha'; return t; } catch { return 'dash'; } })(), S = null, VERIFY = null, MODELS = null, BP = null, FILTER = '', MS = null, AMODELS = null, SETUP = null, UP = null, ROLES = null, TUI = null, TUI_STATE = null;
 
 async function api(u, opts={}){
   const r = await fetch(u, {
@@ -253,7 +299,7 @@ async function act(id, params={}, confirmText){
     }
     else { toast(r.message || 'สำเร็จ'); }
     await refresh();
-    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent','set-mode-lock','check-mode-lock','migrate-tui'];
+    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','sync-all','refresh-config','reset-template','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent','set-mode-lock','check-mode-lock','migrate-tui','tui-save','tui-reset','tui-import','tui-refresh'];
     if(after.includes(id)) runVerify(false);
   }catch(e){ toast('ผิดพลาด: ' + e.message, true); }
 }
@@ -290,7 +336,7 @@ function tab(name){
 function render(){
   if(!S) return;
   if(TAB === 'pstack' && MS) collectMS();
-  const titles = { dash:'ภาพรวม', lock:'ล็อก & โมเดล', server:'Server & Cline', pstack:'pStack', bazer:'Bazer Mode', buddha:'Buddha Mode', arena:'Arena Mode', snack:'Snack', projects:'โปรเจกต์', plannotator:'Plannotator', history:'ประวัติ & สำรอง' };
+  const titles = { dash:'ภาพรวม', lock:'ล็อก & โมเดล', server:'Server & Cline', pstack:'pStack', bazer:'Bazer Mode', buddha:'Buddha Mode', arena:'Arena Mode', snack:'Snack', projects:'โปรเจกต์', plannotator:'Plannotator', tui:'ตั้งค่า OpenCode', history:'ประวัติ & สำรอง' };
   const af = TAB.indexOf('agent:') === 0 ? TAB.slice(6) : null;
   const meta = af ? (AGENT_META[af] || { name: af.replace(/\.md$/, '') }) : null;
   document.getElementById('hTitle').textContent = af ? (meta.name + (meta.sub ? ' (subagent)' : ' Mode')) : (titles[TAB] || '');
@@ -298,13 +344,14 @@ function render(){
   const ptext = document.getElementById('serverPillText');
   if(S.server.up){ pill.className = 'led ok'; ptext.textContent = `server 4096 · v${S.server.version||'?'}`; }
   else { pill.className = 'led fail'; ptext.textContent = 'server 4096 ปิดอยู่'; }
-  const v = af ? vAgent(af) : ({ dash: vDash, lock: vLock, server: vServer, pstack: vPstack, bazer: vBazer, buddha: vBuddha, arena: vArena, snack: vSnack, projects: vProjects, plannotator: vPl, history: vHist }[TAB] || vDash)();
+  const v = af ? vAgent(af) : ({ dash: vDash, lock: vLock, server: vServer, pstack: vPstack, bazer: vBazer, buddha: vBuddha, arena: vArena, snack: vSnack, projects: vProjects, plannotator: vPl, tui: vTui, history: vHist }[TAB] || vDash)();
   document.getElementById('view').innerHTML = v;
   document.querySelectorAll('#nav > button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   renderNavModes();
   renderNavSub();
   if(TAB === 'pstack'){ if(!MS) initMS(); renderMS(); }
   if(TAB === 'buddha' || TAB === 'arena'){ if(!ROLES) parseRoles(); renderRoleChips(); }
+  if(TAB === 'tui') mountTui();
   setVerifyBadge();
 }
 
@@ -1246,6 +1293,690 @@ function vHist(){
   </div>`;
 }
 
+/* ---------- ตั้งค่า OpenCode (tui-settings) ---------- */
+
+/* TUIWidget ถูก inline ที่นี่โดย tui-settings/tools/build-client.mjs (ห้ามแก้มือ) */
+/* TUI-SETTINGS-RENDERER:BEGIN — generated by tui-settings/tools/build-client.mjs — do not hand-edit */
+const TUIWidget = (() => {
+/**
+ * paths.mjs — how a config leaf is addressed on the wire.
+ *
+ * Level separators are `/`, and `~`/`/` inside a key are escaped (`~0`, `~1`) —
+ * the same convention as JSON Pointer. Two reasons not to use dotted paths:
+ *
+ *   1. keybind IDs contain dots. `keybinds.app.exit` split on dots becomes
+ *      {keybinds:{app:{exit:…}}}, which is not the file shape opencode reads.
+ *      Every keybind save would have silently written a nested object.
+ *   2. a hand-written key can contain dots or slashes too. With escaping the
+ *      path is unambiguous for any key, known or not.
+ *
+ * Display still uses dots (`keybinds.app.exit`) because that is what the docs and
+ * the schema call it; `toDisplay`/`toWire` convert.
+ *
+ * Used by the server (patch engine, validator) and by the browser (renderer),
+ * so it lives in its own module rather than in either one.
+ */
+
+function escapeSegment(seg) {
+  return String(seg).replace(/~/g, '~0').replace(/\//g, '~1');
+}
+function unescapeSegment(seg) {
+  return String(seg).replace(/~1/g, '/').replace(/~0/g, '~');
+}
+
+/** ['keybinds','app.exit'] -> 'keybinds/app.exit' */
+function toWire(segments) {
+  return (Array.isArray(segments) ? segments : [segments]).map(escapeSegment).join('/');
+}
+/** 'keybinds/app.exit' -> ['keybinds','app.exit'] */
+function toSegments(wirePath) {
+  return String(wirePath).split('/').map(unescapeSegment);
+}
+/** Wire path shown the way the docs write it: 'keybinds/app.exit' -> 'keybinds.app.exit' */
+function toDisplay(wirePath) {
+  return toSegments(wirePath).join('.');
+}
+
+/** Read a leaf by wire path. `found` distinguishes absent from present-and-undefined. */
+function readLeaf(root, wirePath) {
+  const keys = toSegments(wirePath);
+  let node = root;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (node === null || typeof node !== 'object' || !(key in node)) return { found: false, value: undefined, parent: undefined, key };
+    const parent = node;
+    node = node[key];
+    if (i === keys.length - 1) return { found: true, value: node, parent, key };
+  }
+  return { found: false, value: undefined, parent: undefined, key: undefined };
+}
+
+/** True when `wirePath` is the container of at least one known leaf. */
+function isKnownContainer(wirePath, knownPaths) {
+  if (knownPaths.has(wirePath)) return true;
+  const lead = wirePath + '/';
+  for (const p of knownPaths) if (p.startsWith(lead)) return true;
+  return false;
+}
+
+function isPlainObject(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+
+/**
+ * renderer.mjs — ONE generic control renderer.
+ *
+ * The client holds no knowledge of opencode's settings. It receives the form
+ * model from the server (group -> field -> {type, enum, description, path}) and
+ * draws a control per `type`:
+ *
+ *   boolean -> toggle switch            enum     -> select
+ *   number  -> number input + bounds    integer  -> number input, step 1
+ *   string  -> text input               keybind  -> keybind control
+ *   union   -> type switch + sub-control
+ *   object  -> nested fieldset          boolmap  -> key/value rows
+ *   list    -> item rows + JSON escape
+ *
+ * Add a key to cli.schema.json and it renders with no change here. That is the
+ * whole point of the direction: the schema is the source of truth and the GUI is
+ * a projection of it.
+ *
+ * Value convention, used by every control:
+ *   `state.draft` maps path -> {op:'set', value} or {op:'unset'}.
+ *   A path absent from the draft is untouched. `collectPatches` emits only the
+ *   paths whose value actually differs from the file on disk.
+ */
+
+
+/* ----------------------------------- state ----------------------------------- */
+
+function createState(model, values) {
+  return {
+    model,
+    values: values || {},
+    draft: new Map(),
+    openGroups: new Set(),
+    search: '',
+  };
+}
+
+/** Values are addressed by wire path; see shared/paths.mjs for why not dotted. */
+function readPath(obj, wirePath) {
+  return readLeaf(obj, wirePath);
+}
+
+/** The value a control should show: draft edit if any, else what is on disk, else the schema default. */
+function effectiveValue(state, field) {
+  const d = state.draft.get(field.path);
+  if (d) return d.op === 'unset' ? { present: false, value: undefined, edited: true } : { present: true, value: d.value, edited: true };
+  const onDisk = readPath(state.values, field.path);
+  if (onDisk.found) return { present: true, value: onDisk.value, edited: false };
+  if (field.hasDefault) return { present: false, value: field.default, edited: false, isDefault: true };
+  return { present: false, value: undefined, edited: false };
+}
+
+function setDraft(state, path, value) {
+  const field = state.model.index[path];
+  if (field?.readOnly) return;
+  state.draft.set(path, { op: 'set', value });
+}
+function clearDraft(state, path) {
+  const fieldPath = path;
+  const field = state.model.index[fieldPath];
+  if (field?.readOnly) return;
+  const onDisk = readPath(state.values, fieldPath);
+  if (onDisk.found) state.draft.set(fieldPath, { op: 'unset' });
+  else state.draft.delete(fieldPath);
+}
+
+/**
+ * Only changed paths. Compared against the file on disk, not against the schema
+ * default, so "revert to default" saves as an explicit unset only when the key
+ * is actually present in the file.
+ */
+function collectPatches(state) {
+  const patches = [];
+  for (const [path, edit] of state.draft) {
+    const onDisk = readPath(state.values, path);
+    if (edit.op === 'unset') {
+      if (onDisk.found) patches.push({ path, op: 'unset' });
+      continue;
+    }
+    if (onDisk.found && jsonEqual(onDisk.value, edit.value)) continue;
+    patches.push({ path, op: 'set', value: edit.value });
+  }
+  return patches;
+}
+
+function dirtyCount(state) { return collectPatches(state).length; }
+
+function jsonEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a === null || b === null) return false;
+  if (typeof a !== 'object') return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const json = v => esc(JSON.stringify(v));
+
+/* --------------------------------- rendering --------------------------------- */
+
+function renderSettings(state) {
+  const { model } = state;
+  const q = state.search.trim().toLowerCase();
+  const groups = model.groups.map(g => renderGroup(state, g, q)).filter(Boolean);
+  return `
+<div class="settings">
+  <div class="settings-bar">
+    <input type="search" class="search" data-role="search" data-ctl="search" placeholder="ค้นหา setting / keybind…" value="${esc(state.search)}">
+    <span class="muted" data-role="dirty">${dirtyCount(state)} ค่าที่แก้ไว้</span>
+    <button class="btn gold" data-role="save" ${dirtyCount(state) ? '' : 'disabled'}>บันทึก</button>
+    <button class="btn ghost" data-role="revert" ${dirtyCount(state) ? '' : 'disabled'}>ทิ้งการแก้</button>
+  </div>
+  ${groups.join('\n')}
+</div>`;
+}
+
+function matches(field, q) {
+  if (!q) return true;
+  return field.path.toLowerCase().includes(q)
+    || String(field.display || '').toLowerCase().includes(q)
+    || String(field.label).toLowerCase().includes(q)
+    || String(field.description || '').toLowerCase().includes(q)
+    || String(field.default ?? '').toLowerCase().includes(q);
+}
+
+function renderGroup(state, group, q) {
+  if (group.kind === 'keybinds') {
+    const subs = group.subgroups.map(sg => {
+      const fields = sg.fields.filter(f => matches(f, q));
+      if (!fields.length) return '';
+      return `<details class="subgroup" ${state.openGroups.has(sg.id) || q ? 'open' : ''} data-subgroup="${esc(sg.id)}">
+  <summary>${esc(sg.label)} <span class="muted xs">${fields.length}/${sg.fields.length}</span></summary>
+  <div class="rows">${fields.map(f => renderRow(state, f)).join('')}</div>
+</details>`;
+    }).filter(Boolean);
+    if (!subs.length) return '';
+    return `<section class="group" data-group="keybinds">
+  <header><h2>${esc(group.label)} <span class="muted xs">${group.fieldCount} ปุ่ม</span></h2>
+    <p class="muted small">${esc(group.description)}</p>
+    ${renderBindingHelp(group.bindingShape)}
+  </header>
+  ${subs.join('\n')}
+</section>`;
+  }
+
+  const fields = group.fields.filter(f => matches(f, q));
+  if (!fields.length) return '';
+  return `<section class="group" data-group="${esc(group.id)}">
+  <header><h2>${esc(group.label)} <span class="muted xs">${group.labelEn}</span></h2>
+    ${group.description ? `<p class="muted small">${esc(group.description)}</p>` : ''}</header>
+  <div class="rows">${fields.map(f => renderRow(state, f)).join('')}</div>
+</section>`;
+}
+
+function renderBindingHelp(shapes) {
+  if (!shapes || !shapes.length) return '';
+  const lines = shapes.map(s => {
+    if (s.shape === 'disabled') return `<code>${esc(JSON.stringify(s.literal))}</code> = ปิดปุ่มนี้ (${esc(s.note || '')})`;
+    if (s.shape === 'key') return `<code>"ctrl+k"</code> = ปุ่มเดียวหรือหลายปุ่มคั่นด้วยจุลภาค — ${esc(s.note || '')}`;
+    if (s.shape === 'keyObject') return `<code>{name,…}</code> = ปุ่มพร้อมตัวปรับ (${esc((s.properties || []).join(', '))})`;
+    if (s.shape === 'bindingObject') return `<code>{key,event,preventDefault,fallthrough}</code> = กำหนดพฤติกรรม event`;
+    if (s.shape === 'array') return `<code>[…]</code> = หลายปุ่มพร้อมกัน`;
+    return '';
+  }).filter(Boolean);
+  return `<div class="hint">รับค่าได้: ${lines.join(' · ')}</div>`;
+}
+
+function renderRow(state, field) {
+  if (field.readOnly) {
+    const disk = readPath(state.values, field.path);
+    return `<div class="row readonly" data-path="${esc(field.path)}" data-type="readonly">
+  <div class="rowhead">
+    <div>
+      <div class="label">${esc(field.label)} <code class="path">${esc(field.display || field.path)}</code></div>
+      ${field.description ? `<div class="muted small">${esc(field.description)}</div>` : ''}
+    </div>
+    <div class="ctl"><code class="muted">${esc(disk.found ? JSON.stringify(disk.value) : '—')}</code><span class="badge opt">อ่านอย่างเดียว</span></div>
+  </div>
+</div>`;
+  }
+  const eff = effectiveValue(state, field);
+  const isEdited = state.draft.has(field.path);
+  const badge = !isEdited && field.hasDefault && !eff.present
+    ? `<span class="badge def" title="ค่าที่โปรแกรมใช้เมื่อไม่มีคีย์นี้">default: ${esc(fmt(field.default))}</span>`
+    : !isEdited && !eff.present
+      ? `<span class="badge none" title="ไม่มีค่านี้ในไฟล์">ไม่ตั้งไว้</span>`
+      : '';
+  const source = field.defaultSource === 'runtime' ? 'จาก binary' : field.defaultSource === 'description' ? 'จากคำอธิบายสคีมา' : '';
+  return `<div class="row ${isEdited ? 'edited' : ''}" data-path="${esc(field.path)}" data-type="${esc(field.type)}">
+  <div class="rowhead">
+    <div>
+      <div class="label">${esc(field.label)} <code class="path" title="ที่อยู่บน wire: ${esc(field.path)}">${esc(field.display || field.path)}</code></div>
+      ${field.description ? `<div class="muted small">${esc(field.description)}</div>` : ''}
+      <div class="badges">${badge}${field.defaultSource !== 'none' ? `<span class="badge src" title="ที่มาของค่า default">${esc(source)}</span>` : ''}${field.nullable ? '<span class="badge opt">เว้นว่างได้</span>' : ''}</div>
+    </div>
+    <div class="ctl">${renderControl(state, field, eff)}</div>
+  </div>
+  <button class="clr" data-act="clear" title="คืนค่า default — ลบคีย์นี้ออกจากไฟล์ (ไม่ใช่ปิดด้วย false/none)">×</button>
+</div>`;
+}
+
+function renderControl(state, field, eff) {
+  switch (field.type) {
+    case 'boolean': return renderBoolean(field, eff);
+    case 'enum': return renderEnum(field, eff);
+    case 'number':
+    case 'integer': return renderNumber(field, eff);
+    case 'string': return renderText(field, eff);
+    case 'keybind': return renderKeybind(field, eff);
+    case 'union': return renderUnion(field, eff);
+    case 'object': return renderObject(state, field);
+    case 'boolmap': return renderBoolmap(field, eff);
+    case 'list': return renderList(field, eff);
+    default: return renderText(field, eff);
+  }
+}
+
+function renderBoolean(field, eff) {
+  const on = eff.value === true;
+  const off = eff.value === false;
+  return `<label class="switch"><input type="checkbox" data-ctl="boolean" ${on ? 'checked' : ''} ${!on && !off ? 'data-indeterminate="1"' : ''}><span class="track"></span></label>
+  <span class="muted xs">${on ? 'เปิด' : off ? 'ปิด' : 'ยังไม่ตั้ง'}</span>`;
+}
+
+function renderEnum(field, eff) {
+  const opts = ['<option value="">— ใช้ค่าเริ่มต้น —</option>'];
+  for (const item of field.enum || []) {
+    const sel = eff.present && eff.value === item ? ' selected' : '';
+    opts.push(`<option value="${esc(item)}"${sel}>${esc(item)}</option>`);
+  }
+  return `<select data-ctl="enum">${opts.join('')}</select>`;
+}
+
+function renderNumber(field, eff) {
+  const c = field.constraint || {};
+  const attrs = [
+    field.type === 'integer' ? 'step="1"' : 'step="any"',
+    c.minimum !== undefined ? `min="${c.minimum}"` : '',
+    c.exclusiveMinimum !== undefined ? `min="${Number(c.exclusiveMinimum) + (field.type === 'integer' ? 1 : 0.0001)}"` : '',
+    c.maximum !== undefined ? `max="${c.maximum}"` : '',
+    c.exclusiveMaximum !== undefined ? `max="${Number(c.exclusiveMaximum) - (field.type === 'integer' ? 1 : 0.0001)}"` : '',
+  ].filter(Boolean).join(' ');
+  const bounds = [c.minimum !== undefined ? `min ${c.minimum}` : '', c.exclusiveMinimum !== undefined ? `> ${c.exclusiveMinimum}` : '', c.maximum !== undefined ? `max ${c.maximum}` : '', c.exclusiveMaximum !== undefined ? `< ${c.exclusiveMaximum}` : ''].filter(Boolean).join(' · ');
+  return `<input type="number" data-ctl="number" ${attrs} value="${eff.present ? esc(eff.value) : ''}" placeholder="${field.hasDefault ? esc(field.default) : ''}">${bounds ? `<span class="muted xs">${esc(bounds)}</span>` : ''}`;
+}
+
+function renderText(field, eff) {
+  return `<input type="text" data-ctl="text" value="${eff.present ? esc(eff.value) : ''}" placeholder="${field.hasDefault ? esc(field.default) : ''}">`;
+}
+
+/**
+ * The keybind control. A binding is one of five shapes, so instead of one input
+ * for all of them the control switches mode and shows only the fields that shape
+ * needs. Key capture turns a real key press into `ctrl+shift+k`.
+ */
+function renderKeybind(field, eff) {
+  const v = eff.value;
+  const mode = !eff.present ? 'unset'
+    : v === false ? 'false'
+      : v === 'none' ? 'none'
+        : typeof v === 'string' ? 'keys'
+          : Array.isArray(v) ? 'list' : 'object';
+  const modes = [['keys', 'ปุ่ม'], ['list', 'หลายปุ่ม'], ['object', 'กำหนดเอง'], ['none', 'ปิด (none)'], ['false', 'ปิด (false)'], ['unset', 'คืนค่า default']];
+  const modeSel = `<select data-ctl="kb-mode" class="kb-mode">${modes.map(([m, label]) => `<option value="${m}"${mode === m ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
+
+  let body = '';
+  if (mode === 'keys') {
+    body = `<span class="kb-capture" data-ctl="kb-capture" tabindex="0" title="คลิกแล้วกดปุ่มเพื่อบันทึก"><input type="text" data-ctl="kb-keys" value="${esc(v)}" placeholder="${esc(field.default || 'ctrl+k')}"></span>`;
+  } else if (mode === 'list') {
+    body = `<input type="text" data-ctl="kb-keys" value="${esc(v.filter(x => typeof x === 'string').join(','))}" placeholder="ctrl+c,ctrl+d">
+      ${v.some(x => typeof x !== 'string') ? `<div class="warnbox xs">มีสมาชิกที่ไม่ใช่ข้อความ — ใช้โหมด “กำหนดเอง” แก้</div>` : ''}`;
+  } else if (mode === 'object') {
+    body = `<textarea data-ctl="kb-json" rows="3" spellcheck="false">${esc(JSON.stringify(v, null, 1))}</textarea>`;
+  } else {
+    body = `<span class="muted small">${mode === 'none' ? 'ปิดปุ่มนี้ด้วย "none"' : mode === 'false' ? 'ปิดปุ่มนี้ด้วย false' : 'ไม่มีคีย์นี้ในไฟล์ — ใช้ค่าที่โปรแกรมตั้งไว้'}</span>`;
+  }
+  const advice = mode === 'object' ? '<div class="hint xs">ตัวอย่าง: {"key":"ctrl+v","preventDefault":false} หรือ {"name":"escape","ctrl":true}</div>' : '';
+  return `<div class="kb">${modeSel}${body}${advice}</div>`;
+}
+
+function renderUnion(field, eff) {
+  const kinds = field.variants.map(v => v.type);
+  const currentKind = !eff.present ? ''
+    : typeof eff.value === 'boolean' ? 'boolean'
+      : typeof eff.value === 'number' ? (field.variants.some(v => v.type === 'integer') ? 'integer' : 'number')
+        : 'enum';
+  const kindSel = `<select data-ctl="union-kind"><option value="">— ไม่ตั้งค่า —</option>${[...new Set(kinds)].map(k => `<option value="${k}"${currentKind === k ? ' selected' : ''}>${k}</option>`).join('')}</select>`;
+  const enumVariant = field.variants.find(v => v.type === 'enum');
+  let inner = '';
+  if (currentKind === 'boolean') inner = `<label class="switch"><input type="checkbox" data-ctl="boolean" ${eff.value === true ? 'checked' : ''}><span class="track"></span></label>`;
+  else if (currentKind === 'enum') inner = `<select data-ctl="enum">${(enumVariant?.enum || []).map(o => `<option value="${esc(o)}"${eff.value === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  else if (currentKind === 'number' || currentKind === 'integer') inner = `<input type="number" step="${currentKind === 'integer' ? 1 : 'any'}" data-ctl="number" value="${eff.present ? esc(eff.value) : ''}">`;
+  const shapes = field.variants.map(v => (v.enum ? v.enum.join('|') : v.type)).join(' หรือ ');
+  return `<div class="union">${kindSel}${inner}<span class="muted xs">รับค่า: ${esc(shapes)}</span></div>`;
+}
+
+/** Nested object: draw its own subfields through the same renderRow, so it nestles to any depth. */
+function renderObject(state, field) {
+  return `<fieldset class="nested">${(field.subfields || []).map(sub => renderRow(state, sub)).join('')}</fieldset>`;
+}
+
+/** Free-form boolean map, e.g. `experimental`. Rows are added/removed by hand. */
+function renderBoolmap(field, eff) {
+  const entries = eff.value && typeof eff.value === 'object' && !Array.isArray(eff.value) ? Object.entries(eff.value) : [];
+  const rows = entries.map(([k, val], i) => `<div class="bm-row">
+    <input type="text" data-ctl="bm-key" data-idx="${i}" value="${esc(k)}" placeholder="ชื่อ feature">
+    <label class="switch"><input type="checkbox" data-ctl="bm-val" data-idx="${i}" ${val ? 'checked' : ''}><span class="track"></span></label>
+    <button class="clr" data-act="bm-del" data-idx="${i}" title="ลบแถวนี้">×</button>
+  </div>`).join('');
+  return `<div class="boolmap" data-ctl="boolmap">${rows || '<span class="muted small">ยังไม่มีรายการ</span>'}
+    <button class="btn ghost xs" data-act="bm-add">+ เพิ่ม</button></div>`;
+}
+
+function renderList(field, eff) {
+  const items = Array.isArray(eff.value) ? eff.value : [];
+  const itemKind = field.item?.variants?.length > 1 ? 'string | {package,options}' : field.item?.type || 'any';
+  const rows = items.map((it, i) => `<div class="li-row">
+    <input type="text" data-ctl="li" data-idx="${i}" value="${esc(typeof it === 'string' ? it : JSON.stringify(it))}" placeholder="ชื่อปลั๊กอิน หรือ JSON">
+    <button class="clr" data-act="li-del" data-idx="${i}" title="ลบ">×</button>
+  </div>`).join('');
+  return `<div class="list" data-ctl="list">${rows || '<span class="muted small">ว่าง</span>'}
+    <div class="row-inline"><button class="btn ghost xs" data-act="li-add">+ เพิ่ม</button>
+    <span class="muted xs">ชนิดสมาชิก: ${esc(itemKind)}</span></div>
+    <details class="xs"><summary>แก้เป็น JSON</summary><textarea data-ctl="li-json" rows="3" spellcheck="false">${json(items)}</textarea></details></div>`;
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+/* ------------------------------ key capture helper ------------------------------ */
+
+const MOD_ORDER = ['ctrl', 'shift', 'alt', 'meta', 'super'];
+/** Turn a real keydown into the string the config file wants: `ctrl+shift+k`. */
+function normalizeKeyEvent(event) {
+  const parts = [];
+  for (const mod of MOD_ORDER) {
+    const on = mod === 'ctrl' ? event.ctrlKey
+      : mod === 'shift' ? event.shiftKey
+        : mod === 'alt' ? event.altKey
+          : mod === 'meta' ? event.metaKey : false;
+    if (on) parts.push(mod === 'alt' ? 'alt' : mod);
+  }
+  const k = String(event.key || '').toLowerCase();
+  const ignore = new Set(['control', 'shift', 'alt', 'meta', 'os', 'dead']);
+  if (ignore.has(k)) return null;
+  const named = { ' ': 'space', arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right', escape: 'escape', enter: 'return', tab: 'tab', backspace: 'backspace', delete: 'delete', pageup: 'pageup', pagedown: 'pagedown', home: 'home', end: 'end' };
+  parts.push(named[k] || (event.shiftKey && k.length === 1 ? k : k));
+  return parts.join('+');
+}
+
+/* --------------------------------- interaction --------------------------------- */
+
+/**
+ * Wire every control through one delegated listener. New control types added to
+ * renderControl need one `case` here, not a new listener per row.
+ */
+function bindSettings(root, state, { onChange = () => {} } = {}) {
+  const commit = () => onChange(state);
+
+  root.addEventListener('input', e => {
+    const el = e.target;
+    const row = el.closest('[data-path]');
+    const ctl = el.dataset.ctl;
+    if (ctl === 'search') { state.search = el.value; commit(); return; }
+    if (!row) return;
+    const path = row.dataset.path;
+    const field = state.model.index[path];
+    if (!field || field.readOnly) return;
+
+    switch (ctl) {
+      case 'boolean':
+        setDraft(state, path, el.checked);
+        break;
+      case 'enum':
+        el.value === '' ? clearDraft(state, path) : setDraft(state, path, el.value);
+        break;
+      case 'number': {
+        if (el.value === '') { clearDraft(state, path); break; }
+        const n = field.type === 'integer' ? parseInt(el.value, 10) : Number(el.value);
+        if (Number.isFinite(n)) setDraft(state, path, n);
+        break;
+      }
+      case 'text':
+        el.value === '' ? clearDraft(state, path) : setDraft(state, path, el.value);
+        break;
+      case 'kb-mode':
+        applyKeybindMode(state, field, el.value);
+        break;
+      case 'kb-keys':
+        el.value.trim() === '' ? clearDraft(state, path) : setDraft(state, path, normaliseKeys(el.value));
+        break;
+      case 'kb-json':
+        try { setDraft(state, path, JSON.parse(el.value)); el.classList.remove('bad'); }
+        catch { el.classList.add('bad'); return; }
+        break;
+      case 'li':
+      case 'li-json':
+      case 'bm-key':
+      case 'bm-val':
+        applyComposite(state, field, row, el);
+        break;
+      default:
+        break;
+    }
+    commit();
+  });
+
+  root.addEventListener('change', e => {
+    const el = e.target;
+    if (el.dataset.ctl === 'union-kind') {
+      const row = el.closest('[data-path]');
+      const field = state.model.index[row.dataset.path];
+      row.dataset.unionKind = el.value;
+      if (el.value === '') clearDraft(state, row.dataset.path);
+      else if (el.value === 'boolean') setDraft(state, row.dataset.path, true);
+      else if (el.value === 'integer') setDraft(state, row.dataset.path, 1);
+      else if (el.value === 'number') setDraft(state, row.dataset.path, 1);
+      else setDraft(state, row.dataset.path, (field.variants.find(v => v.type === 'enum')?.enum || [''])[0]);
+      commit();
+    }
+  });
+
+  /* key capture: focus the capture target, then take the next combo */
+  root.addEventListener('keydown', e => {
+    const cap = e.target.closest?.('[data-ctl="kb-capture"]');
+    if (!cap) return;
+    const combo = normalizeKeyEvent(e);
+    if (!combo) return;
+    e.preventDefault();
+    const row = cap.closest('[data-path]');
+    const input = cap.querySelector('[data-ctl="kb-keys"]');
+    const existing = input.value.split(',').map(s => s.trim()).filter(Boolean);
+    const mode = row.querySelector('[data-ctl="kb-mode"]').value;
+    if (mode === 'list') { if (!existing.includes(combo)) existing.push(combo); input.value = existing.join(','); }
+    else input.value = combo;
+    setDraft(state, row.dataset.path, normaliseKeys(input.value));
+    commit();
+  });
+
+  root.addEventListener('click', e => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return;
+    const row = e.target.closest('[data-path]');
+    if (act === 'clear' && row) {
+      const field = state.model.index[row.dataset.path];
+      if (field?.type === 'object') { for (const sub of field.subfields || []) clearDraft(state, sub.path); }
+      else clearDraft(state, row.dataset.path);
+      commit();
+      return;
+    }
+    if (!row) return;
+    const field = state.model.index[row.dataset.path];
+    const idx = Number(e.target.closest('[data-idx]')?.dataset.idx ?? -1);
+    if (act === 'bm-add' || act === 'bm-del') {
+      const cur = effectiveValue(state, field).value;
+      const map = cur && typeof cur === 'object' && !Array.isArray(cur) ? { ...cur } : {};
+      if (act === 'bm-add') map[''] = true;
+      else delete Object.keys(map)[idx];
+      setDraft(state, field.path, map);
+    }
+    if (act === 'li-add' || act === 'li-del') {
+      const cur = effectiveValue(state, field).value;
+      const arr = Array.isArray(cur) ? [...cur] : [];
+      if (act === 'li-add') arr.push('');
+      else arr.splice(idx, 1);
+      setDraft(state, field.path, arr);
+    }
+    commit();
+  });
+}
+
+function normaliseKeys(text) {
+  const list = String(text).split(',').map(s => s.trim()).filter(Boolean);
+  if (list.length === 1) return list[0];
+  return list;
+}
+
+function applyKeybindMode(state, field, mode) {
+  const cur = effectiveValue(state, field).value;
+  switch (mode) {
+    case 'keys': setDraft(state, field.path, typeof cur === 'string' && cur !== 'none' ? cur : (field.default && typeof field.default === 'string' ? field.default : '')); break;
+    case 'list': setDraft(state, field.path, Array.isArray(cur) ? cur : typeof cur === 'string' ? cur.split(',').map(s => s.trim()).filter(Boolean) : []); break;
+    case 'object': setDraft(state, field.path, (cur && typeof cur === 'object' && !Array.isArray(cur)) ? cur : { key: typeof cur === 'string' ? cur : 'ctrl+k', preventDefault: false }); break;
+    case 'none': setDraft(state, field.path, 'none'); break;
+    case 'false': setDraft(state, field.path, false); break;
+    case 'unset': clearDraft(state, field.path); break;
+    default: break;
+  }
+}
+
+function applyComposite(state, field, row, el) {
+  const cur = effectiveValue(state, field).value;
+  const idx = Number(el.dataset.idx ?? -1);
+  if (el.dataset.ctl === 'li' || el.dataset.ctl === 'li-json') {
+    let next;
+    if (el.dataset.ctl === 'li-json') {
+      try { next = JSON.parse(el.value); } catch { el.classList.add('bad'); return; }
+      el.classList.remove('bad');
+    } else {
+      const arr = Array.isArray(cur) ? [...cur] : [];
+      const raw = el.value;
+      arr[idx] = raw.trim().startsWith('{') ? safeJson(raw) : raw;
+      next = arr;
+    }
+    setDraft(state, field.path, next);
+    return;
+  }
+  const map = cur && typeof cur === 'object' && !Array.isArray(cur) ? { ...cur } : {};
+  if (el.dataset.ctl === 'bm-key') {
+    const keys = Object.keys(map);
+    const oldKey = keys[idx];
+    const val = map[oldKey];
+    if (oldKey !== undefined) delete map[oldKey];
+    map[el.value] = val ?? true;
+  } else if (el.dataset.ctl === 'bm-val') {
+    map[Object.keys(map)[idx]] = el.checked;
+  }
+  setDraft(state, field.path, map);
+}
+
+function safeJson(text) {
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+
+return { createState, readPath, effectiveValue, setDraft, clearDraft, collectPatches, dirtyCount, renderSettings, normalizeKeyEvent, bindSettings };
+})();
+/* TUI-SETTINGS-RENDERER:END */
+
+async function loadTui(){
+  if(!TUI) TUI = await api('/api/action', { post: { id:'tui-form' } });
+  return TUI;
+}
+
+function tuiBadge(ok, txt){ return `<span class="badge ${ok?'ok':'warn'}">${esc(txt)}</span>`; }
+
+function vTui(){
+  if(!TUI){
+    loadTui().then(()=>{ if(TAB === 'tui') render(); }).catch(e => toast('โหลดตั้งค่าไม่สำเร็จ: ' + e.message, true));
+    return `<div class="card"><h3>ตั้งค่า OpenCode</h3><div class="sub">กำลังโหลดสคีมา 19 กลุ่ม + 242 keybind…</div></div>`;
+  }
+  const s = TUI, cli = s.files?.cli || {}, ms = s.mirrorStatus || {}, rep = ms.report || {}, cap = s.capabilities?.mirror || {};
+  const unknown = s.unknownPaths || [];
+  const obs = (s.provenance?.binary?.sha256_16) ? `<span class="muted xs">defaults จาก binary sha256:${esc(s.provenance.binary.sha256_16)}</span>` : '';
+  const mirrorLine = ms.inSync
+    ? `${tuiBadge(true,'mirror ตรงกับ cli.json')}`
+    : `${tuiBadge(false,'mirror ต่าง')} <span class="muted xs">ต่างที่: ${esc((ms.drift||[]).join(', ') || ms.reason || '—')}</span>`;
+  const blocked = rep.blockedKeybinds || [];
+  const unmapped = rep.unmappedKeybinds || [];
+  const skipped = rep.skippedSettings || [];
+  return `
+  <div class="card">
+    <h3>ตั้งค่า OpenCode <span class="muted xs">${esc(s.message||'')}</span></h3>
+    <div class="sub mono">cli.json: ${esc(cli.path||'')}${cli.exists?'':' (ยังไม่มีไฟล์ — จะสร้างตอนบันทึก)'}</div>
+    <div class="row mt">${mirrorLine}</div>
+    <div class="sub">${obs}</div>
+    <div class="mt flex">
+      <button class="btn ghost" data-act="tui-refresh">↻ โหลดใหม่</button>
+      <button class="btn ghost" data-act="tui-import" title="ย้ายค่าจาก tui.json เข้า cli.json แบบที่ไบนารีทำ">ย้าย tui.json → cli.json</button>
+      <span class="muted xs">mirror เขียนเฉพาะชื่อที่ tui.schema.json รู้จัก: ${esc(String(cap.tuiNames ?? '—'))} ชื่อ · cli ครอบ ${esc(String(cap.cliNamesCovered ?? '—'))}/${esc(String(cap.cliNamesTotal ?? '—'))}</span>
+    </div>
+    ${unknown.length ? `<div class="warnbox mt">คีย์ใน cli.json ที่ catalog ไม่รู้จัก ${unknown.length} รายการ — ระบบคงไว้ไม่แตะ: <span class="mono">${esc(unknown.slice(0,8).join(', '))}${unknown.length>8?' …':''}</span></div>` : ''}
+    ${blocked.length ? `<div class="sub mt">keybind ที่ tui.schema.json ไม่รู้จัก (ไม่เขียนลง tui.json) ${blocked.length} ตัว: <span class="mono">${esc(blocked.slice(0,6).map(b=>b.tui).join(', '))}${blocked.length>6?' …':''}</span></div>` : ''}
+    ${unmapped.length ? `<div class="sub">keybind ของ cli ที่ไม่มีชื่อใน tui (V2 ใหม่กว่า) ${unmapped.length} ตัว — รายงาน ไม่เดา</div>` : ''}
+    ${skipped.length ? `<div class="sub">setting cli-only ที่ tui ไม่มีที่ไป ${skipped.length} รายการ (เช่น theme.mode, diffs.*)</div>` : ''}
+  </div>
+  <div id="tuiHost"></div>`;
+}
+
+function mountTui(){
+  const host = document.getElementById('tuiHost');
+  if(!host || !TUI || typeof TUIWidget === 'undefined') return;
+  TUI_STATE = TUIWidget.createState(TUI.model, TUI.files?.cli?.values || {});
+  host.innerHTML = '<div id="tuiInner"></div>';
+  const inner = document.getElementById('tuiInner');
+  const paint = () => { inner.innerHTML = TUIWidget.renderSettings(TUI_STATE); };
+  const syncBar = () => {
+    const n = TUIWidget.dirtyCount(TUI_STATE);
+    const d = host.querySelector('[data-role="dirty"]'); if(d) d.textContent = n + ' ค่าที่แก้ไว้';
+    const sb = host.querySelector('[data-role="save"]'); if(sb) sb.disabled = !n;
+    const rb = host.querySelector('[data-role="revert"]'); if(rb) rb.disabled = !n;
+  };
+  paint();
+  TUIWidget.bindSettings(host, TUI_STATE, { onChange: () => {
+    syncBar();
+    const ae = document.activeElement;
+    const ctl = ae && ae.dataset ? ae.dataset.ctl : '';
+    if(ctl === 'search'){
+      const caret = ae.selectionStart;
+      paint();
+      const si = inner.querySelector('[data-ctl="search"]');
+      if(si){ si.focus(); try{ si.setSelectionRange(caret, caret); }catch{} }
+    } else if(['text','number','kb-keys','kb-json','li','li-json','bm-key'].includes(ctl)){
+      /* free-text: ช่องสะท้อนค่าเองแล้ว ไม่วาดใหม่เพื่อไม่ให้เสียโฟกัส */
+    } else {
+      paint();
+    }
+  } });
+  host.addEventListener('click', e => {
+    const role = e.target.closest('[data-role]')?.dataset.role;
+    if(role === 'save'){
+      const patches = TUIWidget.collectPatches(TUI_STATE);
+      if(!patches.length){ toast('ไม่มีอะไรเปลี่ยน'); return; }
+      TUI = null;
+      act('tui-save', { patches }, `บันทึก ${patches.length} ค่า ลง cli.json + mirror ไป tui.json? (สำรองก่อนเขียน)`);
+    } else if(role === 'revert'){
+      TUI_STATE.draft.clear();
+      paint(); syncBar();
+    }
+  });
+}
+
 /* ---------- events ---------- */
 
 document.addEventListener('input', e => {
@@ -1309,6 +2040,16 @@ document.addEventListener('click', async e => {
     }); break;
     case 'mode-lock-check': act('check-mode-lock'); break;
     case 'migrate-tui': act('migrate-tui'); break;
+    case 'tui-refresh': { TUI = null; TUI_STATE = null; try{ await loadTui(); }catch(err){ toast('โหลดไม่สำเร็จ: ' + err.message, true); } render(); break; }
+    case 'tui-import': { TUI = null; TUI_STATE = null; act('tui-import'); break; }
+    case 'tui-save': {
+      const patches = TUI_STATE ? TUIWidget.collectPatches(TUI_STATE) : [];
+      if(!patches.length){ toast('ไม่มีอะไรเปลี่ยน'); break; }
+      TUI = null; TUI_STATE = null;
+      act('tui-save', { patches }, `บันทึก ${patches.length} ค่า ลง cli.json + mirror ไป tui.json? (สำรองก่อนเขียน)`);
+      break;
+    }
+    case 'tui-reset': { if(TUI_STATE){ TUI_STATE.draft.clear(); render(); } break; }
     case 'srv-health': act('health-check'); break;
     case 'srv-restart': act('restart-server', {}, 'รีสตาร์ท server 4096? (Cline ที่กำลังทำงานอยู่อาจสะดุดชั่วครู่)'); break;
     case 'srv-service': act('restart-service', {}, 'รีสตาร์ท opencode service?'); break;

@@ -114,3 +114,87 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 - **ปิดแล้ว (18 ต.ค. 2026):** รันบนเครื่องจริงหลังปิด-เปิดแอปใหม่ (v1.4.0) + ทดสอบ clone ใหม่จริง (Step 03) — ดู "รอบ 6"
 - ยังค้าง: งานยังไม่ขึ้น remote — branch `air` นำหน้า `fire/air` (ยังไม่ push) เครื่องอื่นจึงยังไม่ได้ของ (ดู `FLOW.md` §4)
 - ยังค้าง: ตัวตรวจ "เอกสาร ↔ ตัวจริง" ยังไม่มีในแอป (ถ้า GUIDE/README/FLOW ถูกแก้ทีหลังจนประโยคที่อ้างถึงโหมด/ปุ่มหายไป ระบบจะไม่เตือน) — รอบนี้ใช้สคริปต์ใน `%TEMP%\bazer\buddha-flow-gap\docs-verify\` ตรวจแทน ถ้าต้องการให้ตรวจได้ทุกเครื่อง ควรย้ายสคริปต์ชุดนี้เข้า repo แล้วเรียกจากปุ่มในแท็บภาพรวม
+
+
+## รอบ 7 — แท็บ "ตั้งค่า OpenCode" (tui-settings) · base Candidate B + graft A/C (รันจริงรอบนี้ · Console v1.4.0)
+
+เครื่อง: Windows · Node v24.16.0 · repo `C:\BCS\00.02 LLM Slavery` HEAD `919a8bf` · โฟลเดอร์งาน: `SETUP/OPENCODE/CONSOLE/`
+
+
+### ของที่เพิ่ม/แก้
+
+- สร้างใหม่: `tui-settings/` (`shared/` · `src/{patches,validate,mirror,form-model,save,api}.mjs` · `client/renderer.mjs` · `schema/*.json` · `tools/{gen-opencode-facts,gen-model,build-client,verify}.mjs` · `tests/{run,e2e}.mjs` · `README.md`)
+
+- แก้: `console.mjs` (import `createSettingsApi` · spread action `tui-*` · `gatherState` เพิ่ม `s.tui` · `runVerify` ต่อท้าย 4 ข้อ `TUI · …`) · `console.html` (nav + titles + dispatch + `vTui`/`mountTui` + inline renderer + CSS + handler `tui-save`/`tui-reset`/`tui-import`/`tui-refresh` + `after`)
+
+- แตะเพียง `console.mjs` · `console.html` · `tui-settings/**` — ไม่แตะ `bundle/`
+
+
+### ผลตรวจ (คำสั่งจริง)
+
+| ตรวจ | คำสั่ง | ผล |
+
+|---|---|---|
+
+| syntax backend | `node --check console.mjs` | exit 0 |
+
+| syntax ทุกโมดูล | `node --check` ทุก `.mjs` ใน `tui-settings/` (ไม่รวม `.cache`) | 13/13 ผ่าน |
+
+| parse สคริปต์ในหน้า | ดึงระหว่าง `<script>…</script>` แล้ว `new Function(code)` | PARSE OK (119,929 chars) |
+
+| inline renderer ตรงต้นทาง | `node tui-settings/tools/build-client.mjs --check` | `OK console.html tui renderer in sync` |
+
+| allowlist ตรงสคีมา | `node tui-settings/tools/gen-model.mjs --check --tui-schema=<grounding>/tui.schema.json` | `OK tui keybind allowlist in sync (184 names)` |
+
+| unit + integration | `node tui-settings/tests/run.mjs` | **84 passed, 0 failed** |
+
+| e2e (คัดลอก console.mjs + USERPROFILE ปลอม) | `node tui-settings/tests/e2e.mjs` | all end-to-end checks passed (22 checks) |
+
+| ครบในคำสั่งเดียว | `node tui-settings/tools/verify.mjs` | everything verified |
+
+
+### sandbox round-trip (ตามวิธี CHECKS รอบ 6 — `%TEMP%\bazer\verify-tui` + `USERPROFILE` ปลอม)
+
+สคริปต์: `%TEMP%\bazer\verify-tui-run.mjs` (คัดลอกแอปไป sandbox · spawn `console.mjs --port=4321` · ยิง HTTP ด้วย token)
+
+| ตรวจ | ผลจริง |
+
+|---|---|
+
+| POST `tui-form` | **19 groups · 242 keybinds · 299 fields** |
+
+| POST `tui-save` patches `[{keybinds/app.exit,set,ctrl+alt+q},{diffs/wrap,set,none}]` | applied 2 · backup 2 ไฟล์ · wrote 2 |
+
+| `cli.json` | `keybinds = {"leader":"ctrl+x","app.exit":"ctrl+alt+q"}` → **flat** ไม่ใช่ `{app:{exit}}` (`keybinds.app = undefined`) |
+
+| `tui.json` | `keybinds.app_exit = "ctrl+alt+q"` · `attention.enabled=true` **คงอยู่** · `prompt.max_height=12` **คงอยู่** |
+
+| keybind ชื่อนอก allowlist ใน `tui.json` | **0** |
+
+| patch ผิดสคีมา (`theme/mode = neon`) | ปฏิเสธ (`ค่าไม่ผ่านสคีมา (1 จุด)`) · `cli.json 1cb3276e6d5b2226 → 1cb3276e6d5b2226` **BYTE-IDENTICAL** · `tui.json 7d591ef476a945e5 → 7d591ef476a945e5` **BYTE-IDENTICAL** |
+
+| `/api/verify` | `ok cli.json อ่านได้` · `ok tui.json mirror ตรง` · `warn คีย์นอก catalog (hand.written.key — คงไว้)` · `ok ค่า keybind ถูกต้อง (2 ค่า)` · `ok defaults 242 ตัว` |
+
+
+### graft ที่ใส่เข้า base B
+
+| จาก | ทำจริงที่ไหน |
+
+|---|---|
+
+| A — three-way reset | renderer มี mode `ปิด (none)` / `ปิด (false)` / `คืนค่า default` (unset) แยกกัน · ปุ่ม `×` = unset (`clearDraft` → op `unset`) |
+
+| C — deep merge | `save.mjs` `repairMirror` เปลี่ยน `{...prev,...tui}` เป็น `deepMerge(prev, tuiRest)` · เทสต์ prove `attention.enabled`/`prompt.max_height` รอด |
+
+| C — validate-before-write | มีอยู่แล้ว (`save`) · เพิ่มเทสต์ byte-identical ทั้ง 2 ไฟล์ |
+
+| B เอง — allowlist | `cliToTui(cli, translate, allowlist)` กรองชื่อ · allowlist จาก `tui.schema.json` (`gen-model.mjs`) · เทสต์ prove 0 ชื่อนอก allowlist |
+
+
+### deviation จาก brief (บอกตรง)
+
+- `schema/tui.schema.json` (1.15 MB) **ไม่ commit** ตามที่ brief เปิดทาง — commit เฉพาะ `schema/tui-keybind-names.json` (184 ชื่อ) ที่ derive มา · `gen-model.mjs` จึงต้องรับ `--tui-schema=<path>` ตอน regenerate (ไม่ใช่ zero-arg) และ `verify.mjs` จะข้ามข้อนี้พร้อม note ถ้าไม่มี schema — ระบุใน `tui-settings/README.md` แล้ว
+
+- `tests/e2e.mjs` ตัวเดิมของ Candidate B สตาร์ท `src/server.mjs` ของ candidate (ไม่มีในโปรเจกต์นี้) — เขียนใหม่ให้สตาร์ท **`console.mjs` จริง** ใน sandbox แทน จึงตรงกับวิธีตรวจของโปรเจกต์
+
+- ตัววาด `client/renderer.mjs` คงเป็น ES module (เทสต์ import ได้) แล้ว inline เข้า `console.html` ด้วย `tools/build-client.mjs` (ตัด import/export + ครอบ IIFE กันชื่อ `esc` ชน) — brief สั่ง "inline"; การมี source เดียว + build check กัน drift สองชุด
