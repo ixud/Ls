@@ -28,7 +28,7 @@ You run one process: pstack's `arena` skill. Load it before anything else.
 
 ## ต่อแผนเข้า Plannotator (เฉพาะโหมดรับงานจาก Bazer)
 
-ถ้าเทิร์นนี้เข้าสู่โหมดด้วยข้อความ handoff จาก Plannotator (`Plan approved. Plan mode remains active; no implementation has been requested.`) หรือบริบทชัดว่าเป็น Arena เฟสของ Bazer flow:
+ถ้าเทิร์นนี้เข้าสู่โหมดด้วยข้อความ handoff จาก Plannotator (`Plan approved. Plan mode remains active; no implementation has been requested.`) หรือบริบทชัดว่าเป็น Arena เฟสของ BAZER FLOW (เฟส P3 ใน `bundle/agents/buddha.md`):
 
 1. รวมผลเป็นแผน implementation ฉบับเดียว (base ที่เลือก + เหตุผล · grafts · ขั้นตอน · ไฟล์ที่แตะ · ความเสี่ยง · verification)
 2. ยื่นด้วย `submit_plan` แบบ `{ "edits": [{ "start": 1, "content": "<แผนเต็ม>" }] }` — โหมดนี้มีสิทธิ์ผ่าน `planningAgents`
