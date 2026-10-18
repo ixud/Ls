@@ -20,6 +20,14 @@ BAZER Console (the CONSOLE folder) can help you.
 - All mode files (agents, skills, the bazer-fire plugin) live in `CONSOLE/bundle` as the single source — edit there, then press update in BAZER Console (Overview tab) to install
 - `GUIDE.md` — the non-code guide: what the config files are, where they live, and why
 
+
+|  | Max Efficiency on Max Effort | No Loops Think, No Unnecessary Think | EXTREMELY OBVIOUS FILE/FOLDER PATH | Read that PATH content | Edit that PATH content |
+| --- | --- | --- | --- | --- | --- |
+| BAZER | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SNACK | ✅ | ✅ | ✅ | ✅ | ❌ |
+| ADVISOR | ✅ | ✅ | ❌ | ❌ | ❌ |
+
+
 # TOOLS
 
 ผมยกย่องและให้เครดิตสองสิ่งนี้มาก

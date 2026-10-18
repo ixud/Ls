@@ -139,6 +139,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px}
 .switch input:checked+i{background:linear-gradient(135deg,var(--gold),#ffdf7e);border-color:transparent}
 .switch input:checked+i::after{left:21px;background:#17120a}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
+.ms-other{opacity:.55}
 .chip{
   display:inline-flex;gap:6px;align-items:center;padding:3px 6px 3px 10px;border-radius:999px;
   border:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--dim);
@@ -182,6 +183,8 @@ summary{cursor:pointer;color:var(--dim);font-size:13px}
       <button data-tab="pstack">pStack</button>
       <div class="navgroup">โหมดผู้ช่วย <span id="navModesCnt" class="cnt"></span></div>
       <span id="navModes"></span>
+      <div class="navgroup">Subagent <span id="navSubCnt" class="cnt"></span></div>
+      <span id="navSub"></span>
       <button data-tab="projects">โปรเจกต์</button>
       <button data-tab="plannotator">Plannotator</button>
       <button data-tab="history">ประวัติ &amp; สำรอง</button>
@@ -204,7 +207,7 @@ summary{cursor:pointer;color:var(--dim);font-size:13px}
 <div id="toasts"></div>
 <script>
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
-let TAB = 'dash', S = null, VERIFY = null, MODELS = null, BP = null, FILTER = '', PM = null, AMODELS = null, SETUP = null, BAM = null, UP = null;
+let TAB = (()=>{ try { let t = localStorage.getItem('bazerTab') || 'dash'; if(t === 'agent:arena.md') t = 'arena'; if(t === 'agent:buddha.md') t = 'buddha'; return t; } catch { return 'dash'; } })(), S = null, VERIFY = null, MODELS = null, BP = null, FILTER = '', MS = null, AMODELS = null, SETUP = null, UP = null, ROLES = null;
 
 async function api(u, opts={}){
   const r = await fetch(u, {
@@ -247,7 +250,7 @@ async function act(id, params={}, confirmText){
     if(r.ok === false){ toast('ผิดพลาด: ' + (r.message||''), true); }
     else { toast(r.message || 'สำเร็จ'); }
     await refresh();
-    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','save-agent','save-bazer-arena'];
+    const after = ['set-lock','update-blacklist','set-model-effort','save-text','build-apply','skill-hide','skill-show','skill-remove-field','agent-toggle','agent-del','command-toggle','plannotator-toggle','restore-backup','save-pstack-models','save-plannotator-config','save-plannotator-prefs','scan-projects','project-agent-toggle','project-agent-del','project-agent-add','project-init','setup-apply','update-apply','save-agent','pm-role-save','pm-legacy-migrate','pm-legacy-del','mirror-agents','install-agent'];
     if(after.includes(id)) runVerify(false);
   }catch(e){ toast('ผิดพลาด: ' + e.message, true); }
 }
@@ -259,8 +262,22 @@ async function runVerify(showTab){
   }catch(e){ toast('ตรวจไม่สำเร็จ: ' + e.message, true); }
 }
 
+function anyDirty(){ return [...document.querySelectorAll('textarea')].some(t => t.dataset.dirty === '1'); }
+function setVerifyBadge(){
+  const b = document.querySelector('.foot [data-act="verify"]');
+  if(!b) return;
+  if(!VERIFY){ b.textContent = '⚡ ตรวจความครบ'; b.className = 'btn gold'; return; }
+  const s = VERIFY.summary || {};
+  const parts = [];
+  if(s.fail) parts.push('✕ ' + s.fail);
+  if(s.warn) parts.push('⚠ ' + s.warn);
+  b.textContent = '⚡ ตรวจความครบ' + (parts.length ? ' · ' + parts.join(' · ') : ' · ผ่านหมด');
+  b.className = 'btn ' + (s.fail ? 'danger' : (s.warn ? '' : 'gold'));
+}
+
 function tab(name){
   TAB = name;
+  try{ localStorage.setItem('bazerTab', name); }catch{}
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   render();
 }
@@ -269,19 +286,23 @@ function tab(name){
 
 function render(){
   if(!S) return;
-  const titles = { dash:'ภาพรวม', lock:'ล็อก & โมเดล', server:'Server & Cline', pstack:'pStack', bazer:'Bazer Mode', snack:'Snack', projects:'โปรเจกต์', plannotator:'Plannotator', history:'ประวัติ & สำรอง' };
+  if(TAB === 'pstack' && MS) collectMS();
+  const titles = { dash:'ภาพรวม', lock:'ล็อก & โมเดล', server:'Server & Cline', pstack:'pStack', bazer:'Bazer Mode', buddha:'Buddha Mode', arena:'Arena Mode', snack:'Snack', projects:'โปรเจกต์', plannotator:'Plannotator', history:'ประวัติ & สำรอง' };
   const af = TAB.indexOf('agent:') === 0 ? TAB.slice(6) : null;
   const meta = af ? (AGENT_META[af] || { name: af.replace(/\.md$/, '') }) : null;
-  document.getElementById('hTitle').textContent = af ? (meta.name + ' Mode') : (titles[TAB] || '');
+  document.getElementById('hTitle').textContent = af ? (meta.name + (meta.sub ? ' (subagent)' : ' Mode')) : (titles[TAB] || '');
   const pill = document.getElementById('serverLed');
   const ptext = document.getElementById('serverPillText');
   if(S.server.up){ pill.className = 'led ok'; ptext.textContent = `server 4096 · v${S.server.version||'?'}`; }
   else { pill.className = 'led fail'; ptext.textContent = 'server 4096 ปิดอยู่'; }
-  const v = af ? vAgent(af) : ({ dash: vDash, lock: vLock, server: vServer, pstack: vPstack, bazer: vBazer, snack: vSnack, projects: vProjects, plannotator: vPl, history: vHist }[TAB] || vDash)();
+  const v = af ? vAgent(af) : ({ dash: vDash, lock: vLock, server: vServer, pstack: vPstack, bazer: vBazer, buddha: vBuddha, arena: vArena, snack: vSnack, projects: vProjects, plannotator: vPl, history: vHist }[TAB] || vDash)();
   document.getElementById('view').innerHTML = v;
+  document.querySelectorAll('#nav > button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
   renderNavModes();
-  if(TAB === 'pstack'){ if(!PM) initPM(); renderPM(); }
-  if(TAB === 'bazer'){ if(!BAM) BAM = parseBazerModels(); renderBzChips(); }
+  renderNavSub();
+  if(TAB === 'pstack'){ if(!MS) initMS(); renderMS(); }
+  if(TAB === 'buddha' || TAB === 'arena'){ if(!ROLES) parseRoles(); renderRoleChips(); }
+  setVerifyBadge();
 }
 
 function verifyPanel(){
@@ -360,6 +381,7 @@ function vDash(){
       <button class="btn gold" data-act="update-run">อัพเดตทั้งหมด</button>
     </div>
     <div id="updBox" class="mt">${updBoxHtml()}</div>
+    <div class="small muted mt">แก้ agent แล้วอัพเดต — อย่าลืมกด "อัพเดต mirror" ในแท็บ Buddha (BAZERs-EXTENSION-*) ด้วย</div>
   </div>` : ''}
   ${S.remind && S.remind.exists ? `<div class="card"><h3>↻ remindToUpdate</h3><div class="small muted" style="white-space:pre-wrap">${esc(S.remind.preview)}</div></div>` : ''}
   ${verifyPanel()}`;
@@ -478,89 +500,116 @@ function skillRows(){
 
 function bpRow(f){ const m = {new:['gold','ใหม่'], diff:['warn','ต่าง'], same:['','เหมือน'], exists:['','มีอยู่ (จะไม่ทับ)']}; const [cls,label] = m[f.status] || ['', f.status]; return `<tr><td class="mono small">${esc(f.path)}</td><td><span class="badge ${cls}">${label}</span></td></tr>`; }
 
-const PM_DEFAULTS = [
-  ['feature, refactoring','grok-4.7-xhigh-fast'], ['bug-fix','grok-4.7-xhigh-fast'],
-  ['perf-issue','grok-4.7-xhigh-fast'], ['hillclimb','grok-4.7-xhigh-fast'],
-  ['judgment and prose','claude-opus-5-5-xhigh'], ['hardest tasks','claude-opus-5-5-xhigh'],
-  ['how explorer','grok-4.7-xhigh-fast'], ['how explainer','claude-opus-5-5-xhigh'],
-  ['why investigators','grok-4.7-xhigh-fast'], ['why synthesizer','claude-opus-5-5-xhigh'],
-  ['reflect tooling','grok-4.7-xhigh-fast'], ['reflect judgment, divergent, synthesizer','claude-opus-5-5-xhigh'],
-  ['arena runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'], ['bazer arena runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'], ['arena cross-judge pool','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
-  ['swarm workers','grok-4.7-xhigh-fast'], ['architect runners','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
-  ['interrogate reviewers','claude-opus-5-5-xhigh, grok-4.7-xhigh-fast'],
+const ROLE_LIST = [
+  'feature, refactoring', 'bug-fix', 'perf-issue', 'hillclimb',
+  'judgment and prose', 'hardest tasks',
+  'how explorer', 'how explainer', 'why investigators', 'why synthesizer',
+  'reflect tooling', 'reflect judgment, divergent, synthesizer',
+  'arena runners', 'arena cross-judge pool',
+  'swarm workers', 'architect runners', 'interrogate reviewers',
 ];
-const LIST_ROLES = ['arena runners', 'bazer arena runners', 'arena cross-judge pool'];
-function parsePM(txt){
-  const rows = []; let budget = 'large';
-  for(const line of (txt || '').split(/\r?\n/)){
+const QUICK_MODELS = [
+  'opencode-go/deepseek-v4.1-flash',
+  'opencode-go/beam-free',
+  'opencode-go/muse-spark-1.3-contributor',
+  'opencode-go/longcat-2.5-preview-free',
+];
+const ROLE_RE = /^[a-z][a-z0-9, -]*$/;
+function initMS(){
+  const txt = (S.models2 && S.models2.content) || '';
+  const custom = {}; const extra = []; let budget = 'large';
+  for(const line of txt.split(/\r?\n/)){
     const l = line.trim();
     if(!l) continue;
-    if(l.startsWith('#')){
-      const b = l.match(/^#\s*budget:\s*(\w+)/);
-      if(b && ['unlimited','large','medium','small'].includes(b[1])) budget = b[1];
-      continue;
-    }
+    if(l.startsWith('#')){ const b = l.match(/^#\s*budget:\s*(\w+)/); if(b && ['unlimited','large','medium','small'].includes(b[1])) budget = b[1]; continue; }
     const i = l.indexOf(':');
-    if(i > 0){
-      const role = l.slice(0, i).trim();
-      const raw = l.slice(i + 1).trim();
-      rows.push({ role, models: LIST_ROLES.includes(role) ? raw.split(',').map(s => s.trim()).filter(Boolean) : raw });
-    }
+    if(i <= 0) continue;
+    const role = l.slice(0, i).trim();
+    const models = l.slice(i + 1).trim();
+    if(!role || role.length > 60 || !ROLE_RE.test(role)) continue;
+    custom[role] = models;
+    if(!ROLE_LIST.includes(role) && !extra.includes(role)) extra.push(role);
   }
-  return { budget, rows };
+  const sets = (S.modelSets || []).map(s => ({
+    name: String(s.name || 'ชุดใหม่'),
+    models: Array.isArray(s.models) ? s.models.slice() : [],
+    roles: Array.isArray(s.roles) ? s.roles.filter(r => r).slice() : [],
+  }));
+  MS = { budget, sets, custom, extraRoles: extra };
+  for(const s of sets) for(const r of s.roles) if(s.models.length) MS.custom[r] = s.models.join(', ');
 }
-function initPM(){
-  PM = S.models2.exists
-    ? parsePM(S.models2.content)
-    : { budget: 'large', rows: PM_DEFAULTS.map(([r, m]) => ({ role: r, models: LIST_ROLES.includes(r) ? m.split(',').map(s => s.trim()).filter(Boolean) : m })) };
-  if(!PM.rows.some(r => r.role === 'bazer arena runners')) {
-    PM.rows.push({ role: 'bazer arena runners', models: ['claude-opus-5-5-xhigh', 'grok-4.7-xhigh-fast'] });
-  }
+function ownerOf(role){ return MS.sets.find(s => s.roles.includes(role)) || null; }
+function allRoleNames(){
+  const owned = MS.sets.flatMap(s => s.roles);
+  return [...new Set([...ROLE_LIST, ...(MS.extraRoles || []), ...owned])];
 }
-function collectPM(){
-  if(!PM) return;
-  const rows = [];
-  document.querySelectorAll('#pmEditor .pm-row').forEach(el => {
-    const role = el.querySelector('.pm-role').value.trim();
-    if(el.dataset.list === '1'){
-      const models = [...el.querySelectorAll('.chip b')].map(b => b.textContent.trim()).filter(Boolean);
-      if(role || models.length) rows.push({ role, models });
-    } else {
-      const models = (el.querySelector('.pm-models')?.value || '').trim();
-      if(role || models) rows.push({ role, models });
-    }
-  });
-  PM.rows = rows;
-  const b = document.getElementById('pmBudget');
-  if(b) PM.budget = b.value;
+function quickBtns(target, present){
+  const arr = present || [];
+  return QUICK_MODELS.map(m => {
+    const short = m.split('/').pop();
+    if(arr.includes(m)) return `<button class="btn sm" disabled title="${esc(m)} — มีอยู่แล้ว">✓ ${esc(short)}</button>`;
+    return `<button class="btn sm ghost" data-act="ms-quick" data-t="${esc(target)}" data-model="${esc(m)}" title="${esc(m)}">⚡ ${esc(short)}</button>`;
+  }).join(' ');
 }
-function renderPM(){
-  const box = document.getElementById('pmEditor');
-  if(!box || !PM) return;
-  box.innerHTML = PM.rows.map((r, i) => {
-    if(LIST_ROLES.includes(r.role)){
-      const arr = Array.isArray(r.models) ? r.models : [r.models].filter(Boolean);
-      const chips = arr.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="pm-chip-del" data-idx="${i}" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
-        || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์หรือเลือกด้านล่างแล้วกด +</span>';
-      const tag = r.role === 'bazer arena runners' ? '<span class="badge gold">Bazer arena</span>'
-        : r.role.includes('cross') ? '<span class="badge">cross-judge pool</span>' : '<span class="badge">arena เดี่ยว</span>';
-      return `<div class="pm-row" data-idx="${i}" data-list="1" style="margin-bottom:12px">
-        <div class="row"><input type="text" class="pm-role" style="width:270px" value="${esc(r.role)}" readonly> ${tag}<span class="small muted">ใช้หลายโมเดลพร้อมกัน (เลือก 1 ตัวต่อ 1 subagent)</span></div>
-        <div class="chips" style="margin-top:6px">${chips}</div>
-        <div class="flex" style="margin-top:6px">
-          <input type="text" class="pm-add-input grow" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดลจากรายชื่อ แล้วกด + (เช่น opencode-go/deepseek-v4.1-flash)">
-          <button class="btn sm" data-act="pm-chip-add" data-idx="${i}" style="flex:none">+ เพิ่มโมเดล</button>
+async function saveSets(){
+  if(!MS) return;
+  try{ await api('/api/action', { post: { id: 'save-model-sets', sets: MS.sets } }); }
+  catch(e){ toast('บันทึกชุดไม่สำเร็จ: ' + e.message, true); }
+}
+function renderMS(){
+  const box = document.getElementById('msSets');
+  if(box && MS){
+    box.innerHTML = MS.sets.map((s, i) => {
+      const chips = s.models.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="ms-model-del" data-i="${i}" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
+        || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์ด้านล่าง หรือกด Quick Select</span>';
+      const roleChips = allRoleNames().map(r => {
+        const own = ownerOf(r);
+        const mine = own === s;
+        const other = own && !mine;
+        const cls = 'btn sm ' + (mine ? 'gold' : 'ghost' + (other ? ' ms-other' : ''));
+        const title = mine ? 'คลิกเพื่อปล่อย function นี้กลับเป็น "กำหนดเอง"' : other ? `ตอนนี้ดูแลโดยชุด "${own.name}" — คลิกเพื่อย้ายมาชุดนี้` : 'คลิกเพื่อให้ชุดนี้ดูแล function นี้';
+        return `<button class="${cls}" data-act="ms-role-toggle" data-i="${i}" data-role="${esc(r)}" title="${esc(title)}">${mine ? '✓ ' : ''}${esc(r)}${other ? ' · ' + esc(own.name) : ''}</button>`;
+      }).join(' ');
+      const warn = (s.roles.length && !s.models.length) ? '<div class="warnbox mt">ชุดนี้ยังไม่มีโมเดล — function ที่เลือกไว้จะถูกตัดออกจากไฟล์เมื่อกดบันทึก</div>' : '';
+      return `
+      <div class="card" style="margin-top:10px">
+        <div class="row">
+          <input type="text" class="ms-name" data-i="${i}" value="${esc(s.name)}" style="width:240px" placeholder="ชื่อชุด เช่น fast / judgment / arena">
+          <span class="badge">${s.models.length} โมเดล</span><span class="badge ${s.roles.length ? 'gold' : ''}">${s.roles.length} function</span>
+          <span class="grow"></span>
+          <button class="btn sm danger" data-act="ms-del-set" data-i="${i}">ลบชุด</button>
         </div>
+        <div class="chips mt">${chips}</div>
+        <div class="flex mt">
+          <input type="text" class="ms-add grow" data-i="${i}" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดลจากรายชื่อ แล้วกด +">
+          <button class="btn sm" data-act="ms-model-add" data-i="${i}" style="flex:none">+ เพิ่มโมเดล</button>
+        </div>
+        <div class="flex mt"><span class="small muted">Quick Select:</span>${quickBtns('set:' + i, s.models)}</div>
+        ${warn}
+        <div class="section-title mt">Functions ที่ชุดนี้ดูแล <span class="small muted">— คลิกเพื่อเปิด/ปิด · ชิปที่ขึ้นชื่อชุดอื่น = คลิกเพื่อย้ายมา</span></div>
+        <div class="chips mt">${roleChips}</div>
       </div>`;
-    }
-    return `<div class="pm-row row" data-idx="${i}" style="margin-bottom:6px">
-      <input type="text" class="pm-role" style="width:270px" placeholder="role เช่น swarm workers" value="${esc(r.role)}">
-      <input type="text" class="pm-models grow" placeholder="model เดียว" value="${esc(r.models)}">
-      <button class="btn sm danger" data-act="pm-del" data-idx="${i}" style="flex:none" title="ลบแถว">✕</button>
-    </div>`;
-  }).join('') || '<div class="muted small">ยังไม่มีแถว — กด "+ เพิ่ม role"</div>';
+    }).join('') || '<div class="muted small">ยังไม่มีชุดโมเดล — กด "+ สร้างชุดใหม่" เพิ่มโมเดล แล้วเลือก function ให้ชุดนั้นดูแล</div>';
+  }
+  const cb = document.getElementById('msCustom');
+  if(cb && MS){
+    const free = allRoleNames().filter(r => !ownerOf(r));
+    cb.innerHTML = free.map(r => `
+      <div class="flex" style="margin-top:6px">
+        <span class="mono small" style="width:330px">${esc(r)}</span>
+        <input type="text" class="ms-custom grow" data-role="${esc(r)}" value="${esc(MS.custom[r] || '')}" placeholder="model เดียว หรือคั่นด้วย , (เว้นว่าง = ใช้ค่าเริ่มต้นของ skill)">
+        <button class="btn sm ghost" data-act="ms-make-set" data-role="${esc(r)}" style="flex:none" title="สร้างชุดใหม่จากค่านี้">+ เป็นชุด</button>
+      </div>`).join('') || '<div class="muted small">ทุก function ถูกดูแลโดยชุดแล้ว 🎉</div>';
+  }
   const b = document.getElementById('pmBudget');
-  if(b) b.value = PM.budget;
+  if(b && MS) b.value = MS.budget;
+}
+function collectMS(){
+  if(!MS) return;
+  document.querySelectorAll('.ms-custom').forEach(inp => { MS.custom[inp.dataset.role] = inp.value.trim(); });
+  document.querySelectorAll('.ms-name').forEach(inp => { const s = MS.sets[+inp.dataset.i]; if(s) s.name = inp.value.trim() || s.name; });
+  const b = document.getElementById('pmBudget');
+  if(b) MS.budget = b.value;
 }
 function vPstack(){
   const bp = BP && BP.files ? `
@@ -604,8 +653,8 @@ function vPstack(){
     <div class="small muted mt">"ซ่อนจากโมเดล" = ใส่ <span class="mono">metadata.opencode/autoinvoke: false</span> (V2) — skill ยังโหลดได้ด้วย <span class="mono">@ชื่อ</span></div>
   </div>
   <div class="card">
-    <h3>pStack models — pstack-models.md (โมเดลต่อ role)</h3>
-    <div class="small muted">กำหนดโมเดลที่แต่ละ role ใช้ตอน spawn subagent — role ของ arena ใช้ <b>หลายโมเดลพร้อมกัน</b> (chip + เลือกจากรายชื่อจริงของเครื่อง) · ${S.models2.exists ? 'ไฟล์มีอยู่แล้ว' : 'ยังไม่มีไฟล์ (กดบันทึกแล้วจะสร้างให้)'}</div>
+    <h3>🧩 ชุดโมเดล &amp; Functions — pstack-models.md</h3>
+    <div class="small muted">สร้าง "ชุดโมเดล" กี่ชุดก็ได้ แล้วเลือกว่าแต่ละชุดดูแล function ใด — function ที่ไม่ใช้ชุด แก้ค่าเองได้ด้านล่าง · ${S.models2.exists ? 'ไฟล์มีอยู่แล้ว' : 'ยังไม่มีไฟล์ (กดบันทึกแล้วจะสร้างให้)'}</div>
     <div class="flex mt">
       <span class="small muted">budget:</span>
       <select id="pmBudget" style="width:230px">
@@ -614,15 +663,19 @@ function vPstack(){
         <option value="medium">medium — high</option>
         <option value="small">small — medium</option>
       </select>
-      <button class="btn sm ghost" data-act="pm-add">+ เพิ่ม role</button>
-      <button class="btn sm ghost" data-act="pm-reset">↺ โหลดค่าจากไฟล์ใหม่</button>
+      <button class="btn" data-act="ms-new-set">+ สร้างชุดใหม่</button>
+      <button class="btn sm ghost" data-act="ms-reset">↺ โหลดค่าจากไฟล์ใหม่</button>
       <button class="btn sm ghost" data-act="amodels-fetch">⇣ ดึงรายชื่อโมเดลทั้งหมด${AMODELS ? ' (' + AMODELS.length + ')' : ' — opencode models'}</button>
     </div>
-    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
-    <div id="pmEditor" class="mt"></div>    <div class="mt flex">
-      <button class="btn gold" data-act="pm-save2">บันทึก pstack-models.md</button>
-      <span class="small muted">เขียนใหม่ทั้งไฟล์พร้อมสำรองอัตโนมัติ — มีผลกับ session ใหม่</span>
+    <div id="msSets" class="mt"></div>
+    <div class="section-title mt">Functions ที่ยังกำหนดเอง (ไม่ได้ใช้ชุด)</div>
+    <div class="small muted">แก้ค่าได้ตรงนี้ — หรือกด "+ เป็นชุด" เพื่อตั้งชุดใหม่จากค่านี้ · เว้นว่าง = ตัดบรรทัดออก (skill จะใช้ค่าเริ่มต้น)</div>
+    <div id="msCustom" class="mt"></div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="ms-save">บันทึก pstack-models.md</button>
+      <span class="small muted">เขียนใหม่ทั้งไฟล์พร้อมสำรองอัตโนมัติ — ชุดโมเดลจำไว้ใน console.config.json</span>
     </div>
+    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
     <details class="mt"><summary>ดู/แก้ไฟล์ดิบ (ขั้นสูง)</summary>
       <textarea id="pmText" class="mt">${esc(S.models2.content)}</textarea>
       <div class="mt"><button class="btn sm" data-act="pm-save">บันทึกไฟล์ดิบ</button></div>
@@ -635,53 +688,113 @@ function vPstack(){
   </div>`;
 }
 
-function parseBazerModels(){
+function parseRoles(){
   const txt = (S.models2 && S.models2.content) || '';
-  const line = txt.split(/\r?\n/).find(l => /^bazer arena runners\s*:/.test(l.trim()));
-  return line ? line.split(':').slice(1).join(':').split(',').map(s => s.trim()).filter(Boolean) : [];
+  const out = { 'arena runners': [], 'arena cross-judge pool': [] };
+  for(const line of txt.split(/\r?\n/)){
+    const i = line.indexOf(':');
+    if(i < 0) continue;
+    const r = line.slice(0, i).trim();
+    if(out[r]) out[r] = line.slice(i + 1).split(',').map(s => s.trim()).filter(Boolean);
+  }
+  ROLES = out;
 }
-function renderBzChips(){
-  const el = document.getElementById('bzChips');
-  if(!el || !BAM) return;
-  el.innerHTML = BAM.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="bz-del" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
-    || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์หรือเลือกด้านล่างแล้วกด +</span>';
+const ROLE_LABEL = {
+  'arena runners': 'รันเนอร์ — โมเดลที่แข่งกัน (ใส่ได้หลายตัว)',
+  'arena cross-judge pool': 'กรรมการ — โมเดลตัดสิน (เลือก 1 ตัวต่อการตัดสิน 1 ครั้ง)',
+};
+function renderRoleChips(){
+  if(!ROLES) return;
+  for(const role of Object.keys(ROLE_LABEL)){
+    const el = document.getElementById('rc-' + role.replace(/[^a-z]+/g, '-'));
+    if(!el) continue;
+    const arr = ROLES[role] || [];
+    el.innerHTML = arr.map((m, j) => `<span class="chip"><b>${esc(m)}</b><button data-act="role-del" data-role="${esc(role)}" data-j="${j}" title="เอาออก">✕</button></span>`).join('')
+      || '<span class="muted small">ยังไม่มีโมเดล — พิมพ์หรือเลือกด้านล่างแล้วกด +</span>';
+  }
+}
+function legacyRunner(){
+  const txt = (S.models2 && S.models2.content) || '';
+  const line = txt.split(/\r?\n/).find(l => { const i = l.indexOf(':'); return i > 0 && l.slice(0, i).trim() === 'bazer arena runners'; });
+  return line ? line.slice(line.indexOf(':') + 1).trim() : null;
+}
+function arenaRoleRow(role){
+  if(!ROLES) parseRoles();
+  const present = (ROLES && ROLES[role]) || [];
+  const id = 'rc-' + role.replace(/[^a-z]+/g, '-');
+  return `
+    <div class="section-title mt">${esc(role)} <span class="small muted">— ${esc(ROLE_LABEL[role])}</span></div>
+    <div class="chips" id="${id}" style="margin-top:6px"></div>
+    <div class="flex" style="margin-top:6px">
+      <input type="text" class="role-add grow" data-role="${esc(role)}" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดลจากรายชื่อ แล้วกด +">
+      <button class="btn sm" data-act="role-add" data-role="${esc(role)}" style="flex:none">+ เพิ่มโมเดล</button>
+      <button class="btn sm gold" data-act="role-save" data-role="${esc(role)}" style="flex:none">บันทึก</button>
+    </div>
+    <div class="flex" style="margin-top:6px"><span class="small muted">Quick Select:</span>${quickBtns('role:' + role, present)} <span class="small muted">· จัดเป็นชุดได้ที่แท็บ pStack</span></div>`;
+}
+function arenaSessionCard(showLegacy){
+  const legacy = showLegacy ? legacyRunner() : null;
+  return `
+  <div class="card">
+    <h3>⚔️ Arena session — โมเดลที่ใช้แข่ง/ตัดสิน</h3>
+    <div class="small muted">ชุดเดียวกับ Arena Mode ทุกทาง (แท็บ Arena และ Buddha อ่านค่าเดียวกัน) — บันทึกลง <span class="mono">~/.agents/pstack-models.md</span></div>
+    ${arenaRoleRow('arena runners')}
+    ${arenaRoleRow('arena cross-judge pool')}
+    ${legacy ? `<div class="warnbox mt">พบบรรทัดเก่า <span class="mono">bazer arena runners: ${esc(legacy)}</span> — เลิกใช้แล้ว (Buddha ใช้ชุดเดียวกับ Arena)
+      <div class="flex mt"><button class="btn sm" data-act="legacy-migrate">ย้ายค่าไป arena runners</button><button class="btn sm danger" data-act="legacy-del">ลบบรรทัดเก่า</button></div></div>` : ''}
+    <div class="flex mt">
+      <button class="btn sm ghost" data-act="roles-reset">↺ โหลดค่าจากไฟล์ใหม่</button>
+      <button class="btn sm ghost" data-act="amodels-fetch">⇣ ดึงรายชื่อโมเดล${AMODELS ? ' (' + AMODELS.length + ')' : ''}</button>
+      <span class="small muted">บันทึกแล้วมีผลกับ session ใหม่</span>
+    </div>
+    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
+  </div>`;
+}
+function mirrorCard(){
+  const mir = S.mirror || [];
+  const bad = mir.filter(m => !m.synced).length;
+  const rows = mir.map(m => `
+    <div class="vrow">${led(m.synced ? 'ok' : (m.exists ? 'warn' : 'fail'))}
+      <div class="grow"><b class="mono">${esc(m.skill)}</b>
+      <div class="small muted">${esc(m.name)} — ${m.synced ? ('ตรงกับต้นทาง' + (m.source === 'bundle' ? ' (จาก bundle — agent ยังไม่ติดตั้ง)' : '')) : (m.exists ? 'มีของเก่า — ต้องอัพเดต' : 'ยังไม่มี — กดอัพเดตเพื่อสร้าง')}</div></div>
+    </div>`).join('') || '<div class="muted small">—</div>';
+  return `
+  <div class="card">
+    <h3>🪞 Mirror โหมด → skills ${bad ? `<span class="badge warn">ต้องอัพเดต ${bad}</span>` : '<span class="badge ok">ตรงครบ</span>'}</h3>
+    <div class="small muted">ให้โหมดนี้และโหมดอื่น "เรียก" โหมดหลักได้ด้วยการโหลด skill <span class="mono">BAZERs-EXTENSION-*</span> — mirror ถูกซ่อนจากการ auto-invoke แต่โหลดด้วย ID ได้ · ต้นทางคือไฟล์ agent ที่ติดตั้งอยู่ (ถ้าไม่มี ใช้จาก bundle) · สำรองก่อนเขียนทุกไฟล์</div>
+    <div class="verify-list mt">${rows}</div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="mirror-run">อัพเดต mirror ทั้งหมด</button>
+      <button class="btn sm ghost" data-act="open" data-key="skills">เปิดโฟลเดอร์ skills</button>
+    </div>
+  </div>`;
 }
 function vBazer(){
-  const b = S.bazer || {};
   const bzAgent = agentOf('bazer.md');
   const bzOn = !!(bzAgent && !bzAgent.disabled);
   return `
   <div class="card" style="border-color:rgba(217,72,15,.5);background:linear-gradient(160deg,rgba(217,72,15,.12),rgba(255,255,255,.02) 45%),var(--panel)">
-    <h3>🔥 Bazer Mode</h3>
-    <div class="row">${led(bzOn ? 'ok' : (bzAgent ? 'warn' : 'fail'))}<span class="big">${bzOn ? 'ติดตั้งแล้ว' : (bzAgent ? 'ปิดอยู่' : 'ยังไม่พบ bazer.md')}</span>${b.pluginOk ? '<span class="badge ok">submit_plan พร้อม</span>' : '<span class="badge warn">planningAgents ไม่ครบ (plan · bazer · arena · snack)</span>'}<span class="grow"></span>${agentSwitch('bazer.md')}</div>
-    <div class="sub">${esc(bzAgent && bzAgent.desc ? bzAgent.desc : 'prompt อะไรก็ได้ → วางแผน Arena → ด่าน 1 Plannotator (อนุมัติ + สลับเป็น arena) → Arena Mode → ด่าน 2 แผนสุดท้าย → อนุมัติแล้วสร้าง')} · สีโหมด <span class="mono">${esc(b.color || '#D9480F')}</span></div>
+    <h3>🔥 Bazer Mode — ผู้ลงมือทำ (ขอบเขตไฟล์เด็ดขาด)</h3>
+    <div class="row">${led(bzOn ? 'ok' : (bzAgent ? 'warn' : 'fail'))}<span class="big">${bzOn ? 'ติดตั้งแล้ว' : (bzAgent ? 'ปิดอยู่' : 'ยังไม่พบ bazer.md')}</span>${(S.fire && S.fire.file && S.fire.reg) ? '<span class="badge ok">ไฟ 🔥 พร้อม</span>' : ''}<span class="grow"></span>${agentSwitch('bazer.md')}</div>
+    <div class="sub">${esc(bzAgent && bzAgent.desc ? bzAgent.desc : 'รับงานแล้วทำให้เสร็จ โดยแตะเฉพาะไฟล์ที่ผู้ใช้ระบุ path ชัดเจนใน prompt — ไม่สำรวจโปรเจกต์ ไม่ทำเกินสั่ง')}</div>
     <div class="mt flex">
+      ${bzAgent ? '' : '<button class="btn gold" data-act="install-agent" data-file="bazer.md">ติดตั้งโหมดนี้เลย (จาก bundle)</button>'}
       <button class="btn gold" data-act="copy-bazer">คัดลอกคำสั่งเข้าโหมด</button>
       <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
     </div>
   </div>
   <div class="card">
-    <h3>ขั้นตอนของโหมด</h3>
+    <h3>วิธีทำงานของโหมด</h3>
     <div class="verify-list">
-      <div class="vrow">${led('info')}<div><b>1. วิเคราะห์ + วางแผน Arena</b><div class="small muted">อ่าน prompt (read-only) → candidates 2-3 ทางต่างกันจริง + rubric + โมเดลจากชิปด้านล่าง</div></div></div>
-      <div class="vrow">${led('warn')}<div><b>2. ด่าน 1 · Plannotator</b><div class="small muted">ยื่นแผน Arena — อนุมัติแล้วเลือกสลับ agent เป็น <b>arena</b> (ปุ่มของ Plannotator เอง) หรือ approve ธรรมดา = Bazer รัน arena ภายในให้</div></div></div>
-      <div class="vrow">${led('info')}<div><b>3. Arena Mode</b><div class="small muted">Fan out → Cross-judge → Pick a base → Graft → Verify (sketches ลง temp เท่านั้น)</div></div></div>
-      <div class="vrow">${led('warn')}<div><b>4. ด่าน 2 · Plannotator</b><div class="small muted">แผนสุดท้ายหลัง Arena (base + graft + ขั้นตอน + verification) — arena ยื่นเองได้เพราะอยู่ใน planningAgents</div></div></div>
-      <div class="vrow">${led('ok')}<div><b>5. ตัดสินใจ</b><div class="small muted">feedback → แก้+ยื่นใหม่ · อนุมัติ → สลับเป็น build แล้วลุยสร้าง (พิสูจน์ผลก่อนบอกเสร็จ)</div></div></div>
+      <div class="vrow">${led('info')}<div><b>1. รับขอบเขต</b><div class="small muted">ไฟล์ที่อนุญาต = path ที่ผู้ใช้เขียนใน prompt (หรือทั้งโฟลเดอร์นั้น) — ชื่อไฟล์ที่โผล่ในโค้ด/ผลเครื่องมือ ไม่นับเป็นการอนุญาต</div></div></div>
+      <div class="vrow">${led('info')}<div><b>2. สรุป 3 ข้อแล้วลงมือทันที</b><div class="small muted">ต้องการอะไร · ไฟล์ที่อนุญาตมีอะไร · ขั้นแรกคืออะไร — คิดลึกได้เต็มที่แต่ต้องมีจุดจบ ไม่คิดวน</div></div></div>
+      <div class="vrow">${led('ok')}<div><b>3. ตรวจหนึ่งรอบแล้วรายงานสั้น ๆ</b><div class="small muted">ทำเสร็จ → ตรวจงาน → รายงานสั้น ๆ แล้วจบ (ไม่รีแฟกเตอร์ ไม่ปรับปรุงเกินสั่ง)</div></div></div>
     </div>
-    <div class="mt"><span class="small muted">เข้าโหมด: กด Tab เลือก <b>Bazer</b> ใน TUI หรือรัน <span class="mono">opencode run --agent bazer "โจทย์"</span></span></div>
+    <div class="help mt">สิ่งที่ไฟล์กำหนด: glob/grep/list/bash = ขออนุมัติก่อน · task (subagent) = ห้าม · ไม่ได้ระบุ path = รายการอนุญาตว่าง (คุยได้ ไม่แตะไฟล์)</div>
   </div>
   <div class="card">
-    <h3>🔥 โมเดล Arena ของ Bazer (ใช้หลายโมเดลพร้อมกัน)</h3>
-    <div class="small muted">บันทึกลงบรรทัด <span class="mono">bazer arena runners</span> ใน pstack-models.md — แยกจาก arena เดี่ยว ๆ</div>
-    <div class="chips mt" id="bzChips"></div>
-    <div class="flex mt">
-      <input type="text" class="bz-add grow" list="pmModelList" placeholder="พิมพ์หรือเลือกโมเดล แล้วกด +">
-      <button class="btn sm" data-act="bz-add">+ เพิ่มโมเดล</button>
-      <button class="btn sm gold" data-act="bz-save">บันทึก</button>
-      <button class="btn sm ghost" data-act="amodels-fetch">⇣ ดึงรายชื่อโมเดล</button>
-    </div>
-    <datalist id="pmModelList">${(AMODELS || []).map(m => `<option value="${esc(m)}"></option>`).join('')}</datalist>
+    <h3>ใช้เมื่อไหร่</h3>
+    <div class="small muted">ผู้ใช้ระบุ path ชัดเจนและต้องการให้ลงมือแก้จริง ๆ — ต่างจาก Advisor (คุย/ปรึกษา ไม่แตะไฟล์) และ Buddha (วางแผน + Arena + สร้าง)</div>
   </div>
   ${bzAgent && bzAgent.content ? `
   <div class="card">
@@ -690,16 +803,103 @@ function vBazer(){
     <div class="mt"><button class="btn gold" data-act="agent-save">บันทึก bazer.md</button><span class="small muted" style="margin-left:10px">สำรองก่อนเขียนทุกครั้ง · มีผลกับ session ใหม่</span></div>
   </div>` : ''}`;
 }
+function vBuddha(){
+  const bdAgent = agentOf('buddha.md');
+  const bdOn = !!(bdAgent && !bdAgent.disabled);
+  const plg = S.plg || {};
+  const mir = S.mirror || [];
+  const mirBad = mir.filter(m => !m.synced).length;
+  return `
+  <div class="card" style="border-color:rgba(235,137,91,.55);background:linear-gradient(160deg,rgba(235,137,91,.13),rgba(255,255,255,.02) 45%),var(--panel)">
+    <h3>🧘 Buddha Mode — รวม Plan(notator) + Arena</h3>
+    <div class="row">${led(bdOn ? 'ok' : (bdAgent ? 'warn' : 'fail'))}<span class="big">${bdOn ? 'ติดตั้งแล้ว' : (bdAgent ? 'ปิดอยู่' : 'ยังไม่พบ buddha.md')}</span>${plg.buddha ? '<span class="badge ok">planningAgents พร้อม</span>' : '<span class="badge warn">planningAgents ยังไม่มี buddha</span>'}${mirBad ? `<span class="badge warn">mirror ต้องอัพเดต ${mirBad}</span>` : (mir.length ? '<span class="badge ok">mirror ตรง</span>' : '')}<span class="grow"></span>${agentSwitch('buddha.md')}</div>
+    <div class="sub">${esc(bdAgent && bdAgent.desc ? bdAgent.desc : 'prompt อะไรก็ได้ → วางแผน Arena → ด่าน 1 Plannotator → เรียก Arena Mode ในเซสชันนี้ → ด่าน 2 แผนสุดท้าย → อนุมัติแล้วสร้าง')}</div>
+    <div class="mt flex">
+      ${bdAgent ? '' : '<button class="btn gold" data-act="install-agent" data-file="buddha.md">ติดตั้งโหมดนี้เลย (จาก bundle)</button>'}
+      <button class="btn gold" data-act="copy-agent" data-agent="buddha">คัดลอกคำสั่งเข้าโหมด</button>
+      <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ขั้นตอนของโหมด (ทำงานในเซสชันเดียว ไม่สลับ agent)</h3>
+    <div class="verify-list">
+      <div class="vrow">${led('info')}<div><b>1. วิเคราะห์ + วางแผนการใช้ Arena</b><div class="small muted">อ่าน prompt (read-only) → candidates 2-3 ทางต่างกันจริง + rubric — รันเนอร์ใช้ชุดเดียวกับ Arena (การ์ดด้านล่าง)</div></div></div>
+      <div class="vrow">${led('warn')}<div><b>2. ด่าน 1 · Plan(notator) Mode</b><div class="small muted">ยื่นแผน Arena ผ่าน submit_plan — อนุมัติ / แก้ตาม feedback (ถ้าเลือกสลับเป็น arena เองในหน้าอนุมัติ ก็ทำตาม arena.md พฤติกรรมเดิม)</div></div></div>
+      <div class="vrow">${led('info')}<div><b>3. เรียก Arena Mode (ภายในเซสชันนี้)</b><div class="small muted">โหลด skill BAZERs-EXTENSION-Arena แล้วเดินตามครบ — Fan out → Cross-judge → Pick → Graft → Verify (sketches ลง temp เท่านั้น)</div></div></div>
+      <div class="vrow">${led('warn')}<div><b>4. ด่าน 2 · แผนสุดท้าย</b><div class="small muted">base + grafts + ขั้นตอน + ไฟล์ที่แตะ + ความเสี่ยง + วิธีพิสูจน์ → submit_plan อีกครั้ง</div></div></div>
+      <div class="vrow">${led('ok')}<div><b>5. ตัดสินใจ</b><div class="small muted">feedback → แก้+ยื่นใหม่ · อนุมัติ → สลับเป็น build หรือสร้างในเซสชันนี้ (พิสูจน์ผลจริงก่อนบอกเสร็จ)</div></div></div>
+    </div>
+    <div class="mt"><span class="small muted">เข้าโหมด: กด Tab เลือก <b>Buddha</b> ใน TUI หรือ <span class="mono">opencode run --agent buddha "โจทย์"</span> · โหมดนี้กินโทเคนสูง (มี Arena) — สั่ง "ข้าม arena" ได้</span></div>
+  </div>
+  ${arenaSessionCard(true)}
+  ${mirrorCard()}
+  ${bdAgent && bdAgent.content ? `
+  <div class="card">
+    <h3>✏️ แก้ prompt ของโหมด (buddha.md)</h3>
+    <div class="small muted">บันทึกแล้วมีผลกับ session ใหม่ — สำรองอัตโนมัติก่อนเขียนทุกครั้ง · mirror ด้านบนอ่านค่าจากไฟล์นี้เมื่อกดอัพเดต</div>
+    <textarea class="agent-edit mt" data-file="buddha.md" style="min-height:240px">${esc(bdAgent.content)}</textarea>
+    <div class="mt"><button class="btn gold" data-act="agent-save">บันทึก buddha.md</button></div>
+  </div>` : ''}`;
+}
+function vArena(){
+  const arAgent = agentOf('arena.md');
+  const arOn = !!(arAgent && !arAgent.disabled);
+  const plg = S.plg || {};
+  const hasSkill = n => ((S.skills && S.skills.items) || []).some(x => x.name === n);
+  const pmTxt = (S.models2 && S.models2.content) || '';
+  const hasRunners = /^\s*arena runners\s*:/m.test(pmTxt);
+  const hasPool = /^\s*arena cross-judge pool\s*:/m.test(pmTxt);
+  return `
+  <div class="card" style="border-color:rgba(245,197,66,.5);background:linear-gradient(160deg,rgba(245,197,66,.12),rgba(255,255,255,.02) 45%),var(--panel)">
+    <h3>⚔️ Arena Mode — แข่งหลาย candidate แล้วรวมจุดเด่น</h3>
+    <div class="row">${led(arOn ? 'ok' : (arAgent ? 'warn' : 'fail'))}<span class="big">${arOn ? 'ติดตั้งแล้ว' : (arAgent ? 'ปิดอยู่' : 'ยังไม่พบ arena.md')}</span>${plg.arena ? '<span class="badge ok">planningAgents พร้อม</span>' : '<span class="badge warn">planningAgents ยังไม่มี arena</span>'}<span class="grow"></span>${agentSwitch('arena.md')}</div>
+    <div class="sub">${esc(arAgent && arAgent.desc ? arAgent.desc : 'โหลด skill arena แล้วรันตาม phases: Frame → Fan out → Cross-judge → Pick a base → Graft → Verify')}</div>
+    <div class="mt flex">
+      ${arAgent ? '' : '<button class="btn gold" data-act="install-agent" data-file="arena.md">ติดตั้งโหมดนี้เลย (จาก bundle)</button>'}
+      <button class="btn gold" data-act="copy-agent" data-agent="arena">คัดลอกคำสั่งเข้าโหมด</button>
+      <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ของที่โหมดนี้ต้องมี</h3>
+    <div class="verify-list">
+      <div class="vrow">${led(hasSkill('arena') ? 'ok' : 'warn')}<div><b>skill arena</b><div class="small muted">โหมดโหลด skill นี้ก่อนเริ่มเสมอ (อยู่ในชุด bundle ~54 skills)</div></div></div>
+      <div class="vrow">${led(plg.arena ? 'ok' : 'warn')}<div><b>planningAgents มี arena</b><div class="small muted">ให้ submit_plan โผล่ในเซสชัน arena (Plannotator)</div></div></div>
+      <div class="vrow">${led(hasRunners ? 'ok' : 'warn')}<div><b>บรรทัด arena runners มีค่า</b><div class="small muted">รันเนอร์ — ตั้งในการ์ดด้านล่าง</div></div></div>
+      <div class="vrow">${led(hasPool ? 'ok' : 'warn')}<div><b>บรรทัด arena cross-judge pool มีค่า</b><div class="small muted">กรรมการตัดสิน — ตั้งในการ์ดด้านล่าง</div></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ขั้นตอนของ Arena (จาก skill arena)</h3>
+    <div class="verify-list">
+      <div class="vrow">${led('info')}<div><b>A. Frame</b><div class="small muted">โจทย์ + rubric 3-6 ข้อที่ตัดสินได้จริง + เลือกรันเนอร์</div></div></div>
+      <div class="vrow">${led('info')}<div><b>B. Fan out</b><div class="small muted">ยิง candidate พร้อมกันผ่าน subagent — แต่ละตัวมี output แยกของตัวเอง</div></div></div>
+      <div class="vrow">${led('info')}<div><b>C. Cross-judge</b><div class="small muted">กรรมการ 1 ตัวจาก pool — ให้คะแนนตาม rubric</div></div></div>
+      <div class="vrow">${led('info')}<div><b>D. Pick a base</b><div class="small muted">อ่านทุกตัวแล้วเลือก base ที่ต่อยอดง่ายสุด</div></div></div>
+      <div class="vrow">${led('info')}<div><b>E. Graft</b><div class="small muted">ผสมจุดเด่นจากตัวแพ้ 1-2 จุดต่อตัว ให้อยู่ภายใต้โมเดลเดียว</div></div></div>
+      <div class="vrow">${led('ok')}<div><b>F. Verify</b><div class="small muted">พิสูจน์กับของจริง — เจอปัญหา = กลับไป Frame หรือ Graft</div></div></div>
+    </div>
+  </div>
+  ${arenaSessionCard(false)}
+  ${arAgent && arAgent.content ? `
+  <div class="card">
+    <h3>✏️ แก้ prompt ของโหมด (arena.md)</h3>
+    <div class="small muted">บันทึกแล้วมีผลกับ session ใหม่ — สำรองอัตโนมัติก่อนเขียนทุกครั้ง</div>
+    <textarea class="agent-edit mt" data-file="arena.md" style="min-height:240px">${esc(arAgent.content)}</textarea>
+    <div class="mt"><button class="btn gold" data-act="agent-save">บันทึก arena.md</button></div>
+  </div>` : ''}`;
+}
 function vSnack(){
-  const s = S.snack || {};
+  const plg = S.plg || {};
   const snAgent = agentOf('snack.md');
   const snOn = !!(snAgent && !snAgent.disabled);
   return `
   <div class="card" style="border-color:rgba(64,224,208,.5);background:linear-gradient(160deg,rgba(64,224,208,.12),rgba(255,255,255,.02) 45%),var(--panel)">
     <h3>🍟 Snack</h3>
-    <div class="row">${led(snOn ? 'ok' : (snAgent ? 'warn' : 'fail'))}<span class="big">${snOn ? 'ติดตั้งแล้ว' : (snAgent ? 'ปิดอยู่' : 'ยังไม่พบ snack.md')}</span>${s.pluginOk ? '<span class="badge ok">submit_plan พร้อม</span>' : '<span class="badge warn">planningAgents ยังไม่มี snack</span>'}<span class="grow"></span>${agentSwitch('snack.md')}</div>
-    <div class="sub">${esc(snAgent && snAgent.desc ? snAgent.desc : "prompt อะไรก็ได้ → ประมวลผลด้วย poteto's skills (~60) → ด่านเดียว Plannotator (submit_plan) → อนุมัติแล้วสร้าง → เสร็จแล้วกลับสู่สภาวะ poteto พร้อมรอบถัดไป")} · สีโหมด <span class="mono">${esc(s.color || '#40E0D0')}</span></div>
+    <div class="row">${led(snOn ? 'ok' : (snAgent ? 'warn' : 'fail'))}<span class="big">${snOn ? 'ติดตั้งแล้ว' : (snAgent ? 'ปิดอยู่' : 'ยังไม่พบ snack.md')}</span>${plg.snack ? '<span class="badge ok">planningAgents พร้อม</span>' : '<span class="badge warn">planningAgents ยังไม่มี snack</span>'}<span class="grow"></span>${agentSwitch('snack.md')}</div>
+    <div class="sub">${esc(snAgent && snAgent.desc ? snAgent.desc : "prompt อะไรก็ได้ → ประมวลผลด้วย poteto's skills (~60) → ด่านเดียว Plannotator (submit_plan) → อนุมัติแล้วสร้าง → เสร็จแล้วกลับสู่สภาวะ poteto พร้อมรอบถัดไป")} · สีโหมด <span class="mono">${esc((snAgent && snAgent.color) || '#40E0D0')}</span></div>
     <div class="mt flex">
+      ${snAgent ? '' : '<button class="btn gold" data-act="install-agent" data-file="snack.md">ติดตั้งโหมดนี้เลย (จาก bundle)</button>'}
       <button class="btn gold" data-act="copy-snack">คัดลอกคำสั่งเข้าโหมด</button>
       <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
     </div>
@@ -725,28 +925,29 @@ function vSnack(){
 
 const AGENT_META = {
   'bazer.md':       { name: 'Bazer',   icon: '🔥' },
+  'buddha.md':      { name: 'Buddha',  icon: '🧘' },
   'arena.md':       { name: 'Arena',   icon: '⚔️' },
   'snack.md':       { name: 'Snack',   icon: '🍟' },
   'poteto-mode.md': { name: 'Poteto',  icon: '🥔' },
-  'buddha.md':      { name: 'Buddha',  icon: '🧘' },
   'advisor.md':     { name: 'Advisor', icon: '🧭' },
+  'comment-sicko.md': { name: 'Comment Sicko', icon: '💀', sub: true },
+  'poteto-agent.md':  { name: 'Poteto Agent',  icon: '🧑‍🏭', sub: true },
 };
-const MODE_ORDER = ['bazer.md', 'arena.md', 'snack.md', 'poteto-mode.md', 'buddha.md', 'advisor.md'];
+const MODE_ORDER = ['bazer.md', 'buddha.md', 'arena.md', 'snack.md', 'poteto-mode.md', 'advisor.md'];
+const SUB_ORDER = ['comment-sicko.md', 'poteto-agent.md'];
 function agentOf(file){
   const b = String(file).replace(/\.disabled$/, '');
   return (S.agents || []).find(a => a.file.replace(/\.disabled$/, '') === b);
 }
-function agentTabId(file){ return file === 'bazer.md' ? 'bazer' : file === 'snack.md' ? 'snack' : 'agent:' + file; }
+function agentTabId(file){ return ['bazer.md', 'buddha.md', 'arena.md', 'snack.md'].includes(file) ? file.replace(/\.md$/, '') : 'agent:' + file; }
 function agentSwitch(file){
   const a = agentOf(file);
   if(!a) return '';
   return `<label class="switch" title="${a.disabled ? 'เปิดโหมดนี้' : 'ปิดโหมดนี้'}"><input type="checkbox" data-act="agent-toggle" data-file="${esc(a.file)}" ${a.disabled ? '' : 'checked'}><i></i></label>`;
 }
-function renderNavModes(){
-  const el = document.getElementById('navModes');
+function renderNavList(elId, cntId, files){
+  const el = document.getElementById(elId);
   if(!el) return;
-  const live = (S.agents || []).filter(a => a.mode === 'primary').map(a => a.file.replace(/\.disabled$/, ''));
-  const files = [...MODE_ORDER, ...live.filter(f => !MODE_ORDER.includes(f)).sort()];
   let on = 0, total = 0;
   el.innerHTML = files.map(f => {
     const a = agentOf(f);
@@ -756,45 +957,80 @@ function renderNavModes(){
     const cls = 'agent-tab' + (a ? (a.disabled ? ' off' : '') : ' miss') + (agentTabId(f) === TAB ? ' on' : '');
     return `<button data-tab="${agentTabId(f)}" class="${cls}" title="${esc(a ? (a.desc || f) : 'ยังไม่พบไฟล์ ' + f)}"><span class="adot"${col ? ` style="background:${esc(col)};box-shadow:0 0 8px ${esc(col)}66"` : ''}></span><span class="aname">${meta.icon} ${esc(meta.name)}</span>${a && a.colorOk === false ? '<span class="abadge awarn" title="color ไม่ใช่ hex — V2 จะทิ้งโหมดนี้">!</span>' : ''}${a && a.disabled ? '<span class="abadge">ปิด</span>' : ''}${!a ? '<span class="abadge">ยังไม่มี</span>' : ''}</button>`;
   }).join('');
-  const cnt = document.getElementById('navModesCnt');
+  const cnt = document.getElementById(cntId);
   if(cnt) cnt.textContent = total ? `${on}/${total} เปิด` : '';
+}
+function renderNavModes(){
+  const live = (S.agents || []).filter(a => a.mode === 'primary').map(a => a.file.replace(/\.disabled$/, ''));
+  const files = [...MODE_ORDER, ...live.filter(f => !MODE_ORDER.includes(f)).sort()];
+  renderNavList('navModes', 'navModesCnt', files);
+}
+function renderNavSub(){
+  const live = (S.agents || []).filter(a => a.mode === 'subagent').map(a => a.file.replace(/\.disabled$/, ''));
+  const files = [...SUB_ORDER, ...live.filter(f => !SUB_ORDER.includes(f)).sort()];
+  renderNavList('navSub', 'navSubCnt', files);
 }
 function vAgent(file){
   const a = agentOf(file);
   const meta = AGENT_META[file] || { name: file.replace(/\.md$/, ''), icon: '🤖' };
   if(!a) return `
   <div class="card">
-    <h3>${meta.icon} ${esc(meta.name)} Mode</h3>
+    <h3>${meta.icon} ${esc(meta.name)} ${meta.sub ? '(subagent)' : 'Mode'}</h3>
     <div class="row">${led('fail')}<span class="big">ยังไม่พบไฟล์ ${esc(file)}</span></div>
-    <div class="sub">ติดตั้งได้จากแท็บ pStack → การ์ด Agents — หรือกด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวม</div>
-    <div class="mt"><button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button></div>
+    <div class="sub">ติดตั้งได้ทันทีจากปุ่มด้านล่าง (คัดลอกจาก bundle) — หรือกด "ติดตั้งเสร็จสรรพ" ในแท็บภาพรวม</div>
+    <div class="mt flex">
+      <button class="btn gold" data-act="install-agent" data-file="${esc(file)}">ติดตั้งโหมดนี้เลย (จาก bundle)</button>
+      <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
+    </div>
   </div>`;
   const on = !a.disabled;
   const hasSkill = n => ((S.skills && S.skills.items) || []).some(x => x.name === n);
-  const pmHas = /^bazer arena runners\s*:/m.test((S.models2 && S.models2.content) || '');
+  const plg = S.plg || {};
   const deps = {
-    'bazer.md': [
-      ['skill arena', hasSkill('arena')],
-      ['ปลั๊กอิน Plannotator — planningAgents: plan · bazer · arena · snack', !!(S.bazer && S.bazer.pluginOk)],
-      ['ปลั๊กอิน bazer-fire — ไฟ 🔥 ลุกในโหมด Bazer', !!(S.fire && S.fire.file && S.fire.reg)],
-      ['บรรทัด bazer arena runners ใน pstack-models.md', pmHas],
+    'advisor.md': [
+      ['ไม่พึ่ง skill/ปลั๊กอิน — ไฟล์เดียวจบ', true],
     ],
-    'arena.md': [['skill arena', hasSkill('arena')]],
+    'arena.md': [
+      ['skill arena', hasSkill('arena')],
+      ['planningAgents มี arena', !!plg.arena],
+      ['บรรทัด arena runners มีค่า', /^\s*arena runners\s*:/m.test((S.models2 && S.models2.content) || '')],
+      ['บรรทัด arena cross-judge pool มีค่า', /^\s*arena cross-judge pool\s*:/m.test((S.models2 && S.models2.content) || '')],
+    ],
+    'bazer.md': [
+      ['ไม่พึ่ง skill/ปลั๊กอิน — ไฟล์เดียวจบ (ข้อจำกัดอยู่ในไฟล์เอง)', true],
+    ],
+    'buddha.md': [
+      ['skill arena (fallback ของการเรียกโหมด)', hasSkill('arena')],
+      ['planningAgents มี buddha', !!plg.buddha],
+      ['mirror BAZERs-EXTENSION-Arena ตรงกับต้นทาง', (((S.mirror || []).find(m => m.skill === 'BAZERs-EXTENSION-Arena') || {}).synced) === true],
+    ],
     'snack.md': [
       ['skill poteto-mode', hasSkill('poteto-mode')],
-      ['ปลั๊กอิน Plannotator — planningAgents มี snack', !!(S.snack && S.snack.pluginOk)],
+      ['planningAgents มี snack', !!plg.snack],
     ],
-    'poteto-mode.md': [['skill poteto-mode', hasSkill('poteto-mode')]],
+    'poteto-mode.md': [
+      ['skill poteto-mode', hasSkill('poteto-mode')],
+      ['planningAgents มี poteto-mode', !!plg.poteto],
+      ['subagent poteto-agent ติดตั้งอยู่', !!agentOf('poteto-agent.md')],
+    ],
+    'comment-sicko.md': [
+      ['skill no-comments (ถูกเรียกตามปกติผ่านตัวนี้)', hasSkill('no-comments')],
+      ['read-only — แก้ไฟล์ไม่ได้ (permission ในไฟล์)', true],
+    ],
+    'poteto-agent.md': [
+      ['skill poteto-mode (โหลดก่อนทำงานเสมอ)', hasSkill('poteto-mode')],
+      ['ถูก spawn จากงานในโหมด poteto-mode', true],
+    ],
   }[file] || [];
   return `
   <div class="grid">
     <div class="card">
-      <h3>${meta.icon} ${esc(meta.name)} Mode</h3>
-      <div class="row">${led(on ? 'ok' : 'warn')}<span class="big">${on ? 'เปิดใช้งาน' : 'ปิดอยู่'}</span><span class="grow"></span>${agentSwitch(file)}</div>
+      <h3>${meta.icon} ${esc(meta.name)} ${meta.sub ? '(subagent)' : 'Mode'}</h3>
+      <div class="row">${led(on ? 'ok' : 'warn')}<span class="big">${on ? 'เปิดใช้งาน' : 'ปิดอยู่'}</span>${meta.sub ? '<span class="badge">subagent</span>' : ''}<span class="grow"></span>${agentSwitch(file)}</div>
       <div class="sub">${esc(a.desc || '')}</div>
       <div class="chips mt"><span class="chip"><b class="mono">${esc(a.file)}</b></span>${a.color ? `<span class="chip"><span class="adot" style="background:${esc(a.color.replace(/["']/g, ''))}"></span><b>${esc(a.color.replace(/["']/g, ''))}</b></span>` : ''}${a.colorOk === false ? '<span class="badge red">color ไม่ใช่ hex — V2 จะทิ้งโหมดนี้</span>' : ''}</div>
       <div class="mt flex">
-        <button class="btn sm" data-act="copy-agent" data-agent="${esc(file.replace(/\.md$/, ''))}">คัดลอกคำสั่งเข้าโหมด</button>
+        <button class="btn sm" data-act="copy-agent" data-agent="${esc(file.replace(/\.md$/, ''))}" data-sub="${meta.sub ? 1 : 0}">${meta.sub ? 'คัดลอก id สำหรับเรียก subagent' : 'คัดลอกคำสั่งเข้าโหมด'}</button>
         <button class="btn sm ghost" data-act="open" data-key="agents">เปิดโฟลเดอร์ agents</button>
       </div>
     </div>
@@ -805,7 +1041,7 @@ function vAgent(file){
   </div>
   <div class="card">
     <h3>✏️ แก้ prompt ของโหมด (${esc(a.file)})</h3>
-    <div class="small muted">บันทึกแล้วมีผลกับ session ใหม่ — สำรองอัตโนมัติก่อนเขียนทุกครั้ง</div>
+    <div class="small muted">บันทึกแล้วมีผลกับ session ใหม่ — สำรองอัตโนมัติก่อนเขียนทุกครั้ง${meta.sub ? ' · subagent ถูกเรียกผ่านเครื่องมือ subagent (หรือ skill ที่เกี่ยวข้อง)' : ''}</div>
     <textarea class="agent-edit mt" data-file="${esc(a.file)}" style="min-height:240px">${esc(a.content || '')}</textarea>
     <div class="mt flex"><button class="btn gold" data-act="agent-save">บันทึก ${esc(a.file)}</button><span class="small muted">สถานะบนสุด: สวิตช์เปิด/ปิดโหมดนี้</span></div>
   </div>`;
@@ -963,10 +1199,16 @@ function vHist(){
 /* ---------- events ---------- */
 
 document.addEventListener('input', e => {
+  if(e.target.tagName === 'TEXTAREA') e.target.dataset.dirty = '1';
   if(e.target.id === 'skFilter'){ FILTER = e.target.value; const l = document.getElementById('skillList'); if(l) l.innerHTML = skillRows(); }
 });
 
 document.addEventListener('change', e => {
+  if(e.target.classList && e.target.classList.contains('ms-name')){
+    const s = MS && MS.sets[+e.target.dataset.i];
+    if(s){ s.name = e.target.value.trim() || s.name; saveSets(); }
+    return;
+  }
   const t = e.target.closest('[data-act]');
   if(!t || t.tagName !== 'INPUT') return;
   if(t.dataset.act === 'autostart') act('autostart', { on: t.checked });
@@ -976,13 +1218,17 @@ document.addEventListener('change', e => {
 
 document.addEventListener('click', async e => {
   const navBtn = e.target.closest('#nav button[data-tab]');
-  if(navBtn){ tab(navBtn.dataset.tab); return; }
+  if(navBtn){
+    if(navBtn.dataset.tab !== TAB && anyDirty() && !confirm('มีการแก้ไขที่ยังไม่บันทึกในแท็บนี้ — เปลี่ยนแท็บแล้วทิ้งการแก้ไข?')) return;
+    if(TAB === 'pstack') collectMS();
+    tab(navBtn.dataset.tab); return;
+  }
   const t = e.target.closest('[data-act]');
   if(!t) return;
   if(t.tagName === 'INPUT') return; // checkbox จัดการผ่าน change event
   const a = t.dataset.act;
   switch(a){
-    case 'refresh': if(TAB === 'pstack' && PM && document.getElementById('pmEditor')) collectPM(); refresh(); break;
+    case 'refresh': if(anyDirty() && !confirm('มีการแก้ไขที่ยังไม่บันทึก — รีเฟรชแล้วทิ้งการแก้ไข?')) break; if(TAB === 'pstack') collectMS(); refresh(); break;
     case 'verify': runVerify(); break;
     case 'lock-mode': {
       const mode = t.dataset.mode, restart = document.getElementById('lockRestart')?.checked;
@@ -1011,7 +1257,15 @@ document.addEventListener('click', async e => {
     case 'srv-service': act('restart-service', {}, 'รีสตาร์ท opencode service?'); break;
     case 'autostart': act('autostart', { on: t.checked }); break;
     case 'copy-cline': { try{ await navigator.clipboard.writeText(S.model.current||''); toast('คัดลอกแล้ว'); }catch{ toast('คัดลอกไม่สำเร็จ', true); } break; }
-    case 'copy-agent': { const n = t.dataset.agent || ''; try{ await navigator.clipboard.writeText(`opencode run --agent ${n} "โจทย์ของคุณ"`); toast('คัดลอกแล้ว — หรือกด Tab เลือกโหมดใน TUI'); }catch{ toast('คัดลอกไม่สำเร็จ', true); } break; }
+    case 'copy-agent': {
+      const n = t.dataset.agent || '';
+      const isSub = t.dataset.sub === '1';
+      try{
+        if(isSub){ await navigator.clipboard.writeText(n); toast('คัดลอก id แล้ว — ใช้เป็น agent id ตอนเรียก subagent ผ่านเครื่องมือ subagent'); }
+        else { await navigator.clipboard.writeText(`opencode run --agent ${n} "โจทย์ของคุณ"`); toast('คัดลอกแล้ว — หรือกด Tab เลือกโหมดใน TUI'); }
+      }catch{ toast('คัดลอกไม่สำเร็จ', true); }
+      break;
+    }
     case 'cli-save': act('save-text', { target:'cli', content: document.getElementById('cliJson').value }); break;
     case 'build-preview': {
       try{ BP = await api('/api/action', { post: { id:'build-preview' } }); render(); }
@@ -1027,26 +1281,107 @@ document.addEventListener('click', async e => {
     case 'skill-hide': act('skill-hide', { name: t.dataset.name }); break;
     case 'skill-show': act('skill-show', { name: t.dataset.name }); break;
     case 'skill-field': act('skill-remove-field', { name: t.dataset.name }, 'ลบฟิลด์ disable-model-invocation ออกจาก skill นี้?'); break;
-    case 'pm-save': act('save-text', { target:'pstack-models', content: document.getElementById('pmText').value }); break;
-    case 'pm-add': { collectPM(); PM.rows.push({ role:'', models:'' }); renderPM(); break; }
-    case 'pm-del': { collectPM(); PM.rows.splice(+t.dataset.idx, 1); renderPM(); break; }
-    case 'pm-reset': { PM = null; initPM(); renderPM(); break; }
-    case 'pm-save2': { collectPM(); act('save-pstack-models', { budget: PM.budget, rows: PM.rows }); break; }
-    case 'pm-chip-add': {
-      collectPM();
-      const i = +t.dataset.idx;
-      const row = PM.rows[i];
-      const inp = t.parentElement.querySelector('.pm-add-input');
-      const v = (inp?.value || '').trim();
-      if(row && v){ row.models = Array.isArray(row.models) ? row.models : []; if(!row.models.includes(v)) row.models.push(v); }
-      renderPM();
+    case 'pm-save': {
+      MS = null; ROLES = null;
+      act('save-text', { target:'pstack-models', content: document.getElementById('pmText').value });
       break;
     }
-    case 'pm-chip-del': {
-      collectPM();
-      const row = PM.rows[+t.dataset.idx];
-      if(row && Array.isArray(row.models)) row.models.splice(+t.dataset.j, 1);
-      renderPM();
+    case 'ms-new-set': {
+      if(!MS) initMS();
+      collectMS();
+      MS.sets.push({ name: 'ชุด ' + (MS.sets.length + 1), models: [], roles: [] });
+      renderMS(); saveSets();
+      break;
+    }
+    case 'ms-del-set': {
+      if(!MS) break;
+      const s = MS.sets[+t.dataset.i];
+      if(!s) break;
+      if(!confirm(`ลบชุด "${s.name}"? — function ที่ชุดนี้ดูแลจะกลับเป็น "กำหนดเอง"`)) break;
+      for(const r of s.roles) if(s.models.length) MS.custom[r] = s.models.join(', ');
+      MS.sets.splice(+t.dataset.i, 1);
+      renderMS(); saveSets();
+      break;
+    }
+    case 'ms-model-add': {
+      if(!MS) break;
+      const i = +t.dataset.i, s = MS.sets[i];
+      const inp = document.querySelector(`.ms-add[data-i="${i}"]`);
+      const v = (inp?.value || '').trim();
+      if(s && v && !s.models.includes(v)){ s.models.push(v); if(inp) inp.value = ''; }
+      if(s) for(const r of s.roles) MS.custom[r] = s.models.join(', ');
+      renderMS(); saveSets();
+      break;
+    }
+    case 'ms-model-del': {
+      const s = MS && MS.sets[+t.dataset.i];
+      if(s){ s.models.splice(+t.dataset.j, 1); for(const r of s.roles) MS.custom[r] = s.models.join(', '); renderMS(); saveSets(); }
+      break;
+    }
+    case 'ms-quick': {
+      const tgt = t.dataset.t || '', m = t.dataset.model || '';
+      if(tgt.startsWith('set:')){
+        if(!MS) break;
+        const s = MS.sets[+tgt.slice(4)];
+        if(s && m && !s.models.includes(m)){ s.models.push(m); for(const r of s.roles) MS.custom[r] = s.models.join(', '); }
+        renderMS(); saveSets();
+      } else if(tgt.startsWith('role:')){
+        if(!ROLES) parseRoles();
+        const role = tgt.slice(5);
+        if(ROLES[role] && m){
+          if(!ROLES[role].includes(m)){ ROLES[role].push(m); toast('เพิ่ม ' + m + ' แล้ว — กด "บันทึก" เพื่อเขียนลงไฟล์'); }
+          else { toast('มี ' + m + ' อยู่แล้ว'); }
+          renderRoleChips();
+        }
+      }
+      break;
+    }
+    case 'ms-role-toggle': {
+      if(!MS) break;
+      const s = MS.sets[+t.dataset.i], role = t.dataset.role;
+      if(!s || !role) break;
+      const cur = ownerOf(role);
+      if(cur === s){ s.roles = s.roles.filter(r => r !== role); }
+      else {
+        if(cur){ cur.roles = cur.roles.filter(r => r !== role); toast(`ย้าย "${role}" จากชุด "${cur.name}" → "${s.name}"`); }
+        s.roles.push(role);
+        if(s.models.length) MS.custom[role] = s.models.join(', ');
+      }
+      renderMS(); saveSets();
+      break;
+    }
+    case 'ms-make-set': {
+      if(!MS) initMS();
+      collectMS();
+      const role = t.dataset.role;
+      const val = (MS.custom[role] || '').split(',').map(x => x.trim()).filter(Boolean);
+      const nm = prompt('ตั้งชื่อชุดใหม่สำหรับ "' + role + '":', role.slice(0, 24));
+      if(nm === null) break;
+      const cur = ownerOf(role); if(cur) cur.roles = cur.roles.filter(r => r !== role);
+      MS.sets.push({ name: (nm.trim() || role.slice(0, 24)), models: val, roles: [role] });
+      renderMS(); saveSets();
+      break;
+    }
+    case 'ms-reset': { MS = null; ROLES = null; if(TAB === 'pstack'){ initMS(); renderMS(); } break; }
+    case 'ms-save': {
+      if(!MS) initMS();
+      collectMS();
+      const rows = []; const seen = new Set();
+      for(const s of MS.sets){
+        for(const r of s.roles){
+          if(seen.has(r)) continue;
+          seen.add(r);
+          if(s.models.length) rows.push({ role: r, models: s.models.join(', ') });
+        }
+      }
+      for(const r of allRoleNames()){
+        if(seen.has(r)) continue;
+        seen.add(r);
+        const v = (MS.custom[r] || '').trim();
+        if(v) rows.push({ role: r, models: v });
+      }
+      for(const s of MS.sets) for(const r of s.roles){ if(s.models.length) MS.custom[r] = s.models.join(', '); }
+      act('save-pstack-models', { budget: MS.budget, rows });
       break;
     }
     case 'amodels-fetch': {
@@ -1109,21 +1444,36 @@ document.addEventListener('click', async e => {
       act('save-agent', { file: ta.dataset.file, content: ta.value });
       break;
     }
-    case 'bz-add': {
-      if(!BAM) BAM = parseBazerModels();
-      const inp = document.querySelector('.bz-add');
+    case 'role-add': {
+      if(!ROLES) parseRoles();
+      const role = t.dataset.role;
+      const inp = document.querySelector(`.role-add[data-role="${role}"]`);
       const v = (inp?.value || '').trim();
-      if(v && !BAM.includes(v)) BAM.push(v);
-      renderBzChips();
+      if(v && ROLES[role] && !ROLES[role].includes(v)){ ROLES[role].push(v); if(inp) inp.value = ''; }
+      renderRoleChips();
       break;
     }
-    case 'bz-del': {
-      if(!BAM) BAM = parseBazerModels();
-      BAM.splice(+t.dataset.j, 1);
-      renderBzChips();
+    case 'role-del': {
+      if(!ROLES) parseRoles();
+      const role = t.dataset.role;
+      if(ROLES[role]) ROLES[role].splice(+t.dataset.j, 1);
+      renderRoleChips();
       break;
     }
-    case 'bz-save': act('save-bazer-arena', { models: BAM || parseBazerModels() }); break;
+    case 'role-save': {
+      if(!ROLES) parseRoles();
+      const role = t.dataset.role;
+      const inp = document.querySelector(`.role-add[data-role="${role}"]`);
+      const v = (inp?.value || '').trim();
+      if(v && ROLES[role] && !ROLES[role].includes(v)){ ROLES[role].push(v); if(inp) inp.value = ''; }
+      act('pm-role-save', { role, models: ROLES[role] || [] });
+      break;
+    }
+    case 'roles-reset': { ROLES = null; parseRoles(); renderRoleChips(); toast('โหลดค่าจากไฟล์ใหม่แล้ว'); break; }
+    case 'legacy-migrate': act('pm-legacy-migrate', {}, 'ย้ายค่า bazer arena runners ไป arena runners?'); break;
+    case 'legacy-del': act('pm-legacy-del', {}, 'ลบบรรทัดเก่า bazer arena runners?'); break;
+    case 'mirror-run': act('mirror-agents', {}, 'อัพเดต mirror โหมด → skills (สำรองก่อนเขียนทุกไฟล์)?'); break;
+    case 'install-agent': act('install-agent', { file: t.dataset.file }, `ติดตั้ง ${t.dataset.file} จาก bundle เข้าเครื่อง?`); break;
     case 'copy-bazer': {
       try{ await navigator.clipboard.writeText('opencode run --agent bazer "โจทย์ของคุณ"'); toast('คัดลอกแล้ว — หรือกด Tab เลือก Bazer ใน TUI'); }
       catch{ toast('คัดลอกไม่สำเร็จ', true); }
@@ -1153,7 +1503,7 @@ document.addEventListener('click', async e => {
 
 refresh();
 setInterval(() => { if(!document.hidden) refreshQuiet(); }, 30000);
-async function refreshQuiet(){ const ae = document.activeElement; if(ae && ['TEXTAREA','INPUT','SELECT'].includes(ae.tagName)) return; try{ S = await api('/api/state'); render(); }catch{} }
+async function refreshQuiet(){ if(anyDirty()) return; const ae = document.activeElement; if(ae && ['TEXTAREA','INPUT','SELECT'].includes(ae.tagName)) return; try{ S = await api('/api/state'); render(); }catch{} }
 </script>
 </body>
 </html>

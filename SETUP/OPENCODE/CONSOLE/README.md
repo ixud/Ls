@@ -25,12 +25,17 @@
 | **ภาพรวม** | ไฟสถานะทุกอย่าง + ปุ่ม "ตรวจความครบ" (Verify) + การ์ด "ติดตั้งเสร็จสรรพ" สำหรับเครื่องใหม่ |
 | **ล็อก & โมเดล** | สลับโหมดล็อก server 3 แบบ (ล็อกแน่น / provider เดียว / ปลดล็อก) พร้อมรีสตาร์ท server ให้, แก้ blacklist, ตั้งโมเดล + effort พร้อมซิงค์ `model.json` |
 | **Server & Cline** | ตรวจสุขภาพ/รีสตาร์ท server 4096, เปิด-ปิด autostart ตอนเปิดเครื่อง, ค่าที่ใส่ใน Cline, แก้ `cli.json` |
-| **pStack** | Apply ชุด build, ตั้งโมเดลต่อ role, จัดการ skills/agents/commands (แก้ prompt ในตัวได้), อัปเดตผ่าน npx skills |
-| **🔥 Bazer** | สถานะโหมด Bazer + ขั้นตอนการทำงาน, โมเดล Arena ของ Bazer (แก้ได้ในแท็บนี้), แก้ prompt `bazer.md` |
-| **🍟 Snack** | สถานะโหมด Snack + จุดตั้งค่า |
+| **pStack** | Apply ชุด build, **🧩 ชุดโมเดล (sets) → เลือก function ที่ชุดดูแล + Quick Select**, จัดการ skills/agents/commands (แก้ prompt ในตัวได้), อัปเดตผ่าน npx skills |
+| **โหมดผู้ช่วย (กลุ่ม)** | หนึ่งแท็บต่อโหมด — สถานะติดตั้ง, "ของที่โหมดนี้ต้องมี", แก้ prompt, สวิตช์เปิด/ปิด: **Bazer** (ลงมือทำแบบจำกัดไฟล์) · **Buddha** (วางแผน + Arena + สร้าง — มีการ์ด Arena session และปุ่ม "อัพเดต mirror") · **Arena** (มี Arena session config) · **Snack** · **Poteto** · **Advisor** |
+| **Subagent (กลุ่ม)** | **Comment Sicko** (ตัวตรวจคอมเมนต์) · **Poteto Agent** (ลูกมือของ poteto-mode) — สถานะ วิธีถูกเรียก เปิด/ปิด และแก้ prompt |
 | **โปรเจกต์** | สแกนว่าเครื่องเคยใช้ OpenCode ที่โฟลเดอร์ไหน + จัดการ agent รายโปรเจกต์ |
 | **Plannotator** | เปิด-ปิดปลั๊กอิน, แก้ `config.json`, จัดการคำสั่ง, เปิดคลังแผน |
 | **ประวัติ & สำรอง** | ทุกการแก้ถูกเก็บเป็นประวัติ + สำรองไฟล์เดิม กู้คืนได้รายชุด (เก็บ 30 ชุดล่าสุด) |
+
+
+**โหมด และ mirror (BAZERs-EXTENSION-*):** โหมดหนึ่ง "เรียก" โหมดหลักอื่นได้ด้วยการโหลด skill mirror ใน `%USERPROFILE%\.agents\skills\` (เช่น Buddha เรียก Arena ผ่าน `BAZERs-EXTENSION-Arena`) — mirror ถูกซ่อนจากการ auto-invoke แต่โหลดด้วย ID ได้ · ต้นทางคือ `bundle/agents` — แก้ prompt แล้วกด "อัพเดต mirror" ในแท็บ Buddha (หรือขั้นตอน "ติดตั้งเสร็จสรรพ" จัดการให้ อัตโนมัติ)
+
+การ์ด **Arena session** (แท็บ Arena และ Buddha อ่านค่าเดียวกัน) เขียนบรรทัด `arena runners` + `arena cross-judge pool` ใน `~/.agents/pstack-models.md` — ไฟล์เก่าที่มีบรรทัด `bazer arena runners` จะมีปุ่มย้ายค่าให้ในแท็บ Buddha · จัดทั้งไฟล์เป็น **ชุดโมเดล (sets)** ได้ที่แท็บ pStack → การ์ด "🧩 ชุดโมเดล & Functions"
 
 
 **ไฟล์ในโฟลเดอร์นี้:**

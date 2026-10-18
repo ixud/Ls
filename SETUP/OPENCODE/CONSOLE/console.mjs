@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 
 /* ---------------------------------- config ---------------------------------- */
 
@@ -330,6 +330,67 @@ function skillMeta(md) {
   };
 }
 
+/* pstack-models: ดึงเฉพาะบล็อกค่าจริงจาก template (ไม่เอาคำอธิบาย/โค้ดเฟนซ์ติดมาด้วย) */
+
+function pstackTemplateContent(base) {
+  const tpl = readText(path.join(base || BUNDLE, 'config', 'pstack-models.template.md'));
+  if (!tpl) return '# pStack model configuration\n# budget: large (xhigh)\n';
+  const m = tpl.match(/```\r?\n([\s\S]*?)```/);
+  return m ? m[1].replace(/\s+$/, '') + '\n' : tpl.replace(/\r\n/g, '\n');
+}
+
+/* mirrors — BAZERs-EXTENSION-* (สำเนาโหมดหลักให้โหมดอื่นเรียกใช้เป็น skill) */
+
+const MIRRORS = [
+  { id: 'advisor.md',     skill: 'BAZERs-EXTENSION-Advisor', name: 'Advisor' },
+  { id: 'arena.md',       skill: 'BAZERs-EXTENSION-Arena',   name: 'Arena' },
+  { id: 'bazer.md',       skill: 'BAZERs-EXTENSION-Bazer',   name: 'Bazer' },
+  { id: 'buddha.md',      skill: 'BAZERs-EXTENSION-Buddha',  name: 'Buddha' },
+  { id: 'poteto-mode.md', skill: 'BAZERs-EXTENSION-Poteto',  name: 'Poteto' },
+  { id: 'snack.md',       skill: 'BAZERs-EXTENSION-Snack',   name: 'Snack' },
+];
+function splitAgentFrontmatter(md) {
+  const m = String(md).match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  return m ? String(md).slice(m[0].length).trim() : String(md).trim();
+}
+function findAgentSource(id) {
+  const a = path.join(P.agentsDir, id), d = a + '.disabled';
+  const ip = fs.existsSync(a) ? a : (fs.existsSync(d) ? d : null);
+  if (ip) { const t = readText(ip); if (t !== null) return { content: t, from: 'installed' }; }
+  const b = path.join(BUNDLE, 'agents', id);
+  if (fs.existsSync(b)) { const t = readText(b); if (t !== null) return { content: t, from: 'bundle' }; }
+  return null;
+}
+function buildMirrorContent(m, agentMd) {
+  const body = splitAgentFrontmatter(agentMd);
+  const desc = `โหมด ${m.name} ฉบับ mirror (BAZERs-EXTENSION) — โหลดเมื่อถูกเรียกจากโหมดอื่นเท่านั้น เช่น Buddha Mode เรียก Arena · ต้นทาง agents/${m.id} · อัปเดตผ่านปุ่มอัพเดต mirror ใน BAZER Console`;
+  return [
+    '---',
+    `name: ${m.skill}`,
+    `description: "${desc}"`,
+    'metadata:',
+    '  opencode/autoinvoke: false',
+    '---',
+    '',
+    `# ${m.skill} — ${m.name} Mode (mirror)`,
+    '',
+    `ไฟล์นี้เป็นสำเนา (mirror) ของโหมด ${m.name} จาก agents/${m.id} — ห้ามแก้ไฟล์นี้ตรง ๆ ให้แก้ที่ต้นทางแล้วกด "อัพเดต mirror" ใน BAZER Console`,
+    '',
+    `วิธีใช้: โหลด skill นี้ด้วย ID ${m.skill} แล้วทำตามเนื้อหาทั้งหมดด้านล่าง เสมือนสลับเข้าสู่โหมด ${m.name} — สิทธิ์เครื่องมือจริงยังเป็นของโหมดที่รันอยู่ (ถ้าโหลด skill ไม่ได้ ให้อ่านไฟล์นี้ตรง ๆ)`,
+    '',
+    body,
+    '',
+  ].join('\n');
+}
+function mirrorStatus() {
+  return MIRRORS.map(m => {
+    const src = findAgentSource(m.id);
+    const cur = readText(path.join(P.skillsDir, m.skill, 'SKILL.md'));
+    const synced = !!(src && cur !== null && cur === buildMirrorContent(m, src.content));
+    return { id: m.id, name: m.name, skill: m.skill, agentExists: !!src, source: src ? src.from : null, exists: cur !== null, synced };
+  });
+}
+
 /* ---------------------------------- gather ---------------------------------- */
 
 let cliVersionCache = { v: null, at: 0 };
@@ -600,6 +661,29 @@ async function runVerify() {
     const badColor = ag.filter(a => a.colorOk === false);
     if (badColor.length) add('fail', 'agent color ไม่ใช่ hex (V2 จะทิ้ง agent)', badColor.map(a => a.file + ' → ' + a.color).join(' · '));
     else add('ok', 'agent frontmatter ผ่าน', `${ag.length} ตัว`);
+  }
+
+  // 7b planningAgents ของ Plannotator
+  {
+    try {
+      const arrs = parseJSONC(P.opencodeJsonc).obj || {};
+      const plist = arrs.plugins || arrs.plugin || [];
+      let pa = [];
+      for (const x of (Array.isArray(plist) ? plist : [])) { const o = Array.isArray(x) ? x[1] : x?.options; if (o?.planningAgents) { pa = o.planningAgents; break; } }
+      const need = ['buddha', 'arena', 'snack', 'poteto-mode'];
+      const miss = need.filter(n => !pa.includes(n));
+      if (!pa.length) add('warn', 'planningAgents ของ Plannotator', 'ไม่พบค่า — กดเปิด/บันทึกปลั๊กอินในแท็บ Plannotator เพื่อเขียนใหม่');
+      else if (miss.length) add('warn', 'planningAgents ยังขาดโหมด', miss.join(', ') + ' — เปิดปลั๊กอินใหม่ในแท็บ Plannotator');
+      else add('ok', 'planningAgents ครบตามโหมดจริง', pa.join(', '));
+    } catch {}
+  }
+
+  // 7c mirror โหมด (BAZERs-EXTENSION-*)
+  {
+    const ms = safe(mirrorStatus, []);
+    const bad = ms.filter(x => !x.synced);
+    if (!bad.length) add('ok', 'mirror โหมด (BAZERs-EXTENSION-*)', `${ms.length} ตัวตรงกับต้นทาง`);
+    else add('warn', `mirror โหมดต้องอัพเดต ${bad.length} ตัว`, bad.map(b => b.name).join(', ') + ' — กด "อัพเดต mirror" ในแท็บ Buddha');
   }
 
   // 8 plannotator
@@ -934,7 +1018,7 @@ const ACTIONS = {
     if (parts.config) {
       const tpl = path.join(B, 'config', 'pstack-models.template.md');
       if (fs.existsSync(tpl) && !fs.existsSync(P.pstackModels)) {
-        writeAtomic(P.pstackModels, readText(tpl));
+        writeAtomic(P.pstackModels, pstackTemplateContent(B));
         stat.config = 'คัดลอก template แล้ว';
       } else stat.config = fs.existsSync(P.pstackModels) ? 'มีไฟล์อยู่แล้ว — ไม่ทับ' : 'ไม่พบ template';
     }
@@ -1025,7 +1109,7 @@ const ACTIONS = {
     if (!Array.isArray(arr)) arr = [];
     const nameOf = x => typeof x === 'string' ? x : Array.isArray(x) ? String(x[0] || '') : String(x?.package || '');
     arr = arr.filter(x => !nameOf(x).includes('plannotator'));
-    const PLAN_OPTS = { workflow: 'plan-agent', planningAgents: ['plan', 'bazer', 'arena', 'snack'] };
+    const PLAN_OPTS = { workflow: 'plan-agent', planningAgents: ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'] };
     if (enable) {
       if (key === 'plugin') arr.push(['@plannotator/opencode@latest', PLAN_OPTS]);
       else arr.push({ package: '@plannotator/opencode@latest', options: PLAN_OPTS });
@@ -1035,7 +1119,7 @@ const ACTIONS = {
     bk.add(P.opencodeJsonc);
     writeAtomic(P.opencodeJsonc, jsonHeader('Global config') + JSON.stringify(obj, null, 2) + '\n');
     bk.finalize();
-    return { message: `${enable ? 'เปิด' : 'ปิด'} ปลั๊กอิน Plannotator ใน global config แล้ว (โหมด plan-agent · planningAgents: plan, bazer, arena, snack) — มีผลกับ session ใหม่` };
+    return { message: `${enable ? 'เปิด' : 'ปิด'} ปลั๊กอิน Plannotator ใน global config แล้ว (โหมด plan-agent · planningAgents: plan, buddha, arena, snack, poteto-mode) — มีผลกับ session ใหม่` };
   },
 
   plannotator: async ({ op }) => {
@@ -1076,6 +1160,16 @@ const ACTIONS = {
     writeAtomic(P.pstackModels, content);
     bk.finalize();
     return { message: `บันทึก pstack-models.md แล้ว — ${clean.length} role · budget ${b} (${EFFORT[b]}) (มีผลกับ session ใหม่)` };
+  },
+
+  'save-model-sets': async ({ sets }) => {
+    const arr = (Array.isArray(sets) ? sets : []).slice(0, 50).map(s => ({
+      name: String((s && s.name) || '').trim().slice(0, 60) || 'ชุดใหม่',
+      models: (Array.isArray(s && s.models) ? s.models : []).map(x => String(x).trim()).filter(Boolean).slice(0, 50),
+      roles: (Array.isArray(s && s.roles) ? s.roles : []).map(x => String(x).trim()).filter(Boolean).slice(0, 60),
+    }));
+    patchConfig({ modelSets: arr });
+    return { message: `บันทึกชุดโมเดลแล้ว (${arr.length} ชุด) — เก็บไว้ใน console.config.json` };
   },
 
   'save-plannotator-config': async ({ semanticDiff, callFlow, raw, dryRun }) => {
@@ -1124,24 +1218,97 @@ const ACTIONS = {
     bk.finalize();
     return { message: `บันทึก ${base} แล้ว (สำรองก่อนเขียน — มีผลกับ session ใหม่)` };
   },
-  'save-bazer-arena': async ({ models }) => {
+  /* pStack models roles + mirrors */
+  'pm-role-save': async ({ role, models, dryRun }) => {
+    const r = String(role || '').trim();
+    if (!['arena runners', 'arena cross-judge pool'].includes(r)) throw new Error('role นี้ไม่รองรับ: ' + role);
     const arr = (Array.isArray(models) ? models : []).map(x => String(x).trim()).filter(Boolean);
     let content = readText(P.pstackModels);
-    if (content === null) {
-      const tpl = readText(path.join(BUNDLE, 'config', 'pstack-models.template.md'));
-      content = tpl || '# pStack model configuration\n# budget: large (xhigh)\n';
-    }
+    if (content === null) content = pstackTemplateContent();
+    const isRole = (l, r2) => { const i = l.indexOf(':'); return i > 0 && l.slice(0, i).trim() === r2; };
     const lines = content.split(/\r?\n/);
-    const idx = lines.findIndex(l => /^bazer arena runners\s*:/.test(l.trim()));
+    const idx = lines.findIndex(l => isRole(l, r));
     if (arr.length) {
-      const newLine = `bazer arena runners: ${arr.join(', ')}`;
-      if (idx >= 0) lines[idx] = newLine; else lines.push(newLine);
+      const nl = `${r}: ${arr.join(', ')}`;
+      if (idx >= 0) lines[idx] = nl; else lines.push(nl);
     } else if (idx >= 0) lines.splice(idx, 1);
-    const bk = createBackup('save-bazer-arena');
+    if (dryRun) return { message: `ทดสอบ: ${r} → ${arr.join(', ') || '(ลบบรรทัด)'}`, content: lines.join('\n') };
+    const bk = createBackup('pm-role-save');
     bk.add(P.pstackModels);
     writeAtomic(P.pstackModels, lines.join('\n'));
     bk.finalize();
-    return { message: `บันทึกโมเดล Arena ของ Bazer แล้ว (${arr.length} ตัว)` };
+    return { message: `บันทึก ${r} แล้ว (${arr.length} โมเดล) — มีผลกับ session ใหม่` };
+  },
+  'pm-legacy-migrate': async () => {
+    const content = readText(P.pstackModels);
+    if (content === null) throw new Error('ยังไม่มี pstack-models.md');
+    const isRole = (l, r2) => { const i = l.indexOf(':'); return i > 0 && l.slice(0, i).trim() === r2; };
+    const lines = content.split(/\r?\n/);
+    const li = lines.findIndex(l => isRole(l, 'bazer arena runners'));
+    if (li < 0) return { message: 'ไม่พบบรรทัดเก่า bazer arena runners — ไม่มีอะไรต้องย้าย' };
+    const oldVal = lines[li].slice(lines[li].indexOf(':') + 1).trim();
+    const hasArena = lines.some(l => isRole(l, 'arena runners'));
+    lines.splice(li, 1);
+    let msg;
+    if (hasArena) msg = 'ลบบรรทัดเก่าแล้ว (arena runners มีค่าอยู่แล้ว — Buddha ใช้ชุดเดียวกับ Arena)';
+    else { lines.push(`arena runners: ${oldVal}`); msg = 'ย้ายค่าไปเป็น arena runners แล้ว (Buddha ใช้ชุดเดียวกับ Arena)'; }
+    const bk = createBackup('pm-legacy-migrate');
+    bk.add(P.pstackModels);
+    writeAtomic(P.pstackModels, lines.join('\n'));
+    bk.finalize();
+    return { message: msg };
+  },
+  'pm-legacy-del': async () => {
+    const content = readText(P.pstackModels);
+    if (content === null) throw new Error('ยังไม่มี pstack-models.md');
+    const lines = content.split(/\r?\n/);
+    const li = lines.findIndex(l => { const i = l.indexOf(':'); return i > 0 && l.slice(0, i).trim() === 'bazer arena runners'; });
+    if (li < 0) return { message: 'ไม่พบบรรทัดเก่า — ไม่มีอะไรต้องลบ' };
+    lines.splice(li, 1);
+    const bk = createBackup('pm-legacy-del');
+    bk.add(P.pstackModels);
+    writeAtomic(P.pstackModels, lines.join('\n'));
+    bk.finalize();
+    return { message: 'ลบบรรทัดเก่า bazer arena runners แล้ว' };
+  },
+  'mirror-agents': async ({ names, dryRun }) => {
+    const want = Array.isArray(names) ? names : [];
+    const list = MIRRORS.filter(m => !want.length || want.includes(m.id) || want.includes(m.skill));
+    if (!list.length) throw new Error('ไม่รู้จักชื่อโหมดที่จะ mirror');
+    const bk = createBackup('mirror-agents');
+    const results = [];
+    let n = 0;
+    for (const m of list) {
+      const src = findAgentSource(m.id);
+      if (!src) { results.push({ id: m.id, name: m.name, skill: m.skill, status: 'no-source' }); continue; }
+      const content = buildMirrorContent(m, src.content);
+      const f = path.join(P.skillsDir, m.skill, 'SKILL.md');
+      const prev = readText(f);
+      const status = prev === null ? 'new' : (prev === content ? 'same' : 'diff');
+      if (!dryRun && status !== 'same') { bk.add(f); writeAtomic(f, content); n++; }
+      results.push({ id: m.id, name: m.name, skill: m.skill, status });
+    }
+    if (!dryRun) bk.finalize();
+    const mustUpdate = results.filter(r => r.status === 'new' || r.status === 'diff').length;
+    const noSource = results.filter(r => r.status === 'no-source').length;
+    const msg = dryRun
+      ? `ทดสอบ mirror: ต้องอัปเดต ${mustUpdate} · ตรงอยู่แล้ว ${results.length - mustUpdate - noSource}${noSource ? ' · ไม่มีต้นทาง ' + noSource : ''}`
+      : `อัพเดต mirror แล้ว ${n} ตัว (ที่เหลือตรงอยู่แล้ว${noSource ? ' · ไม่มีต้นทาง ' + noSource : ''}) — โหลดด้วย ID ได้ทันทีใน session ใหม่`;
+    return { message: msg, results };
+  },
+  'install-agent': async ({ file, dryRun }) => {
+    const base = path.basename(String(file || ''));
+    if (!base.endsWith('.md')) throw new Error('ต้องเป็นไฟล์ .md');
+    const src = path.join(BUNDLE, 'agents', base);
+    if (!fs.existsSync(src)) throw new Error('ไม่พบไฟล์ต้นทางใน bundle: ' + base);
+    const dst = path.join(P.agentsDir, base);
+    if (dryRun) return { message: `ทดสอบ: จะติดตั้ง ${base} → ${dst}` };
+    const bk = createBackup('install-agent');
+    bk.add(dst);
+    fs.mkdirSync(P.agentsDir, { recursive: true });
+    fs.copyFileSync(src, dst);
+    bk.finalize();
+    return { message: `ติดตั้ง ${base} จาก bundle แล้ว (สำรองของเดิม — มีผลกับ session ใหม่)` };
   },
 
   /* projects + setup */
@@ -1216,7 +1383,7 @@ const ACTIONS = {
     const gp = parseJSONC(P.opencodeJsonc);
     const arr = (gp.obj && (gp.obj.plugin || gp.obj.plugins)) || [];
     const hasPl = Array.isArray(arr) && arr.some(x => JSON.stringify(x).includes('plannotator'));
-    steps.push({ id: 'plugins', label: 'ลงทะเบียนปลั๊กอิน Plannotator (เปิด submit_plan ให้ plan + Bazer + arena + Snack)', detail: hasPl ? 'มีอยู่แล้ว — ข้าม' : 'จะเพิ่มใน ' + P.opencodeJsonc, will: !hasPl });
+    steps.push({ id: 'plugins', label: 'ลงทะเบียนปลั๊กอิน Plannotator (เปิด submit_plan ให้ plan + buddha + arena + snack + poteto-mode)', detail: hasPl ? 'มีอยู่แล้ว — ข้าม' : 'จะเพิ่มใน ' + P.opencodeJsonc, will: !hasPl });
     const countCopy = (src, dst) => {
       let fresh = 0, exist = 0;
       try {
@@ -1255,6 +1422,11 @@ const ACTIONS = {
     let launchMissing = 0;
     try { launchMissing = fs.readdirSync(path.join(__dirname, 'launch-template')).filter(f => !fs.existsSync(path.join(launchTarget, f))).length; } catch {}
     steps.push({ id: 'launch', label: 'ติดตั้งไฟล์ launch (เปิด server 4096 + สคริปต์สลับโหมดล็อก)', detail: (serveExists && !launchMissing) ? 'มีอยู่แล้วที่ ' + launchTarget : 'จะสร้างที่ ' + launchTarget + (CFG.launchDir ? '' : ' + ตั้ง launchDir ให้แอป') + (launchMissing ? ` (ยังขาด ${launchMissing} ไฟล์)` : ''), will: !serveExists || launchMissing > 0 });
+    {
+      const ms = safe(mirrorStatus, []);
+      const msBad = ms.filter(x => !x.synced).length;
+      steps.push({ id: 'mirror', label: `mirror โหมด → skills (BAZERs-EXTENSION-*) — ต้องอัพเดต ${msBad} / ${ms.length}`, detail: 'ให้โหมดต่าง ๆ เรียกกันได้ (เช่น Buddha เรียก Arena) — เขียนที่ ' + P.skillsDir, will: msBad > 0 });
+    }
     return { steps, message: `${steps.filter(s => s.will).length} ขั้นตอนพร้อมติดตั้ง` };
   },
   'setup-apply': async ({ steps = [], overwrite = false, autostart = false }) => {
@@ -1271,7 +1443,7 @@ const ACTIONS = {
       const key = obj.plugin && !obj.plugins ? 'plugin' : 'plugins';
       let arr2 = Array.isArray(obj[key]) ? obj[key] : [];
       arr2 = arr2.filter(x => !JSON.stringify(x).includes('plannotator'));
-      const opts = { workflow: 'plan-agent', planningAgents: ['plan', 'bazer', 'arena', 'snack'] };
+      const opts = { workflow: 'plan-agent', planningAgents: ['plan', 'buddha', 'arena', 'snack', 'poteto-mode'] };
       arr2.push(key === 'plugin' ? ['@plannotator/opencode@latest', opts] : { package: '@plannotator/opencode@latest', options: opts });
       obj[key] = arr2;
       const bk = createBackup('setup-plugins');
@@ -1315,8 +1487,8 @@ const ACTIONS = {
       if (fs.existsSync(tpl)) { fs.mkdirSync(path.dirname(P.agentsMd), { recursive: true }); fs.copyFileSync(tpl, P.agentsMd); log.push('AGENTS.md'); }
     }
     if (has('pstack-models') && !fs.existsSync(P.pstackModels)) {
-      const tpl = path.join(BUNDLE, 'config', 'pstack-models.template.md');
-      if (fs.existsSync(tpl)) { writeAtomic(P.pstackModels, readText(tpl)); log.push('pstack-models.md'); }
+      writeAtomic(P.pstackModels, pstackTemplateContent());
+      log.push('pstack-models.md');
     }
     if (has('plugins-bazer-fire')) {
       const src = path.join(BUNDLE, 'plugins', 'bazer-fire');
@@ -1362,6 +1534,7 @@ const ACTIONS = {
       log.push('ไฟล์ launch: ' + target + (nL ? ' (+' + nL + ')' : ''));
     }
     if (autostart) { await ACTIONS['autostart']({ on: true }); log.push('autostart'); }
+    if (has('mirror')) { try { await ACTIONS['mirror-agents']({}); log.push('mirror โหมด → skills'); } catch { log.push('mirror โหมด (ข้าม — error)'); } }
     return { message: 'ติดตั้งเสร็จ — ' + log.join(' · ') };
   },
 
@@ -1453,6 +1626,7 @@ async function gatherState() {
     pl: { configs: [], cache: [], cliPath: null, cliOk: false, dupes: [] },
     build: safe(walkBuild, { exists: false, files: [], counts: {}, diffCount: 0, stray: false }),
     models2: { exists: fs.existsSync(P.pstackModels), content: readText(P.pstackModels) || '', path: P.pstackModels },
+    modelSets: Array.isArray(CFG.modelSets) ? CFG.modelSets : [],
     history: readHistory(60),
     backups: listBackups(),
   };
@@ -1473,21 +1647,23 @@ async function gatherState() {
   const rmd = CFG.launchDir ? readText(path.join(CFG.launchDir, 'remindToUpdate.md')) : null;
   s.remind = rmd ? { exists: true, preview: rmd.split(/\r?\n/).filter(l => l.trim()).slice(0, 12).join('\n').slice(0, 420) } : { exists: false };
   try {
-    const bz = readText(path.join(P.agentsDir, 'bazer.md'));
-    const bzColor = (bz?.match(/^color:\s*(.+)$/m) || [])[1]?.trim().replace(/["']/g, '') || '';
     const arrs = parseJSONC(P.opencodeJsonc).obj || {};
     const plist = arrs.plugins || arrs.plugin || [];
     let pa = [];
     for (const x of (Array.isArray(plist) ? plist : [])) { const o = Array.isArray(x) ? x[1] : x?.options; if (o?.planningAgents) { pa = o.planningAgents; break; } }
-    s.bazer = { agentExists: bz !== null, color: bzColor, pluginOk: Array.isArray(pa) && pa.includes('bazer') && pa.includes('arena') };
-    const sn = readText(path.join(P.agentsDir, 'snack.md'));
-    const snColor = (sn?.match(/^color:\s*(.+)$/m) || [])[1]?.trim().replace(/["']/g, '') || '';
-    s.snack = { agentExists: sn !== null, color: snColor, pluginOk: Array.isArray(pa) && pa.includes('snack') };
+    s.plg = {
+      planningAgents: Array.isArray(pa) ? pa : [],
+      buddha: Array.isArray(pa) && pa.includes('buddha'),
+      arena: Array.isArray(pa) && pa.includes('arena'),
+      snack: Array.isArray(pa) && pa.includes('snack'),
+      poteto: Array.isArray(pa) && pa.includes('poteto-mode'),
+    };
     s.fire = {
       file: fs.existsSync(path.join(P.config, 'plugins', 'bazer-fire', 'index.ts')),
       reg: Array.isArray(plist) && plist.some(x => String(typeof x === 'string' ? x : x?.package || '').includes('bazer-fire')),
     };
-  } catch { s.bazer = { agentExists: false, color: '', pluginOk: false }; s.snack = { agentExists: false, color: '', pluginOk: false }; s.fire = { file: false, reg: false }; }
+    s.mirror = safe(mirrorStatus, []);
+  } catch { s.plg = { planningAgents: [], buddha: false, arena: false, snack: false, poteto: false }; s.fire = { file: false, reg: false }; s.mirror = []; }
   return s;
 }
 function safe(fn, fallback) { try { return fn(); } catch { return fallback; } }

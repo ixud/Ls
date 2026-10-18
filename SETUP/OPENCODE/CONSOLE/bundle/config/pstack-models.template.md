@@ -22,7 +22,6 @@ reflect tooling: grok-4.7-xhigh-fast
 reflect judgment, divergent, synthesizer: claude-opus-5-5-xhigh
 arena runners: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
 arena cross-judge pool: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
-bazer arena runners: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
 swarm workers: grok-4.7-xhigh-fast
 architect runners: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
 interrogate reviewers: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
