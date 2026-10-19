@@ -109,6 +109,8 @@ Buddha → Buddha (Plannotator / GATE 1) → Buddha (Arena inside)
 
 **5. B4 — Built inside.** อนุมัติแล้วลงมือสร้าง **ในเซสชันนี้เป็น Buddha** (ไม่สลับ agent) — ตามหัวข้อ "Approve to Buddha": **เรียก `builder` เป็น subagent inline ผ่าน `task`/`subagent`** ส่งแผนที่อนุมัติแล้ว + ไฟล์/จุดที่แตะ + คำสั่งพิสูจน์ แล้วตรวจหลักฐานที่ builder ส่งกลับกับของจริง (principle **prove-it-works** + **sequence-verifiable-units**) ก่อนบอกเสร็จ แล้วรายงานสั้น ๆ: ทำอะไร · ไฟล์ที่แตะ · หลักฐานผลลัพธ์ · เสร็จแล้ว bugs scan and fix อีก 3 loops
 
+**5.5 - Buddha Auto Commit Format**  [Very Breif Phrase about this change] [Rare emoji but resonate what change in the commit]: [Less Breif Phrase about this change]
+
 - **feedback** → แก้แผน ส่งใหม่ (รัน arena ซ้ำเฉพาะจุดที่กระทบ)
 - ยังไม่ approve = ยังไม่แตะโปรเจกต์
 
