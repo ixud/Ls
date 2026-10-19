@@ -866,21 +866,28 @@ function mirrorCard(){
 function flowCard(){
   const fk = S.flowkit || {};
   const on = !!(fk.pluginFile && fk.registered);
+  const pl = fk.plPatch || { total: 0, stale: 0, patched: 0, unknown: 0, notInVersion: [] };
+  const plNa = (pl.notInVersion && pl.notInVersion.length) ? ' · จุด ' + pl.notInVersion.join(', ') + ' ไม่มีในเวอร์ชันนี้' : '';
+  const plOk = !pl.total || (!pl.stale && !pl.unknown);
+  const plText = !pl.total ? 'ยังไม่พบ plannotator.html — ข้าม (ติดตั้ง/ซิงค์จะลองให้ใหม่)'
+    : pl.stale ? pl.stale + '/' + pl.total + ' ไฟล์ยังแพตช์ไม่ครบ 5 จุด — รัน patch-plannotator.mjs (ดูแผน: --dry-run)' + plNa
+    : pl.unknown ? 'อ่านสถานะไม่ได้ — Plannotator อาจเปลี่ยนโครง html (ตรวจ: patch-plannotator.mjs --check)' + plNa
+    : pl.patched + '/' + pl.total + ' ไฟล์ครบ 5 จุด · label "Approve → Buddha" ไม่มี "(?)" · key plannotator-approve-target-v2' + plNa;
   const rows = [
     ['ปลั๊กอิน bazer-flow', fk.pluginFile, fk.pluginFile ? ('ติดตั้งที่ ' + S.paths.config + '\\plugins\\bazer-flow') : 'ยังไม่มี — กดติดตั้ง'],
     ['ลงทะเบียนใน config', fk.registered, fk.registered ? './plugins/bazer-flow อยู่ใน plugins[]' : 'ยังไม่ลงทะเบียน'],
     ['builder (subagent)', fk.builder && fk.builderMode === 'subagent', fk.builder ? ('mode = ' + (fk.builderMode || '?') + (fk.builderDisabled ? ' (ปิดอยู่)' : '')) : 'ยังไม่ติดตั้ง'],
     ['AGENTS gate', fk.gateMarker, fk.gateMarker ? 'marker BAZER-FLOW-GATE v2 ครบ' : 'ยังไม่มี marker'],
-    ['Plannotator: ปุ่มอนุมัติ', (fk.plPatch && fk.plPatch.patched > 0) ? true : (fk.plPatch && fk.plPatch.total ? false : true), (fk.plPatch && fk.plPatch.total) ? ((fk.plPatch.stale ? fk.plPatch.stale + '/' + fk.plPatch.total + ' ไฟล์ยังชี้ build/builder — รัน patch-plannotator.mjs' : fk.plPatch.patched + '/' + fk.plPatch.total + ' ไฟล์ชี้ buddha (label "Buddha")')) : 'ยังไม่พบ plannotator.html — ข้าม'],
+    ['Plannotator: ปุ่มอนุมัติ → Buddha', plOk, plText],
   ].map(([l, okay, d]) => `<div class="vrow">${led(okay ? 'ok' : 'warn')}<div><b>${esc(l)}</b><div class="small muted">${esc(d)}</div></div></div>`).join('');
   return `
   <div class="card">
     <h3>🧩 BAZER FLOW v2 — Plan gate + builder ${on ? '<span class="badge ok">ใช้งาน</span>' : '<span class="badge warn">ยังไม่ติดตั้ง</span>'}</h3>
-    <div class="small muted">Plan Mode ถูกบังคับให้ยื่นแผนก่อนสร้าง และสร้างผ่าน subagent <span class="mono">builder</span> (subagent เท่านั้น — ไม่โชว์ใน Main Agents) · ปุ่มอนุมัติของ Plannotator ชี้ <span class="mono">buddha</span> (label "Buddha" — Buddha เรียก builder เป็น subagent inline) · Buddha ทำงานในเซสชันเดียว ไม่สลับ agent · prompt tab โชว์ PLAN/ARENA/BUILD</div>
+    <div class="small muted">Plan Mode ถูกบังคับให้ยื่นแผนก่อนสร้าง และสร้างผ่าน subagent <span class="mono">builder</span> (subagent เท่านั้น — ไม่โชว์ใน Main Agents) · ปุ่มอนุมัติของ Plannotator อ่าน <span class="mono">Approve → Buddha</span> — ไม่มีเครื่องหมาย <span class="mono">(?)</span> แล้ว (ค่าเริ่มต้นคือ <span class="mono">buddha</span> · key <span class="mono">plannotator-approve-target-v2</span> ทับค่าเก่าในเบราว์เซอร์) · Plan Mode อนุมัติแล้วสลับเป็น Buddha แล้ว Buddha เรียก <span class="mono">builder</span> เป็น subagent inline (Buddha ไม่สลับ agent ต่อ — ทำงานในเซสชันเดียว) · ปุ่มเดียวจบ + รันอัตโนมัติใน "ติดตั้ง/ซ่อม BAZER FLOW v2" · ตรวจได้ด้วย <span class="mono">patch-plannotator.mjs --check</span> · prompt tab โชว์ PLAN/ARENA/BUILD</div>
     <div class="verify-list mt">${rows}</div>
     <div class="mt flex">
       <button class="btn gold" data-act="flow-apply">ติดตั้ง / ซ่อม BAZER FLOW v2</button>
-      <button class="btn sm" data-act="plannotator-patch">แพตช์ปุ่มอนุมัติ → Buddha</button>
+      <button class="btn sm" data-act="plannotator-patch">อัพเดต config ปุ่มอนุมัติ → Buddha (ไม่มี "(?)")</button>
       ${on ? '<button class="btn sm danger" data-act="flow-toggle" data-en="0">ปิด (กลับพฤติกรรมเดิม)</button>' : ''}
       <span class="small muted">มีผลกับ session ใหม่ — ต้องปิด-เปิด OpenCode หลังติดตั้ง</span>
     </div>
@@ -2309,7 +2316,7 @@ document.addEventListener('click', async e => {
     case 'legacy-del': act('pm-legacy-del', {}, 'ลบบรรทัดเก่า bazer arena runners?'); break;
     case 'mirror-run': act('mirror-agents', {}, 'อัพเดต mirror โหมด → skills (สำรองก่อนเขียนทุกไฟล์)?'); break;
     case 'flow-apply': act('flow-apply', {}, 'ติดตั้ง/ซ่อม BAZER FLOW v2 (plugin + builder + กฎ AGENTS.md)?'); break;
-    case 'plannotator-patch': act('plannotator-patch', {}, 'แพตช์ปุ่มอนุมัติของ Plannotator ให้ชี้ Buddha (label "Buddha" — Buddha จะเรียก builder เป็น subagent inline) — สำรอง .bak ทุกไฟล์ก่อนเขียน?'); break;
+    case 'plannotator-patch': act('plannotator-patch', {}, 'อัพเดต config ปุ่มอนุมัติของ Plannotator ให้เป็น Buddha? — ปุ่มจะอ่าน "Approve → Buddha" (ไม่มี "(?)") · 5 จุดแพตช์ · key plannotator-approve-target-v2 กันค่าเก่าในเบราว์เซอร์ · Buddha เรียก builder เป็น subagent inline · สำรอง .bak ทุกไฟล์ก่อนเขียน'); break;
     case 'flow-toggle': act('flow-toggle', { enable: t.dataset.en === '1' }, 'สลับการติดตั้ง BAZER FLOW v2?'); break;
     case 'install-agent': act('install-agent', { file: t.dataset.file }, `ติดตั้ง ${t.dataset.file} จาก bundle เข้าเครื่อง?`); break;
     case 'copy-bazer': {

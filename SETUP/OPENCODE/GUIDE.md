@@ -551,11 +551,12 @@ BAZER Console คือแอปหน้าจอในเครื่อง �
 
 หมายเหตุเรื่องปุ่มในหน้าอนุมัติ: ปุ่มและตัวเลือกทั้งหมดเป็นของ Plannotator เอง — ถ้าผู้ใช้เลือกสลับเป็น `arena` เองในหน้าอนุมัติ ให้ทำตาม `arena.md` ในเซสชันนั้น (ไม่ใช่ค่าเริ่มต้นของ BAZER FLOW v1)
 
-**อัปเดต 19 ต.ค. 2026 — เป้าหมายของปุ่มอนุมัติ:** ค่าเริ่มต้นของ Plannotator ถูกตั้งเป็น **`buddha`** (ปุ่มอ่านว่า `Approve → Buddha`) และค่าเก่าในเบราว์เซอร์ถูกกันด้วย key ใหม่ (`plannotator-approve-buddha`) — ผลคือ:
+**อัปเดต 19 ต.ค. 2026 — เป้าหมายของปุ่มอนุมัติ:** ค่าเริ่มต้นของ Plannotator ถูกตั้งเป็น **`buddha`** และปุ่มอ่านว่า **`Approve → Buddha`** — **ไม่มีเครื่องหมาย `(?)` แล้ว** · ค่าเก่าในเบราว์เซอร์ถูกกันด้วย key ใหม่ `plannotator-approve-target-v2` (บังคับค่าเริ่มต้นใหม่ทับของเดิม) · ตัวแพตช์แตะ 5 จุด และตรวจได้ด้วย `node patch-plannotator.mjs --check` — ผลคือ:
+
 - **GATE 1 (แผน Arena):** อนุมัติแล้ว Buddha เดินเฟส Arena ต่อ
-- **GATE 2 (แผนสร้าง):** Buddha เรียก `builder` เป็น **subagent inline** ในเซสชัน (ไม่สลับ agent) — กติกาอยู่ใน `bundle/agents/buddha.md`
-- **Plan Mode:** อนุมัติแล้ว session สลับมาที่ Buddha (ถ้าโฮสต์รองรับ `session.switchAgent`) ซึ่งจะเรียก `builder` ให้เอง; ถ้าไม่ต้องการสลับ ให้เลือก **Disabled** ในเมนู "After approval" ของ Plannotator
-- บนเครื่องนี้ตัวแพตช์คือ `CONSOLE\patch-plannotator.mjs` (รันอัตโนมัติจากปุ่มติดตั้ง/อัพเดต/ซิงค์ของ Console)
+- **GATE 2 (แผนสร้าง):** Buddha เรียก `builder` เป็น **subagent inline** ในเซสชัน (ไม่สลับ agent)
+- **Plan Mode:** อนุมัติแล้วสลับ session มาที่ Buddha (ถ้าโฮสต์รองรับ `session.switchAgent`) แล้ว Buddha เรียก `builder` เป็น subagent inline ให้เอง — **Buddha ไม่สลับ agent ต่อ** (กติกาอยู่ใน `bundle/agents/buddha.md`)
+- บนเครื่องนี้ตัวแพตช์คือ `CONSOLE\patch-plannotator.mjs` — Console มีปุ่มเดียวจบ (**"อัพเดต config ปุ่มอนุมัติ → Buddha (ไม่มี "(?)")"**) และรันให้อัตโนมัติใน ติดตั้ง/ซ่อม BAZER FLOW v2 · อัพเดตทั้งหมด · ซิงค์ทั้งหมด · ติดตั้งเสร็จสรรพ
 
 
 ### 🪞 โหมด "เรียก" กันได้อย่างไร — mirror (BAZERs-EXTENSION-*)

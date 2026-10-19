@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { applyAll as plPatchApplyAll } from './patch-plannotator.mjs';
+import { applyAll as plPatchApplyAll, check as plannotatorCheck, plan as plannotatorPlan, syntaxBad as plannotatorSyntaxBad, syntaxOf as plannotatorSyntax } from './patch-plannotator.mjs';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -444,7 +444,13 @@ function flowRegistered() {
     return Array.isArray(arr) && arr.some(x => String(typeof x === 'string' ? x : x?.package || '').includes(FLOW_PLUGIN_ID));
   } catch { return false; }
 }
-/** Plannotator approve button: อ่าน patch state จาก html จริง (vendor — patch หลุดเมื่ออัปเดต) */
+/** Plannotator approve button → Buddha: อ่าน patch state จาก html จริงด้วย invariant ของ patch-plannotator
+ *  (แหล่งเดียวกับ --check ไม่ hardcode สตริงใน Console อีก) · plan() คืน state ต่อจุด: todo|applied|na
+ *  patched = invariant ระดับไฟล์ครบ (check().recognised && check().ok) + bundle ใน <script type="module"> compile ผ่าน
+ *  — ไม่ใช่แค่ "5 จุด applied": ไฟล์ที่โครงปุ่มพัง (span ชื่อ agent หาย / children array ไม่ปิด) หรือไบต์พัง
+ *  ต้องไม่ถูกนับเป็น patched (เกณฑ์ชุดเดียวกับ `node patch-plannotator.mjs --check`)
+ *  stale = มีจุด todo (แพตช์ซ่อมได้ด้วย patch-plannotator.mjs) · unknown = ที่เหลือ (มีจุด na / โครงไม่ครบจนซ่อมด้วยสคริปต์ไม่ได้ / อ่านไม่รู้เรื่อง)
+ *  ทุกทางคืนค่าได้ — ไม่ throw ออกมาถึงผู้ใช้ (ผู้เรียกยังห่อ safe() อีกชั้น) */
 function plannotatorPatchState() {
   const roots = [
     path.join(HOME, '.cache', 'opencode', 'npm', '@plannotator'),
@@ -462,13 +468,25 @@ function plannotatorPatchState() {
     }
   };
   for (const r of roots) walk(r);
-  let stale = 0, patched = 0;
+  const naIds = new Set();
+  let stale = 0, patched = 0, unknown = 0;
   for (const f of found) {
-    const t = readText(f) || '';
-    if (t.includes('{switchTo:"buddha"}')) patched++;
-    else if (t.includes('{switchTo:"build"}') || t.includes('{switchTo:"builder"}')) stale++;
+    try {
+      const text = readText(f) || '';
+      const points = plannotatorPlan(text);
+      const todo = points.filter(p => p.state === 'todo').length;
+      const na = points.filter(p => p.state === 'na');
+      for (const s of na) naIds.add(s.patch.id);
+      const inv = plannotatorCheck(text);
+      /* เกณฑ์เดียวกับ `--check` (checkAll): invariant required ครบ + bundle ใน <script type="module"> compile ผ่าน
+         (syntaxBad ข้าม 'no-module' = ไฟล์ที่ไม่ใช่หน้า Plannotator) — ไฟล์ที่ไบต์พังจะไม่ถูกเรียกว่า "ครบ" */
+      const syntaxOk = !plannotatorSyntaxBad(plannotatorSyntax(text));
+      if (inv.recognised && inv.ok && syntaxOk) patched++;
+      else if (todo) stale++;
+      else unknown++;
+    } catch { unknown++; }
   }
-  return { total: found.length, stale, patched };
+  return { total: found.length, patched, stale, unknown, notInVersion: [...naIds] };
 }
 function gatherFlowkit() {
   const pluginFile = fs.existsSync(path.join(flowPluginDir(), 'index.ts'));
@@ -486,7 +504,7 @@ function gatherFlowkit() {
     builderMode: mode,
     gateMarker: agentsMd.includes(FLOW_GATE_MARKER),
     version: (bundleBud.match(FLOW_MARKER_RE) || [])[1] || null,
-    plPatch: safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 }),
+    plPatch: safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0, unknown: 0, notInVersion: [] }),
   };
 }
 /** Real load proof: the host must list bazer.flow, not just have the file registered. */
@@ -876,11 +894,13 @@ async function runVerify() {
     else if (!fk.builder) add('warn', 'builder', fk.builderDisabled ? 'ปิดอยู่ (builder.md.disabled) — กด "ติดตั้ง/ซ่อม"' : 'ยังไม่ติดตั้ง — กด "ติดตั้ง/ซ่อม"');
     else add('warn', 'builder', `mode = ${fk.builderMode || '?'} — ต้องเป็น subagent`);
     {
-      const pl = fk.plPatch || { total: 0, stale: 0, patched: 0 };
-      if (!pl.total) add('info', 'Plannotator: ปุ่มอนุมัติ', 'ยังไม่พบ plannotator.html — ข้าม');
-      else if (pl.stale) add('warn', 'Plannotator: ปุ่มอนุมัติชี้ builder', `${pl.stale}/${pl.total} ไฟล์ยังชี้ build — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
-      else if (pl.patched) add('ok', 'Plannotator: ปุ่มอนุมัติชี้ builder', `${pl.patched}/${pl.total} ไฟล์ (label "Builder")`);
-      else add('warn', 'Plannotator: ปุ่มอนุมัติ', 'ไม่พบเครื่องหมายของ patch — Plannotator อาจเปลี่ยนโครง html');
+      const pl = fk.plPatch || { total: 0, stale: 0, patched: 0, unknown: 0, notInVersion: [] };
+      const na = pl.notInVersion || [];
+      if (!pl.total) add('info', 'Plannotator: ปุ่มอนุมัติ → Buddha', 'ยังไม่พบ plannotator.html — ข้าม (ติดตั้ง/ซิงค์จะลองให้ใหม่ทุกครั้ง)');
+      else if (pl.stale) add('warn', 'Plannotator: ปุ่มอนุมัติ → Buddha ยังไม่ครบ 5 จุด', `${pl.stale}/${pl.total} ไฟล์ยังแพตช์ไม่ครบ — ดูแผนด้วย "node patch-plannotator.mjs --dry-run" แล้วรัน "node patch-plannotator.mjs" (สำรอง .bak ทุกไฟล์)`);
+      else if (pl.unknown) add('warn', 'Plannotator: ปุ่มอนุมัติ → Buddha อ่านสถานะไม่ได้', `Plannotator อาจเปลี่ยนโครง html — ตรวจด้วย "node patch-plannotator.mjs --check"${na.length ? ` · จุด ${na.join(', ')} ไม่มีในเวอร์ชันนี้` : ''}`);
+      else add('ok', 'Plannotator: ปุ่มอนุมัติ → Buddha', `${pl.patched}/${pl.total} ไฟล์ครบ 5 จุด — ค่าเริ่มต้นของปุ่มคือ buddha (label "Approve → Buddha" ไม่มี "(?)") · key plannotator-approve-target-v2 · Buddha เรียก builder เป็น subagent inline`);
+      if (na.length && (pl.stale || pl.patched)) add('warn', 'Plannotator: จุดที่ไม่มีในเวอร์ชันนี้', `จุด ${na.join(', ')} ไม่มีในเวอร์ชันนี้ — ยืนยันด้วย "node patch-plannotator.mjs --check"`);
     }
     if (fk.gateMarker) add('ok', 'AGENTS gate (BAZER-FLOW-GATE v2)', 'กฎระดับเครื่องมี gate ครบ');
     else add('warn', 'AGENTS gate', 'ยังไม่มี marker — กด "ติดตั้ง/ซ่อม BAZER FLOW v2" หรือ "รีเซ็ตจาก template"');
@@ -1985,15 +2005,19 @@ const ACTIONS = {
       });
     }
     {
-      const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
+      const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0, unknown: 0, notInVersion: [] });
+      const na = st.notInVersion || [];
+      const naNote = na.length ? ` · จุด ${na.join(', ')} ไม่มีในเวอร์ชันนี้` : '';
       steps.push({
         id: 'plannotator-patch',
-        label: 'แพตช์ปุ่มอนุมัติ Plannotator → Buddha (label "Buddha" — Buddha เรียก builder เป็น subagent inline)',
+        label: 'อัพเดต config ปุ่มอนุมัติ Plannotator → Buddha (ปุ่มอ่าน "Approve → Buddha" ไม่มี "(?)" · Buddha เรียก builder เป็น subagent inline)',
         detail: !st.total
           ? 'ยังไม่พบ plannotator.html — จะลองใหม่ให้อัตโนมัติทุกครั้งที่กดอัพเดต/ซิงค์ (หลังเปิด OpenCode ครั้งแรก)'
           : st.stale
-            ? `จะแพตช์ ${st.stale}/${st.total} ไฟล์ (เปลี่ยนจาก build/builder → buddha · สำรอง .bak ก่อนเขียน)`
-            : `แพตช์แล้ว ${st.patched}/${st.total} ไฟล์ (ค่าเริ่มต้นของปุ่ม + label "Buddha")`,
+            ? `จะแพตช์ ${st.stale}/${st.total} ไฟล์ให้ครบ 5 จุด (label + key plannotator-approve-target-v2 · สำรอง .bak ก่อนเขียน)${naNote}`
+            : st.unknown
+              ? `อ่านสถานะไม่ได้ ${st.unknown}/${st.total} ไฟล์ — Plannotator อาจเปลี่ยนโครง html (ตรวจด้วย patch-plannotator.mjs --check)${naNote}`
+              : `แพตช์ครบแล้ว ${st.patched}/${st.total} ไฟล์ (5/5 จุด · label "Approve → Buddha" ไม่มี "(?)")`,
         will: st.stale > 0,
       });
     }
@@ -2184,17 +2208,19 @@ const ACTIONS = {
     return { message: `อัพเดตแล้ว ${n} รายการ (สำรองอัตโนมัติก่อนเขียน)${tail}`, applied: n };
   },
 
-  /* Plannotator: ปุ่มอนุมัติชี้ buddha (patch vendor ไฟล์ html) — เรียกได้จากปุ่ม + ติดไปกับ install/update */
+  /* Plannotator: ปุ่มอนุมัติ → Buddha (patch vendor ไฟล์ html 5 จุด) — เรียกได้จากปุ่ม + ติดไปกับ install/update */
   'plannotator-patch': async ({ dryRun } = {}) => {
-    const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
-    const r = safe(() => plPatchApplyAll({ dryRun: !!dryRun, home: HOME }), { targets: 0, discovered: 0, applied: 0, skipped: 0, errors: 1, details: [] });
+    const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0, unknown: 0, notInVersion: [] });
+    const r = safe(() => plPatchApplyAll({ dryRun: !!dryRun, home: HOME }), { targets: 0, discovered: 0, applied: 0, skipped: 0, errors: 1, details: [], notInVersion: [] });
     const parts = [`applied=${r.applied}`, `skipped=${r.skipped}`, `targets=${r.targets}`];
     if (r.errors) parts.push(`errors=${r.errors}`);
+    const na = [...new Set([...(r.notInVersion || []).map(n => n.id), ...(st.notInVersion || [])])];
+    const naNote = na.length ? ` · จุด ${na.join(', ')} ไม่มีในเวอร์ชันนี้` : '';
     if (!r.targets) {
       return { message: 'ยังไม่พบ plannotator.html (Plannotator ยังไม่ถูกติดตั้งบนเครื่องนี้) — ปุ่มติดตั้ง/อัพเดต/ซิงค์จะลองให้ใหม่ทุกครั้ง', ...r, state: st };
     }
     const where = (r.details || []).filter(d => d.applied).map(d => `${path.basename(path.dirname(path.dirname(d.file)))}/${path.basename(path.dirname(d.file))}`);
-    const msg = `${dryRun ? 'ทดสอบ: ' : ''}แพตช์ปุ่มอนุมัติ Plannotator → Buddha (label "Buddha" แล้ว Buddha เรียก builder เป็น subagent ต่อ) — ${parts.join(' · ')}${where.length ? ' · ' + where.join(', ') : ''}${r.errors ? ' · มีไฟล์ที่แพตช์ไม่ได้ (ดู log)' : ''}`;
+    const msg = `${dryRun ? 'ทดสอบ: ' : ''}อัพเดต config ปุ่มอนุมัติ Plannotator → Buddha — อ่าน "Approve → Buddha" ไม่มี "(?)" · 5 จุด (ค่าเริ่มต้น buddha · key plannotator-approve-target-v2 ทับค่าเก่าในเบราว์เซอร์) · ${parts.join(' · ')}${where.length ? ' · ' + where.join(', ') : ''}${naNote}${r.errors ? ' · มีไฟล์ที่แพตช์ไม่ได้ (ดู log)' : ''} — ตรวจซ้ำด้วย patch-plannotator.mjs --check`;
     return { message: msg, ...r, state: st };
   },
 

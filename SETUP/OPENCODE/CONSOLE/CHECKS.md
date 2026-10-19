@@ -440,3 +440,56 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 
 - **ต้องรีสตาร์ท OpenCode** ให้ html ที่แพตช์มีผลกับปุ่ม (cache ต่อ process)
 - ถ้าผู้ใช้เคยเลือก "Builder" ไว้ในเมนู After approval ค่าเก่าจะไม่ชนะ เพราะ key เปลี่ยนเป็น `plannotator-approve-buddha`
+
+
+## รอบ 12 — ตัด "(?)" บนปุ่มอนุมัติ + ตั้ง config เป็น default + Console กดปุ่มเดียวอัปเดตได้
+
+วันที่: 19 ต.ค. 2026 · Console v1.5.0 · โจทย์ (Buddha Mode, ผ่าน Arena ในเซสชัน): (1) Plan Mode อนุมัติแล้วสลับเป็น Buddha แล้ว Buddha เรียก `builder` เป็น sub-agent inline (Buddha Mode พฤติกรรมเดียวกัน) (2) ปุ่มอนุมัติต้องไม่มีเครื่องหมาย `(?)` (3) ทั้งชุดเป็น default (4) Console ต้องกดปุ่มเดียวอัปเดต config นี้ได้ (5) `builder` `bash: ask` → `allow`
+
+| เรื่อง | ผล |
+|---|---|
+| `patch-plannotator.mjs` | เขียนใหม่เป็น **C3 invariant-first** ที่ merge grafts: 5 จุดเดิม · `(?)` ถูกลบด้วย regex ทนการเปลี่ยนชื่อ minified + บังคับ `,` นำหน้า · key ใหม่ `plannotator-approve-target-v2` (ทับค่าเก่า 3 key) · `INVARIANTS` 2 ระดับ (required/advisory) · `syntaxOf()` เป็นประตู 1+2 · `--check`/`--verify`/`--json`/`--verbose` · export `plan`/`check`/`describePatches`/`deleteHintSpan`/`syntaxBad` |
+| `bundle/agents/builder.md` | `bash: ask` → `allow` (คอมเมนต์อ้างเหตุ) · `task: deny` + `submit_plan: deny` คงเดิม · buddha/arena/bazer/poteto-mode ยัง `ask` |
+| Console (`console.mjs` + `console.html`) | `plannotatorPatchState()` ใช้ `plan`/`check`/`syntaxBad` ของแพตเชอร์ (patched = invariant ครบ + compile ผ่าน) · ปุ่มใหม่ "อัพเดต config ปุ่มอนุมัติ → Buddha (ไม่มี "(?)")" · แถวสถานะ/ข้อความ/dialog/ขั้น setup-preview ตรงกัน |
+| `flow-check.mjs` | guard ใหม่ใช้ invariant จากแพตเชอร์ (ทุกจุด applied + `(?)`=0 + key ใหม่ + syntax) · ไฟล์ยังไม่แพตช์ = WARN · เทสต์ใหม่ 4 ข้อ (regex กับชื่อ minified เปลี่ยน · needle ไม่ทับ · `(?)` 2 ครั้ง throw · โครงปุ่มพังต้องถูกจับ) |
+| `mode-lock.mjs` | R11 เขียนใหม่ให้ตรงความจริง (buddha + ไม่มี `(?)` + key v2 + ตัวตรวจ `--check`) |
+| เอกสาร | `FLOW.md` §3 · `GUIDE.md` · `CONSOLE/README.md` — ถอดคำแนะนำเก่า "เลือก Disabled ก่อนใช้ Buddha" ออก |
+
+### Arena (B2 — รันในเซสชันนี้)
+
+| ขั้น | ผล |
+|---|---|
+| Fixtures | 3 สถานะ × 2 เวอร์ชัน vendor (`vendor` / รอบ 10 `builder` / รอบ 11 `buddha`) ผ่าน sha ยืนยัน |
+| Runners | C1 minimal (ข้อมูลล้วน) · C2 declarative table + `anchor[]` + syntax gate · C3 invariant-first — ทั้งสามรันด้วย `opencode-go/deepseek-v4.1-flash` |
+| Convergence | **ทั้งสามจบที่ sha เดียวกัน** `77544852b250d931` (vendor ใหม่) / `8bc4493bb6502a19` (vendor เก่า) |
+| Cross-judge | `deepseek-v4.1-flash` ให้ **C3 4.75 · C1 4.55 · C2 4.40** (ไม่ใช่ `beam-free` ที่ระบุในบรีฟ — บันทึกตามจริง) |
+| Base + grafts | base = C3 · ยกจาก C2: syntax gate + `--json`/`inspect`/`describePatches` + sha/syntax ใน `details[]` · ยกจาก C1: ชุดเคส T0-T9 + fixture `edge-neighbour-renamed` + พิมพ์ invariant เฉพาะ FAIL/`--verbose` |
+| เคสที่แยกผู้ชนะ | vendor เปลี่ยนชื่อ minify ใน span `(?)` → C1 ปฏิเสธทั้งไฟล์ · **C2 รายงาน `applied` ทั้งที่ `children:"(?)"` ยัง=1** · C3 ลบถูก |
+
+### Loop 1-3 — bug scan (เจอ 4 บั๊ก แก้ครบ)
+
+| รอบ | บั๊กที่เจอ | หลักฐาน |
+|---|---|---|
+| 1 | flow-check พังทั้งตัวเมื่อเจอ `(?)` 2 ก้อน (`plan()` throw ทะลุ) | `run9.log` |
+| 1 | เกณฑ์หลวม นับเองแค่ `(?)`+key+syntax → ไฟล์ที่ 5 จุด applied แต่โครงปุ่มพังถูกประกาศ PASS ทั้งที่ `--check` exit 1 | `run10-round1.log` |
+| 2 | invariant ถูกกลืน: ค่า `to` ผิดนับ (key โผล่ 2 ครั้ง) → state `na` → `--check` คืน `ok=1 failed=0 exit 0` | `run11-round2.log` + เทสต์ regression `run13` |
+| 3 | Console เรียกไฟล์ที่ compile ไม่ผ่านว่า "ครบ" (`patched:1` ขณะ `--check` exit 1) | `run14-round3.log` |
+
+### หลักฐาน (รันจริง — ตรวจซ้ำโดย Buddha เอง)
+
+| ตรวจ | ผล |
+|---|---|
+| `patch-plannotator.mjs --check` (แคชจริง) | `CHECK files=2 ok=2 failed=0 advisory=0 errors=0` exit 0 · 5 จุด `ok` ทั้ง 2 copy |
+| แพตช์จริง (U8) | `applied=4 skipped=6 targets=2 errors=0` (4 = จุดที่แพตช์ ไม่ใช่ไฟล์) · `.bak` ใหม่ 2 ไฟล์ · รันซ้ำ `applied=0` ไม่มี backup เพิ่ม |
+| html ทั้ง 2 copy (นับเอง) | `children:"(?)"`=0 · `{switchTo:"buddha"}`=1 · `"plannotator-approve-target-v2"`=1 · key เก่า 3 ตัว=0 · `build`/`builder`=0 |
+| `node flow-check.mjs` | **PASS 32 · WARN 0** exit 0 |
+| `node mode-lock.mjs` | R6/R7 PASS · **R3/R3b/R4 FAIL** (drift ที่มีมาก่อน: `reasoningEffort = medium` ต้องเป็น `max`) — ต้องกด "ล็อกเลย" ใน Console |
+| `builder.md` ที่ติดตั้ง | sha256 `2362d15e…` ตรงกับ bundle เป๊ะ (ติดตั้งผ่านโค้ด action `install-agent` + backup set `2026-10-19T07-35-27-08c5`) |
+| ระยะเวลาที่แตะ | 9 ไฟล์ใน `CONSOLE/` + `FLOW.md` + `GUIDE.md` (ตามตารางข้างบน) · ไม่แตะ `opencode.jsonc`/`model.json`/`console.config.json` |
+
+### ต้องรู้
+
+- **ต้องรีสตาร์ท OpenCode และปิด-เปิดแอป Console** — html ที่แพตช์มีผลต่อ process ที่โหลดใหม่ และ Console ที่รันอยู่ (pid 16028, พอร์ต 4310) ยังโหลดโค้ดเก่า; หลังรีสตาร์ท กดปุ่มจะเป็น no-op (`applied=0`) ซึ่งถูกต้อง
+- คนที่เคยเลือก "Disabled" ในเมนู After approval จะกลับไปเป็น Buddha อัตโนมัติ เพราะ key เปลี่ยนเป็น `plannotator-approve-target-v2` (เจตนา: "ตั้งเป็น default")
+- drift ที่พบและ **ไม่ได้แก้โดยเจตนา**: mirror `BAZERs-EXTENSION-Advisor` มี `metadata:` ซ้ำ 2 บรรทัด · `~/.config/opencode/agents/buddha.md` ขาดหัวข้อ `5.5` (เก่ากว่า bundle 10 นาที) — ทั้งคู่เป็นของมาก่อนรอบนี้ และ Console ปุ่มอัพเดตจะซิงค์ให้เอง
+- `mode-lock.mjs` R3/R3b/R4 เป็นค่าล็อกที่ผู้ใช้ต้องกดตั้งใน Console (ห้ามแก้ `opencode.jsonc`/`model.json` ด้วยมือ)

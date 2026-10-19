@@ -8,7 +8,7 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  bash: ask
+  bash: allow  # ผู้ใช้สั่งให้ builder รันคำสั่งพิสูจน์ผลงานได้เองโดยไม่ต้องรออนุมัติ; ทางออกอันตรายยังถูกกั้นด้วย task: deny / submit_plan: deny และ gate ของ bazer-flow
   task: deny
   submit_plan: deny
 ---

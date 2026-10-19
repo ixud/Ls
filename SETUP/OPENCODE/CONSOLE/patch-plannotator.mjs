@@ -1,45 +1,61 @@
 #!/usr/bin/env node
-/* BAZER — patch-plannotator.mjs   (ปลายทางจริง: CONSOLE\patch-plannotator.mjs)
+/* BAZER — patch-plannotator.mjs   (v3 · invariant-first guard/repair · ปลายทางจริง: CONSOLE\patch-plannotator.mjs)
  *
- * ทำให้ปุ่ม approve ของ Plannotator (Plan Mode) ชี้ไปที่ **subagent `builder`** และโชว์ label "Builder"
- * แทน primary agent `build`
+ * ทำให้ปุ่ม approve ของ Plannotator (Plan Mode) สลับไป primary agent `buddha` แล้วโชว์ label "Approve → Buddha"
+ * (Buddha เป็นคนเรียก `builder` เป็น subagent ในเซสชันต่อ — host เทียบ agent.name กับค่า switchTo ตรง ๆ
+ *  จึงใช้ "builder" เป็นเป้าหมายการสลับไม่ได้ เพราะเป็น subagent ล้วน)
  *
- * ทำไมต้องเป็นสคริปต์ ไม่ใช่แก้มือ: Plannotator ติดตั้งจาก npm เข้า cache ของ OpenCode —
- * อัปเดต/ติดตั้งใหม่เมื่อไร plannotator.html จะถูกทับด้วยของใหม่ (patch หลุด) รันสคริปต์นี้ซ้ำ = กลับมา
- * รันซ้ำบนไฟล์ที่แพตช์แล้ว = ไม่เขียนอะไรเลย (idempotent)
+ * ทำไมสคริปต์ ไม่ใช่แก้มือ: Plannotator ติดตั้งจาก npm เข้า cache ของ OpenCode — อัปเดตเมื่อไร plannotator.html
+ * ถูกทับด้วยของใหม่ (patch หลุด) · รันซ้ำ = ไม่เขียนอะไร (idempotent)
  *
- * ไฟล์ที่แตะ (ค้นหาอัตโนมัติทั้งสองแบบของ cache):
- *   %USERPROFILE%\.cache\opencode\npm\@plannotator\opencode@latest\**\node_modules\@plannotator\opencode\plannotator.html
- *   %USERPROFILE%\.cache\opencode\packages\@plannotator\opencode@latest\node_modules\@plannotator\opencode\plannotator.html
+ * v3 ต่างจาก v2 ตรงไหน — v2 ตัดสิน "สำเร็จ" ด้วย predicate ชุดเดียวกับที่ใช้ตัดสินใจแพตช์
+ * (`verify()` เรียก `plan()` ที่เพิ่งใช้เลือก patch) จึงพิสูจน์ได้แค่ "เขียนไม่พัง" พิสูจน์ไม่ได้ว่าเนื้อไฟล์ถึงปลายทาง:
+ *   - v3 ประกาศ INVARIANTS เป็นข้อมูล (needle + จำนวนที่คาดหวัง + predicate โครงสร้าง) แล้ว **วัดบนเนื้อไฟล์จริง**
+ *     ทั้งก่อนเขียน (plan) และหลังเขียน (อ่านไบต์กลับมา) · เขียนเฉพาะเมื่อ invariant ระดับ required ครบ
+ *   - invariant มี 2 ระดับ: `required` (บล็อกการเขียน + ทำให้ --check fail) = 5 จุดสเปค + โครงปุ่ม (`button/label-structure-intact`)
+ *     · `advisory` (รายงาน แต่ไม่บล็อก) = ความสมเหตุทางหน้าตาของปุ่ม (ลูกศร) — ผูก class เครื่องสำอางของ vendor
+ *     — `button/label-structure-intact` เป็น required ได้เพราะนิยามแบบ "เทียบสองรูป" บนข้อความจริง:
+ *       เนื้อหลัง span ชื่อ agent ต้องเป็น `]}` (แพตช์แล้ว) หรือ `,<jsx span>` (ยังไม่แพตช์) เท่านั้น
+ *       ไฟล์ที่ยังไม่แพตช์จึงไม่ถูกหักคะแนน แต่ span หาย/array ไม่ปิด/JSX พัง ยังถูกจับ
+ *   - เขียนแล้ว invariant/syntax ไม่ครบ = คืนไฟล์จาก .bak แล้วรายงาน error (ไม่รายงานว่าผ่าน)
+ *   - โหมด `--check` (alias `--verify`) อ่านอย่างเดียว ให้ flow-check/Console เฝ้าได้โดยไม่ต้อง hardcode สตริงเอง
+ *   - state ของแต่ละจุด (`todo|applied|na`) นิยามจาก invariant: applied = invariant ของจุดนั้นครบแล้ว
+ *   - จุดที่ state เป็น `na` ถูกรายงานผ่าน `applyAll().notInVersion = [{ file, id }]` (Console เอาไปเตือนได้)
  *
- * ใครเรียกใช้:
- *   - มนุษย์: `node patch-plannotator.mjs [--dry-run|--list]`
- *   - BAZER Console: action `plannotator-patch` (ปุ่ม "แพตช์ปุ่มอนุมัติ → builder") และติดไปกับ
- *     `flow-apply` (ติดตั้ง/ซ่อม BAZER FLOW v2) · `update-apply` (อัพเดตทั้งหมด) · `sync-all` (ซิงค์ทั้งหมด)
- *     · `setup-apply` (ขั้น `plannotator-patch`) — เครื่องใหม่ที่ยังไม่มี cache จะข้ามอย่างเงียบแล้วลองใหม่ทุกครั้ง
- *   - `flow-check.mjs` เฝ้าว่า patch ยังอยู่ (WARN + บอกคำสั่งนี้เมื่อ Plannotator อัปเดตแล้วหลุด)
+ * 5 จุด (ทุกรูปแบบเดิมต้องเจอ "พอดี 1 ครั้ง" ไม่งั้น throw และไม่แตะไฟล์นั้น):
+ *   1 default-approve-target  {switchTo:"build"} หรือ {switchTo:"builder"} -> {switchTo:"buddha"}
+ *   2 settings-menu-entry     value/label/description -> buddha / Buddha
+ *   3 label-capitalisation    ห่อ t.find(...)?.name??e.switchTo ด้วย capitalize (ปุ่มอ่าน "Approve → Buddha")
+ *   4 button-hint-span        ลบ span children:"(?)" ทั้งก้อน
+ *   5 localstorage-key        key เก่า 3 ตัว -> "plannotator-approve-target-v2"
  *
- * 4 จุด (แต่ละจุดต้องเจอ "หนึ่งครั้งเท่านั้น" ไม่เช่นนั้น target นั้นไม่ถูกแตะ):
- *   1 default หลังอนุมัติ      {switchTo:"build"} หรือ {switchTo:"builder"} (ของเดิม) -> {switchTo:"buddha"}
- *   2 เมนู "After approval"    value/label/description       -> buddha / Buddha
- *   3 label บนปุ่ม             t.find(...)?.name??e.switchTo -> ห่อ capitalize (โชว์ "Buddha")
- *                             (ค่า switchTo ต้องคง "buddha" ตัวเล็ก เพราะ server เทียบ agent.name)
- *   4 key localStorage         "plannotator-agent-switch" / "plannotator-approve-agent" -> "plannotator-approve-buddha"
- *                             (กันค่าเก่าในเบราว์เซอร์ชนะ default ใหม่ — เปลี่ยน key ทุกครั้งที่เปลี่ยนเป้าหมาย)
+ * กับดักที่ v3 ปิด: count() เป็นแบบ substring — ถ้าตั้ง key ใหม่ทับกับ key เก่า (เช่น "...-buddha-v2" มี
+ * "...-buddha" อยู่ข้างใน) จะนับตัวเองเป็น from ด้วย (from=1/to=1 -> state ตีความไม่ได้) จึงมี
+ * assertNeedlesDisjoint() ตรวจตอนโหลดโมดูล: แก้สตริงปลายทางให้ทับกันเมื่อไร โมดูล throw ทันที ไม่รอไปพังกับไฟล์จริง
  *
- * ทำไม buddha ไม่ใช่ builder: host เทียบ `agent.name` กับค่า switchTo — "buddha" เป็น primary agent ที่สลับได้จริง
- * (name ตรงเป๊ะ) แล้ว Buddha เป็นคนเรียก `builder` เป็น subagent ในเซสชันต่อ (ดู bundle/agents/buddha.md)
- * ส่วน "builder" เป็น subagent ล้วน — ใช้เป็นเป้าหมายการสลับ session ไม่ได้
+ * ประตู 2 ชั้นก่อน/หลังเขียน (ไฟล์ 23 MB):
+ *   ประตู 1 — ผลลัพธ์ในหน่วยความจำ: invariant required ครบ + bundle ใน <script type="module"> compile ผ่าน
+ *   ประตู 2 — อ่านไบต์กลับจากดิสก์: เนื้อไฟล์ต้องเท่ากับที่ตรวจแล้ว + invariant ครบ + compile ผ่าน
+ *   syntax gate เทียบ baseline: ไฟล์ตั้งต้นที่ compile ไม่ผ่านอยู่แล้วจะข้ามเกตนี้ (ไม่บล็อกงานที่ซ่อมไม่ได้)
  *
  * Usage:
- *   node patch-plannotator.mjs [--dry-run] [--list] [--target <plannotator.html>]...
- *     (ไม่ระบุ target = แพตช์ทุกไฟล์ที่ค้นเจอ · --dry-run = พิมพ์แผน+จำนวน ไม่เขียน)
- *   exit: 0 = เขียน/ไม่มีอะไรต้องทำ · 1 = มี target ที่ตีความไม่ได้ (target นั้นไม่ถูกแตะ) · 2 = --target ที่ระบุไม่มีจริง
+ *   node patch-plannotator.mjs [--dry-run] [--list] [--check|--verify] [--json] [--verbose] [--target <plannotator.html>]...
+ *     ไม่ระบุ --target = แพตช์ทุกไฟล์ที่ค้นเจอ · --dry-run = พิมพ์แผน + invariant ที่คาดว่าจะได้ ไม่เขียน
+ *     --check / --verify = อ่านอย่างเดียว (exit 1 = invariant required ไม่ครบ/patch หลุด)
+ *     --json = พิมพ์ JSON ก้อนเดียว (Console/flow-check อ่านสถานะจากแหล่งเดียว) · --verbose = พิมพ์ invariant ทุกข้อ
+ *   exit: 0 = ถึงปลายทาง/ไม่มีอะไรต้องทำ · 1 = target ตีความไม่ได้ หรือ invariant required ไม่ครบ · 2 = --target ที่ระบุไม่มีจริง
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import vm from 'node:vm'
+import crypto from 'node:crypto'
 import { pathToFileURL } from 'node:url'
+
+export const TOOL = 'patch-plannotator'
+export const REVISION = 3
+
+/* ── วัด ─────────────────────────────────────────────────────────────────── */
 
 export const count = (text, needle) => {
   let n = 0
@@ -51,77 +67,257 @@ export const count = (text, needle) => {
   return n
 }
 
+/* ── ปลายทางที่ต้องการ ────────────────────────────────────────────────────── */
+
 const TARGET_TO = '{switchTo:"buddha"}'
-/* ต้นทางที่ยอมรับได้: ไฟล์ต้นฉบับ (build) หรือไฟล์ที่เคยแพตช์เป็น builder มาก่อน (transition) */
 const TARGET_FROM = ['{switchTo:"build"}', '{switchTo:"builder"}']
 const MENU_TO = '{value:"buddha",label:"Buddha",description:"Switch to Buddha after approval (Buddha runs builder as a subagent)"}'
 const MENU_FROM = [
   '{value:"build",label:"Build",description:"Switch to build agent after approval"}',
   '{value:"builder",label:"Builder",description:"Switch to builder subagent after approval"}',
 ]
-const LABEL_MARK = ')?.name??e.switchTo}' // ก่อนแพตช์
-const LABEL_DONE = '?.name??e.switchTo)}' // หลังแพตช์ (ปิด call ก่อน `}` ของฟังก์ชัน)
+/* key เก่า 3 ตัว — ต้องไม่ทับกับ KEY_TO แบบ substring (กับดัก count()) */
+const KEY_TO = '"plannotator-approve-target-v2"'
+const KEY_FROM = ['"plannotator-agent-switch"', '"plannotator-approve-agent"', '"plannotator-approve-buddha"']
+
+const LABEL_MARK = ')?.name??e.switchTo}' // ยังไม่ห่อ (ปิดท้ายด้วย `}` ของฟังก์ชัน)
+const LABEL_DONE = '?.name??e.switchTo)}' // ห่อแล้ว (`)` ปิด call ตัวห่อ ตามด้วย `}` ของฟังก์ชัน)
 const LABEL_WRAP = '((n)=>n?n.charAt(0).toUpperCase()+String(n).slice(1):n)('
-const KEY_TO = '"plannotator-approve-buddha"'
-const KEY_FROM = ['"plannotator-agent-switch"', '"plannotator-approve-agent"']
 const FIND_CALL = 't.find('
 
-/** หา expression ของ label ที่ลงท้ายด้วย LABEL_MARK: คืน { start, end, region, wrapped } (region รวม `}` ตัวสุดท้าย) */
-function labelRegion(text) {
-  const tail = text.indexOf(LABEL_MARK)
-  if (tail === -1) return null
-  const start = text.lastIndexOf(FIND_CALL, tail)
-  if (start === -1) return null
-  const region = text.slice(start, tail + LABEL_MARK.length) // `t.find(...)?.name??e.switchTo}`
-  const core = region.slice(0, -1) // ตัด `}` ของฟังก์ชันออก
-  return { start, end: tail + LABEL_MARK.length, region, core, wrapped: LABEL_WRAP + core + ')}' }
+const HINT_CHILD = 'children:"(?)"' // ตัวบอกว่ายังมี span "(?)" อยู่
+const HINT_CLASS = 'className:"opacity-60 text-[10px]"' // class ของ span นั้น
+/* span "(?)" ทั้งก้อน — ชื่อตัวแปร minified เปลี่ยนได้ แต่ payload คงที่ · ต้องเจอพอดี 1 ครั้ง */
+const HINT_SPAN_RE = /[A-Za-z$_][\w$]*&&[A-Za-z$_][\w$]*\.jsxs?\("span",\{className:"opacity-60 text-\[10px\]",children:"\(\?\)"\}\)/
+const ARROW_SPAN = 'className:"opacity-60",children:"→"'
+
+/* โครงปุ่ม — เทียบ "สองรูป" บนข้อความจริง ไม่ผูกกับ class เครื่องสำอางที่อาจถูกเปลี่ยนในเวอร์ชันใหม่
+ *   อ่านจาก atom ของ span ชื่อ agent (`className:"max-w-[120px] truncate",children:`) แล้วดูเนื้อหลังจุดปิด span
+ *   รูปหลังแพตช์ — `]}` คือปิด children array ทันที (span ชื่อ agent เป็น element สุดท้าย)
+ *   รูปก่อนแพตช์ — `,` แล้วตามด้วย jsx span element ตัวถัดไป (span "(?)" ที่ยังไม่ถูกลบ)
+ *   สองรูปนี้คือสองสภาพจริงของไฟล์ — predicate จึงไม่เตือนหลอกบนไฟล์ที่ยังไม่แพตช์ แต่ยังจับ span หาย/array ไม่ปิด/JSX พัง */
+const LABEL_ATOM = 'className:"max-w-[120px] truncate",children:'
+const LABEL_SPAN_CLOSE = '})' // ปิด call ของ span ชื่อ agent
+const LABEL_TAIL_DONE = ']}' // หลังแพตช์: ปิด children array ทันที
+const LABEL_TAIL_TODO = /^,[A-Za-z$_][\w$]*&&[A-Za-z$_][\w$]*\.jsxs?\("span",\{/ // ก่อนแพตช์: ยังมี element ถัดไป
+
+function labelArrayClosed(text) {
+  const at = text.indexOf(LABEL_ATOM)
+  if (at === -1) return false
+  const rest = text.slice(at + LABEL_ATOM.length)
+  const close = rest.indexOf(LABEL_SPAN_CLOSE)
+  if (close === -1) return false
+  const after = rest.slice(close + LABEL_SPAN_CLOSE.length)
+  return after.startsWith(LABEL_TAIL_DONE) || LABEL_TAIL_TODO.test(after)
 }
+
+/* ── จุดแพตช์ 5 จุด (ข้อมูล) ─────────────────────────────────────────────── */
 
 export const PATCHES = [
-  { id: 'default-approve-target', from: TARGET_FROM, to: TARGET_TO },
-  { id: 'settings-menu-entry', from: MENU_FROM, to: MENU_TO },
-  { id: 'label-capitalisation' },
-  { id: 'localstorage-key', from: KEY_FROM, to: KEY_TO },
+  { id: 'default-approve-target', kind: 'replace', from: TARGET_FROM, to: TARGET_TO },
+  { id: 'settings-menu-entry', kind: 'replace', from: MENU_FROM, to: MENU_TO },
+  { id: 'label-capitalisation', kind: 'wrap' },
+  { id: 'button-hint-span', kind: 'delete' },
+  { id: 'localstorage-key', kind: 'replace', from: KEY_FROM, to: KEY_TO },
 ]
 
-/** 'todo' | 'applied' | 'na' — อย่างอื่น = throw (ไม่เดา) */
-function stateOf(patch, text) {
-  if (patch.id === 'label-capitalisation') {
-    const wraps = count(text, LABEL_WRAP)
-    const naive = count(text, LABEL_MARK)
-    const done = count(text, LABEL_DONE)
-    if (wraps === 1 && done === 1 && naive === 0) return 'applied'
-    if (wraps === 0 && done === 0 && naive === 1) return 'todo'
-    if (wraps === 0 && done === 0 && naive === 0) return 'na'
-    throw new Error(`${patch.id}: สภาพไฟล์ตีความไม่ได้ (wrapper=${wraps}, done=${done}, marker=${naive})`)
+/** รูปแบบ "ก่อนแพตช์" ที่แต่ละจุดต้องเจอ 1 ครั้ง — ใช้บอกว่าจุดนี้ยังต้องทำ (locator) */
+const beforeNeedles = (p) =>
+  p.kind === 'wrap' ? [LABEL_MARK] : p.kind === 'delete' ? [HINT_CHILD] : p.from
+
+/** needle ทุกตัวของจุดนี้ (รวมฝั่ง "ปลายทาง") — ใช้ตัดสินว่าไฟล์นี้ "มี" จุดนี้ แม้ state จะออกมาเป็น na
+ *  กับดัก: จุดที่ค่า to ผิดนับ (เช่น key ใหม่โผล่ 2 ครั้ง = ไบต์มีจริง) จะไม่ถูกนับเป็น before → state na
+ *  ถ้าไม่นับว่าจุดนั้น "มี" invariant ที่ fail จะถูกกลืนจากผลตัดสิน (--check/Console/flow-check ผ่านทั้งที่ไฟล์ไม่ตรง invariant) */
+const allNeedles = (p) =>
+  p.kind === 'wrap' ? [LABEL_MARK, LABEL_WRAP, LABEL_DONE]
+    : p.kind === 'delete' ? [HINT_CHILD, HINT_CLASS]
+      : [p.to, ...p.from]
+
+/** กับดัก substring ของ count(): needle ที่ทับกันจะถูกนับซ้ำ (from=1/to=1 → state ตีความไม่ได้)
+ *  ตรวจ needle ทุกตัวที่ INVARIANTS จะนับ จริง ๆ ตอนโหลดโมดูล — แก้สตริงให้ทับกันเมื่อไรรู้ทันที ไม่รอไปพังกับไฟล์ 23 MB */
+export function assertNeedlesDisjoint(invariants = INVARIANTS) {
+  const owner = new Map()
+  for (const inv of invariants) {
+    if (!inv.needle) continue
+    const seen = owner.get(inv.needle)
+    if (seen) throw new Error(`needle "${inv.needle}" ถูกนับซ้ำที่ ${seen} และ ${inv.id} — count() แยกสองความหมายไม่ออก`)
+    owner.set(inv.needle, inv.id)
   }
-  const after = count(text, patch.to)
-  const beforeCounts = patch.from.map((f) => count(text, f))
-  const before = beforeCounts.reduce((a, b) => a + b, 0)
-  if (after === 1 && before === 0) return 'applied'
-  if (after === 0 && before === 1) return 'todo'
-  if (after === 0 && before === 0) return 'na'
-  throw new Error(`${patch.id}: พบต้นฉบับ ${before} (${beforeCounts.join('/')}) / ปลายทาง ${after} — ต้องเป็น 1/0 หรือ 0/1`)
+  const list = [...owner.keys()]
+  for (const a of list) {
+    for (const b of list) {
+      if (a !== b && (a.includes(b) || b.includes(a)))
+        throw new Error(`${owner.get(a)} / ${owner.get(b)}: "${b}" เป็น substring ของ "${a}" — count() จะนับซ้ำ ต้องเปลี่ยนสตริงปลายทาง`)
+    }
+  }
+  return true
 }
 
-function applyPatch(patch, text) {
-  if (patch.id === 'label-capitalisation') {
+/* ── INVARIANTS: เกณฑ์ตัดสิน "ถึงปลายทางแล้ว" (ข้อมูลล้วน ไม่ผูกกับวิธีแพตช์) ──
+ *  level: 'required' = บล็อกการเขียน และทำให้ --check fail · 'advisory' = รายงานแต่ไม่บล็อก */
+
+export const REQUIRED = 'required'
+export const ADVISORY = 'advisory'
+
+const replaceInvariants = (p) => [
+  { id: `${p.id}/to`, point: p.id, level: REQUIRED, needle: p.to, expect: 1 },
+  ...p.from.map((f, i) => ({ id: `${p.id}/from${i + 1}-gone`, point: p.id, level: REQUIRED, needle: f, expect: 0 })),
+]
+
+export const INVARIANTS = [
+  ...PATCHES.filter((p) => p.kind === 'replace').flatMap(replaceInvariants),
+  { id: 'label/wrapped', point: 'label-capitalisation', level: REQUIRED, needle: LABEL_WRAP, expect: 1 },
+  { id: 'label/call-closed', point: 'label-capitalisation', level: REQUIRED, needle: LABEL_DONE, expect: 1 },
+  { id: 'label/naive-gone', point: 'label-capitalisation', level: REQUIRED, needle: LABEL_MARK, expect: 0 },
+  { id: 'hint/child-gone', point: 'button-hint-span', level: REQUIRED, needle: HINT_CHILD, expect: 0 },
+  { id: 'hint/class-gone', point: 'button-hint-span', level: REQUIRED, needle: HINT_CLASS, expect: 0 },
+  /* โครงปุ่ม (point = null → วัดเฉพาะไฟล์ที่ "รู้จัก"): เนื้อหลัง span ชื่อ agent ต้องเป็นรูปใดรูปหนึ่งที่ถูกต้อง
+   * (`]}` = แพตช์แล้ว · `,<jsx span>` = ยังไม่แพตช์) — required เพราะ span หาย/array ไม่ปิด = JSX พังจริง
+   * `button/arrow-kept` ยังเป็น advisory: class ของลูกศรเป็นเครื่องสำอางผูกเวอร์ชัน vendor */
+  { id: 'button/arrow-kept', point: null, level: ADVISORY, needle: ARROW_SPAN, expect: 1 },
+  { id: 'button/label-structure-intact', point: null, level: REQUIRED, test: labelArrayClosed, subject: 'เนื้อหลัง span ชื่อ agent เป็นรูปปิด array (`]}`) หรือยังมี jsx span ต่อ (ก่อนแพตช์)' },
+]
+
+/* ── ประเมินไฟล์หนึ่งครั้ง: invariant ทั้งชุด → state ของทุกจุด ─────────────── */
+
+/** นับ needle ซ้ำไม่ให้สแกนไฟล์ 23 MB ซ้ำ (ทุก invariant ที่ใช้ needle เดียวกันได้ค่าเดียวกัน) */
+const hitCounter = (text) => {
+  const cache = new Map()
+  return (needle) => {
+    let n = cache.get(needle)
+    if (n === undefined) { n = count(text, needle); cache.set(needle, n) }
+    return n
+  }
+}
+
+/** 'applied' = invariant ของจุดนั้นครบ · 'todo' = เจอรูปแบบเดิมพอดี 1 · 'na' = ไม่มีในเวอร์ชันนี้
+ *  อย่างอื่น (เจอเดิม 2 ครั้งขึ้นไป) = throw — ไม่เดา ไม่แตะไฟล์ */
+export function survey(text) {
+  const hits = hitCounter(text)
+  const results = INVARIANTS.map((inv) => {
+    const actual = inv.test ? Boolean(inv.test(text)) : hits(inv.needle)
+    const expected = inv.test ? true : inv.expect
+    return {
+      id: inv.id,
+      point: inv.point,
+      level: inv.level,
+      subject: inv.test ? inv.subject : inv.needle,
+      expected,
+      actual,
+      ok: actual === expected,
+    }
+  })
+  const done = (id) => results.filter((r) => r.point === id).every((r) => r.ok)
+  const states = PATCHES.map((p) => {
+    if (done(p.id)) return { patch: p, state: 'applied' }
+    const n = beforeNeedles(p).reduce((a, f) => a + hits(f), 0)
+    if (n === 1) return { patch: p, state: 'todo' }
+    if (n === 0) return { patch: p, state: 'na' }
+    throw new Error(`${p.id}: พบรูปแบบเดิม ${n} ครั้ง — ต้องเจอพอดี 1 ครั้ง (ไม่แตะไฟล์นี้)`)
+  })
+  /* "รู้จักจุดนี้" = state ไม่ใช่ na หรือยังมี needle ของจุดนี้อยู่ในไฟล์ (ไฟล์มีเรื่องให้จับ)
+   * ไฟล์ที่ไม่รู้จักเลย (ทุกจุด na และไม่มี needle ไหนเลย) = ข้าม ไม่นับเป็น error */
+  const present = (p) => allNeedles(p).some((n) => hits(n) > 0)
+  const known = states.filter((s) => s.state !== 'na' || present(s.patch)).map((s) => s.patch.id)
+  /* enforced = เฉพาะจุดที่ไฟล์นี้รู้จัก · ไฟล์ที่ไม่รู้จักเลย (ทุกจุด na) = ข้าม ไม่นับเป็น error */
+  const measured = results.map((r) => ({ ...r, enforced: r.point === null ? known.length > 0 : known.includes(r.point) }))
+  const enforced = measured.filter((r) => r.enforced)
+  const failed = enforced.filter((r) => !r.ok && r.level === REQUIRED)
+  const advisory = enforced.filter((r) => !r.ok && r.level === ADVISORY)
+  return {
+    states,
+    invariants: {
+      recognised: known.length > 0,
+      ok: failed.length === 0,
+      enforced: enforced.length,
+      requiredCount: enforced.filter((r) => r.level === REQUIRED).length,
+      advisoryCount: enforced.filter((r) => r.level === ADVISORY).length,
+      states: states.map((s) => `${s.patch.id}=${s.state}`),
+      results: measured,
+      failed,
+      advisory,
+    },
+  }
+}
+
+export const plan = (text) => survey(text).states
+export const check = (text) => survey(text).invariants
+
+/* ── syntax gate: compile-only บน bundle ใน <script type="module"> ────────── */
+
+/** ตัว bundle ทั้งหน้าเว็บอยู่ใน `<script type="module">` ก้อนเดียว — ตัดออกมาเพื่อ compile-only check */
+function moduleBody(html) {
+  const open = html.match(/<script type="module"[^>]*>/)
+  if (!open) return null
+  const start = open.index + open[0].length
+  const end = html.indexOf('</script>', start)
+  if (end === -1) return null
+  return html.slice(start, end)
+}
+
+/**
+ * `vm.Script` compile อย่างเดียว ไม่รันโค้ด (`SourceTextModule` ยังอยู่หลัง flag ใน Node นี้)
+ * `import.meta` ผิดไวยากรณ์ใน Script จึงแทนด้วย identifier เฉย ๆ — เป็น token ที่ถูกต้องในตำแหน่งเดิม
+ * คืน 'ok' หรือข้อความ error · 'no-module' = ไฟล์นี้ไม่ใช่หน้า Plannotator ที่รู้จัก
+ */
+export function syntaxOf(text) {
+  const body = moduleBody(text)
+  if (body == null) return 'no-module'
+  try {
+    new vm.Script(body.replaceAll('import.meta', 'import_meta_placeholder'), { filename: 'plannotator-bundle' })
+    return 'ok'
+  } catch (error) {
+    return `${error.constructor.name}: ${String(error.message).split('\n')[0]}`
+  }
+}
+
+/** 'no-module' = ไฟล์นี้ไม่ใช่หน้า Plannotator ที่รู้จัก (ข้ามเกตไวยากรณ์) — ใช้ร่วมกับ Console/flow-check
+ *  (export เพื่อให้ทุกตัวตัดสินใช้เกณฑ์เดียวกัน ไม่ต้องเขียนซ้ำแล้วเพี้ยนกัน) */
+export const syntaxBad = (syntax) => syntax !== 'ok' && syntax !== 'no-module'
+
+/* ── ลงมือแก้ ─────────────────────────────────────────────────────────────── */
+
+/** หา expression ของ label ที่ลงท้ายด้วย LABEL_MARK: คืน { start, end, wrapped } (region รวม `}` ตัวสุดท้าย) */
+function labelRegion(text) {
+  const tail = text.indexOf(LABEL_MARK)
+  if (tail === -1) throw new Error('label-capitalisation: ไม่พบ t.find(...)?.name??e.switchTo}')
+  const start = text.lastIndexOf(FIND_CALL, tail)
+  if (start === -1) throw new Error('label-capitalisation: ไม่พบ t.find( ก่อน marker')
+  const core = text.slice(start, tail + LABEL_MARK.length - 1) // ตัด `}` ของฟังก์ชันออก
+  return { start, end: tail + LABEL_MARK.length, wrapped: LABEL_WRAP + core + ')}' }
+}
+
+function locateFrom(p, text) {
+  const hits = p.from.filter((f) => text.includes(f))
+  if (hits.length !== 1)
+    throw new Error(`${p.id}: ต้องเจอรูปแบบเดิมพอดี 1 แบบ (เจอ ${hits.length}: ${hits.join(' | ') || 'ไม่มี'}) — ไม่แตะไฟล์นี้`)
+  const from = hits[0]
+  const at = text.indexOf(from)
+  if (text.indexOf(from, at + 1) !== -1) throw new Error(`${p.id}: รูปแบบเดิม "${from}" ซ้ำในไฟล์ — ไม่แตะไฟล์นี้`)
+  return { from, at }
+}
+
+/** ลบทั้ง array element `,<guard>&&jsx("span",{...children:"(?)"})` — ต้องมี `,` นำหน้า ไม่งั้น JSX พัง
+ *  export ไว้ให้ flow-check ทดสอบ regex นี้ตรง ๆ กับ snippet ที่ชื่อ minified เปลี่ยน (ไม่ต้องคัดลอก regex ไปเทสต์) */
+export function deleteHintSpan(text) {
+  const hits = [...text.matchAll(new RegExp(HINT_SPAN_RE.source, 'g'))]
+  if (hits.length !== 1) throw new Error(`button-hint-span: span "(?)" ต้องเจอพอดี 1 ก้อน (เจอ ${hits.length}) — ไม่แตะไฟล์นี้`)
+  const [span] = hits
+  if (text[span.index - 1] !== ',') throw new Error('button-hint-span: span ไม่ได้เป็น array element (ไม่มี `,` นำหน้า) — ไม่แตะไฟล์นี้')
+  return text.slice(0, span.index - 1) + text.slice(span.index + span[0].length)
+}
+
+function applyPatch(p, text) {
+  if (p.kind === 'wrap') {
     const r = labelRegion(text)
     return text.slice(0, r.start) + r.wrapped + text.slice(r.end)
   }
-  const from = patch.from.find((f) => text.includes(f))
-  const at = text.indexOf(from)
-  return text.slice(0, at) + patch.to + text.slice(at + from.length)
+  if (p.kind === 'delete') return deleteHintSpan(text)
+  const { from, at } = locateFrom(p, text)
+  return text.slice(0, at) + p.to + text.slice(at + from.length)
 }
 
-export function plan(text) {
-  return PATCHES.map((p) => ({ patch: p, state: stateOf(p, text) }))
-}
-
-function verify(text) {
-  const bad = plan(text).filter((x) => x.state !== 'applied')
-  if (bad.length) throw new Error('หลังแพตช์แล้วยังไม่ครบ: ' + bad.map((b) => `${b.patch.id}=${b.state}`).join(', '))
-}
+/* ── ไฟล์ ─────────────────────────────────────────────────────────────────── */
 
 export function discoverTargets(home = os.homedir()) {
   const roots = [
@@ -157,6 +353,8 @@ const uniqueBackup = (file) => {
   return c
 }
 
+const sha16 = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)
+
 /** UTF-8 round-trip guard: ไฟล์ 23 MB minified — ต้องมั่นใจว่า decode/encode ไม่เพี้ยนก่อนเขียนคืน */
 function readUtf8(file) {
   const buf = fs.readFileSync(file)
@@ -166,120 +364,401 @@ function readUtf8(file) {
   return text
 }
 
-function patchFile(file, { dryRun, quiet = false }) {
-  const say = (...args) => { if (!quiet) console.log(...args) }
-  const version = (() => {
-    try { return JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'package.json'), 'utf8')).version } catch { return '?' }
-  })()
-  say(`[patch-plannotator] target=${file} (v${version}, ${fs.statSync(file).size} bytes)`)
-  const original = readUtf8(file)
-  const states = plan(original)
-  for (const s of states) {
-    const tag = s.state === 'todo' ? 'apply' : s.state === 'applied' ? 'ok   ' : 'na   '
-    say(`  ${tag} ${s.patch.id}${s.state === 'na' ? ' (ไม่มีในเวอร์ชันนี้)' : ''}`)
-  }
+const versionOf = (file) => {
+  try { return JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'package.json'), 'utf8')).version } catch { return '?' }
+}
 
-  const todo = states.filter((s) => s.state === 'todo').map((s) => s.patch)
-  const skipped = states.length - todo.length
-  const detail = { file, version, applied: todo.length, skipped, states: states.map((s) => `${s.patch.id}=${s.state}`) }
+const brief = (text) => ({ sha256: sha16(Buffer.from(text, 'utf8')), bytes: Buffer.byteLength(text, 'utf8') })
+
+/** อ่าน + ประเมิน (state ของทุกจุด + invariant + syntax) — ไม่เขียนอะไร */
+function inspectFile(file) {
+  const bytes = fs.statSync(file).size
+  const text = readUtf8(file)
+  const { states, invariants } = survey(text)
+  const todo = states.filter((s) => s.state === 'todo')
+  return {
+    file,
+    version: versionOf(file),
+    bytes,
+    ...brief(text),
+    syntax: syntaxOf(text),
+    text,
+    states,
+    invariants,
+    todo: todo.map((s) => s.patch),
+    skipped: states.length - todo.length,
+  }
+}
+
+/** อ่านด้วยเครื่อง: สถานะของทุกจุดจากเนื้อไฟล์ (Console/flow-check ใช้ได้โดยไม่ต้อง hardcode สตริงเอง) */
+export function inspect(text) {
+  const { states, invariants } = survey(text)
+  const syntax = syntaxOf(text)
+  const points = states.map((s) => ({ id: s.patch.id, kind: s.patch.kind, state: s.state }))
+  const countOf = (wanted) => points.filter((p) => p.state === wanted).length
+  return {
+    recognised: invariants.recognised,
+    ok: invariants.ok && !(invariants.recognised && syntaxBad(syntax)),
+    syntax,
+    ...brief(text),
+    applied: countOf('applied'),
+    todo: countOf('todo'),
+    na: countOf('na'),
+    points,
+    failed: invariants.failed,
+    advisory: invariants.advisory,
+    notInVersion: points.filter((p) => p.state === 'na').map((p) => p.id),
+  }
+}
+
+/** patch table แบบพร้อมใช้เป็นข้อมูล (Console/flow-check อ่านจากที่นี่ ไม่ต้องเขียนสตริงซ้ำ) */
+export const describePatches = () =>
+  PATCHES.map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    from: p.from ? [...p.from] : [],
+    to: p.to ?? null,
+    invariants: INVARIANTS.filter((i) => i.point === p.id).map((i) => ({ id: i.id, level: i.level })),
+  }))
+
+/* ── ประตูตรวจ: invariant + syntax ────────────────────────────────────────── */
+
+const failText = (list) => list.map((f) => `${f.id}(${f.actual}≠${f.expected})`).join(', ')
+
+/** invariant ที่ไม่ผ่าน (required) ในผลลัพธ์ + syntax ที่แย่ลงกว่า baseline */
+function gate(next, baselineSyntax) {
+  const inv = survey(next).invariants
+  if (!inv.ok) return { inv, error: `ผลลัพธ์ยังไม่ครบ invariant: ${failText(inv.failed)}` }
+  const syntax = syntaxOf(next)
+  if (baselineSyntax === 'ok' && syntaxBad(syntax)) return { inv, syntax, error: `ผลลัพธ์ compile ไม่ผ่าน (${syntax})` }
+  return { inv, syntax, error: null }
+}
+
+const TAG = { todo: 'apply', applied: 'ok   ', na: 'na   ' }
+
+/** พิมพ์ invariant เฉพาะตอน FAIL/WARN หรือเมื่อ --verbose — apply ปกติจึงเหลือ ~5 บรรทัด/ไฟล์ */
+function logInvariants(say, label, inv, { verbose = false, showAdvisory = false } = {}) {
+  const hard = inv.failed
+  const soft = showAdvisory || verbose ? inv.advisory : []
+  if (!hard.length && !soft.length && !verbose) return
+  const passed = inv.enforced - inv.failed.length - inv.advisory.length
+  say(`  invariants(${label}) ${passed}/${inv.enforced}${inv.recognised ? '' : ' — ไม่ใช่ไฟล์ที่รู้จัก (ข้าม)'}`)
+  if (verbose) {
+    for (const r of inv.results.filter((x) => x.enforced)) {
+      const tag = r.ok ? 'ok  ' : r.level === ADVISORY ? 'WARN' : 'FAIL'
+      say(`    ${tag} ${r.subject} = ${r.actual} (ต้องเป็น ${r.expected})`)
+    }
+    return
+  }
+  for (const r of hard) say(`    FAIL ${r.subject} = ${r.actual} (ต้องเป็น ${r.expected})`)
+  for (const r of soft) say(`    WARN ${r.subject} = ${r.actual} (ต้องเป็น ${r.expected}) — advisory ไม่บล็อก`)
+}
+
+const detailOf = (read, inv) => ({
+  file: read.file,
+  version: read.version,
+  bytes: read.bytes,
+  sha256: read.sha256,
+  syntax: read.syntax,
+  applied: read.todo.length,
+  skipped: read.skipped,
+  states: read.states.map((s) => `${s.patch.id}=${s.state}`),
+  points: read.states.map((s) => ({ id: s.patch.id, kind: s.patch.kind, state: s.state })),
+  notInVersion: read.states.filter((s) => s.state === 'na').map((s) => s.patch.id),
+  invariants: inv,
+})
+
+const defaultWrite = (file, text) => fs.writeFileSync(file, text, 'utf8')
+
+function patchFile(file, { dryRun, quiet = false, verbose = false, writeText = defaultWrite }) {
+  const say = (...args) => { if (!quiet) console.log(...args) }
+  const read = inspectFile(file)
+  const { text: original, states, todo, skipped } = read
+  const before = read.invariants
+  say(`[${TOOL}] target=${file} (v${read.version}, ${read.bytes} bytes, sha256=${read.sha256})`)
+  for (const s of states) {
+    say(`  ${TAG[s.state]} ${s.patch.id}${s.state === 'na' ? ' (ไม่มีในเวอร์ชันนี้)' : ''}`)
+  }
+  logInvariants(say, 'now', before, { verbose })
+
+  const detail = detailOf(read, before)
+
   if (!todo.length) {
+    if (before.recognised && !before.ok)
+      throw new Error(`invariant ไม่ครบแต่ไม่มีจุดที่แพตช์ได้: ${failText(before.failed)} — ไม่แตะไฟล์นี้`)
     say(`applied=0 skipped=${skipped} target=${file} backup=none dryRun=${dryRun}`)
     return detail
   }
 
   let next = original
   for (const p of todo) next = applyPatch(p, next)
-  verify(next) // in memory ก่อนเขียนจริง
+
+  /* ประตู 1: invariant + syntax บนผลลัพธ์ในหน่วยความจำ ก่อนแตะดิสก์ */
+  const plannedGate = gate(next, read.syntax)
+  logInvariants(say, 'after', plannedGate.inv, { verbose })
+  if (plannedGate.error) throw new Error(`${plannedGate.error} — ไม่เขียนไฟล์`)
+
+  detail.invariants = plannedGate.inv
+  detail.sha256After = sha16(Buffer.from(next, 'utf8'))
+  detail.bytesAfter = Buffer.byteLength(next, 'utf8')
+  detail.syntaxAfter = plannedGate.syntax
 
   if (dryRun) {
     say(`applied=${todo.length} skipped=${skipped} target=${file} backup=none dryRun=true`)
     return detail
   }
 
+  /* ประตู 2: เขียนจริง แล้วอ่านไบต์กลับมาวัดใหม่ · ไม่ผ่าน = คืนไฟล์จาก backup */
   const backup = uniqueBackup(file)
   fs.copyFileSync(file, backup)
-  fs.writeFileSync(file, next, 'utf8')
+  writeText(file, next)
+  let problem = null
   try {
-    verify(readUtf8(file)) // อ่านไบต์จริงกลับมาตรวจ
+    const onDisk = readUtf8(file)
+    if (onDisk !== next) problem = 'เนื้อไฟล์บนดิสก์ไม่ตรงกับผลลัพธ์ที่ตรวจแล้ว'
+    else {
+      const diskGate = gate(onDisk, read.syntax)
+      detail.syntaxAfter = diskGate.syntax
+      if (diskGate.error) problem = diskGate.error.replace('ผลลัพธ์', 'หลังเขียนแล้ว')
+      else detail.invariants = diskGate.inv
+    }
   } catch (error) {
+    problem = error.message
+  }
+  if (problem) {
     fs.copyFileSync(backup, file)
-    throw new Error(`${error.message} — คืนไฟล์จาก ${backup} แล้ว`)
+    let restored = 'ok'
+    try { restored = readUtf8(file) === original ? 'ok' : 'MISMATCH' } catch { restored = 'อ่านไม่ได้' }
+    throw new Error(`${problem} — คืนไฟล์จาก ${backup} แล้ว (restore=${restored})`)
   }
   say(`applied=${todo.length} skipped=${skipped} target=${file} backup=${backup} dryRun=false`)
   return { ...detail, backup }
 }
 
-/** API สำหรับ Console (import ไปใช้) — ไม่ throw ถ้าไฟล์ใดไฟล์หนึ่งพัง: คืน errors ให้ผู้เรียกตัดสินใจ */
-export function applyAll({ dryRun = false, home = os.homedir(), targets = null, quiet = false } = {}) {
-  const say = (...args) => { if (!quiet) console.log(...args) }
+/** ไฟล์ที่จะจัดการ + ไฟล์ที่ระบุแต่ไม่มีจริง — ใช้ร่วมกันทั้ง apply และ check */
+function resolveFiles(home, targets) {
   const discovered = discoverTargets(home).map((t) => t.file)
   const files = Array.isArray(targets) && targets.length ? targets : discovered
-  const missing = files.filter((f) => !fs.existsSync(f))
+  return { discovered, files, missing: files.filter((f) => !fs.existsSync(f)) }
+}
+
+/** รูปร่าง invariant ของไฟล์ที่อ่าน/ตรวจไม่ได้ */
+const UNCHECKED = { recognised: false, ok: false, enforced: 0, states: [], results: [], failed: [], advisory: [] }
+
+/** API สำหรับ Console (import ไปใช้) — ไม่ throw ถ้าไฟล์ใดไฟล์หนึ่งพัง: คืน errors ให้ผู้เรียกตัดสินใจ */
+export function applyAll({ dryRun = false, home = os.homedir(), targets = null, quiet = false, verbose = false, writeText = defaultWrite } = {}) {
+  const say = (...args) => { if (!quiet) console.log(...args) }
+  const { discovered, files, missing } = resolveFiles(home, targets)
   const details = []
+  const notInVersion = []
   let applied = 0
   let skipped = 0
   let errors = 0
   for (const f of files) {
     if (!fs.existsSync(f)) { errors += 1; details.push({ file: f, error: 'ไม่พบไฟล์' }); continue }
     try {
-      const d = patchFile(f, { dryRun, quiet })
+      const d = patchFile(f, { dryRun, quiet, verbose, writeText })
       applied += d.applied
       skipped += d.skipped
       details.push(d)
+      for (const id of d.notInVersion || []) notInVersion.push({ file: f, id })
     } catch (error) {
       errors += 1
-      say(`[patch-plannotator] ERROR ${f} — ${error.message}`)
+      say(`[${TOOL}] ERROR ${f} — ${error.message}`)
       details.push({ file: f, error: error.message })
     }
   }
-  return { targets: files.length, discovered: discovered.length, applied, skipped, errors, missing, dryRun, details }
+  return {
+    targets: files.length,
+    discovered: discovered.length,
+    applied,
+    skipped,
+    errors,
+    missing,
+    dryRun,
+    notInVersion,
+    invariants: details.map((d) => ({ file: d.file, ...(d.invariants || UNCHECKED) })),
+    details,
+  }
 }
+
+/** อ่านอย่างเดียว: invariant + syntax ของไฟล์ตอนนี้ (Console/flow-check ใช้เตือนแทนการ hardcode สตริง) */
+export function checkAll({ home = os.homedir(), targets = null, quiet = false, verbose = false } = {}) {
+  const say = (...args) => { if (!quiet) console.log(...args) }
+  const { discovered, files, missing } = resolveFiles(home, targets)
+  const invariants = []
+  const details = []
+  const notInVersionAll = []
+  let skipped = 0
+  let errors = 0
+  for (const f of files) {
+    if (!fs.existsSync(f)) {
+      errors += 1
+      details.push({ file: f, error: 'ไม่พบไฟล์' })
+      invariants.push({ file: f, ...UNCHECKED })
+      continue
+    }
+    try {
+      const read = inspectFile(f)
+      const inv = read.invariants
+      const syntaxFail = inv.recognised && syntaxBad(read.syntax)
+      const failed = syntaxFail
+        ? [...inv.failed, { id: 'syntax', point: null, level: REQUIRED, subject: 'bundle ใน <script type="module"> compile ผ่าน', expected: 'ok', actual: read.syntax, ok: false, enforced: true }]
+        : inv.failed
+      const view = { ...inv, ok: inv.recognised ? failed.length === 0 : true, failed }
+      for (const s of read.states) say(`  ${TAG[s.state]} ${s.patch.id}${s.state === 'na' ? ' (ไม่มีในเวอร์ชันนี้)' : ''}`)
+      logInvariants(say, 'now', view, { verbose, showAdvisory: true })
+      const notInVersion = read.states.filter((s) => s.state === 'na').map((s) => s.patch.id)
+      for (const id of notInVersion) notInVersionAll.push({ file: f, id })
+      skipped += read.states.filter((s) => s.state !== 'todo').length
+      details.push({
+        file: f,
+        version: read.version,
+        bytes: read.bytes,
+        sha256: read.sha256,
+        syntax: read.syntax,
+        states: view.states,
+        points: read.states.map((s) => ({ id: s.patch.id, kind: s.patch.kind, state: s.state })),
+        notInVersion,
+        ok: view.ok,
+        invariants: view,
+      })
+      invariants.push({ file: f, ...view })
+    } catch (error) {
+      errors += 1
+      say(`[${TOOL}] ERROR ${f} — ${error.message}`)
+      details.push({ file: f, error: error.message })
+      invariants.push({ file: f, ...UNCHECKED, recognised: true, failed: [{ id: 'unreadable', level: REQUIRED, actual: error.message, expected: 'อ่านได้' }] })
+    }
+  }
+  return { targets: files.length, discovered: discovered.length, skipped, errors, missing, invariants, notInVersion: notInVersionAll, details }
+}
+
+/* ── CLI ──────────────────────────────────────────────────────────────────── */
+
+const USAGE = 'usage: node patch-plannotator.mjs [--dry-run] [--list] [--check|--verify] [--json] [--verbose] [--target <plannotator.html>]...'
+
+const jsonReport = ({ mode, ok, dryRun = false, totals, missing = [], targets = [], notInVersion = [] }) =>
+  JSON.stringify({
+    tool: TOOL,
+    revision: REVISION,
+    mode,
+    ok,
+    dryRun,
+    points: describePatches(),
+    totals: { ...totals, missing },
+    targets,
+    notInVersion,
+  }, null, 2)
 
 function main(argv) {
   let dryRun = false
   let list = false
+  let checkOnly = false
+  let json = false
+  let verbose = false
   const targets = []
   const args = [...argv]
   while (args.length) {
     const a = args.shift()
     if (a === '--dry-run') dryRun = true
     else if (a === '--list') list = true
+    else if (a === '--check' || a === '--verify') checkOnly = true
+    else if (a === '--json') json = true
+    else if (a === '--verbose' || a === '-v') verbose = true
     else if (a === '--target') targets.push(args.shift() || '')
     else if (a === '--help' || a === '-h') {
-      console.log('usage: node patch-plannotator.mjs [--dry-run] [--list] [--target <plannotator.html>]...')
+      console.log(USAGE)
       return 0
     } else throw new Error(`ไม่รู้จัก argument: ${a}`)
   }
 
   const discovered = discoverTargets()
   if (list) {
-    console.log(`[patch-plannotator] พบ ${discovered.length} ไฟล์:`)
+    if (json) {
+      console.log(jsonReport({ mode: 'list', ok: true, totals: { targets: discovered.length, discovered: discovered.length }, targets: discovered }))
+      return 0
+    }
+    console.log(`[${TOOL}] พบ ${discovered.length} ไฟล์:`)
     for (const t of discovered) console.log('  ' + t.file)
     return 0
   }
 
   const files = targets.length ? targets : discovered.map((t) => t.file)
   if (!files.length) {
+    if (json) {
+      console.log(jsonReport({
+        mode: checkOnly ? 'check' : 'apply',
+        ok: true,
+        dryRun,
+        totals: { targets: 0, discovered: 0, applied: 0, skipped: 0, errors: 0 },
+      }))
+      return 0
+    }
     console.log('TOTAL applied=0 skipped=0 targets=0 errors=0 dryRun=' + dryRun)
-    console.log('[patch-plannotator] ไม่พบ plannotator.html (ยังไม่ได้ติดตั้ง Plannotator) — ไม่มีอะไรต้องทำ')
+    console.log(`[${TOOL}] ไม่พบ plannotator.html (ยังไม่ได้ติดตั้ง Plannotator) — ไม่มีอะไรต้องทำ`)
     return 0
   }
   for (const f of files) if (!fs.existsSync(f)) {
-    console.error(`[patch-plannotator] target ที่ระบุไม่มีจริง: ${f}`)
+    if (json) console.log(JSON.stringify({ tool: TOOL, ok: false, exit: 2, missing: f }, null, 2))
+    console.error(`[${TOOL}] target ที่ระบุไม่มีจริง: ${f}`)
     return 2
   }
-  if (files.length > 1) console.log(`[patch-plannotator] พบ ${files.length} ไฟล์ — แพตช์ทุกไฟล์ (ใหม่สุดก่อน)`)
 
-  const r = applyAll({ dryRun, targets: targets.length ? targets : null })
+  if (checkOnly) {
+    const r = checkAll({ targets: targets.length ? targets : null, quiet: json, verbose })
+    const failed = r.invariants.filter((i) => i.recognised && !i.ok)
+    const okCount = r.invariants.filter((i) => i.recognised && i.ok).length
+    const advisoryCount = r.invariants.reduce((n, i) => n + (Array.isArray(i.advisory) ? i.advisory.length : 0), 0)
+    if (json) {
+      console.log(jsonReport({
+        mode: 'check',
+        ok: r.errors === 0 && failed.length === 0,
+        dryRun,
+        totals: { targets: r.targets, discovered: r.discovered, ok: okCount, failed: failed.length, advisory: advisoryCount, errors: r.errors },
+        missing: r.missing,
+        targets: r.details,
+        notInVersion: r.notInVersion,
+      }))
+      return r.errors || failed.length ? 1 : 0
+    }
+    console.log(`CHECK files=${r.targets} ok=${okCount} failed=${failed.length} advisory=${advisoryCount} errors=${r.errors}`)
+    for (const i of failed) {
+      const why = i.failed.length ? failText(i.failed) : 'อ่านไฟล์ไม่ได้'
+      console.log(`  ${i.file} — ${why}`)
+    }
+    for (const n of r.notInVersion) console.log(`  (na) ${n.file} — ${n.id} ไม่มีในเวอร์ชันนี้`)
+    console.log(`TOTAL applied=0 skipped=${r.skipped} targets=${r.targets} errors=${r.errors} dryRun=true`)
+    return r.errors || failed.length ? 1 : 0
+  }
+
+  if (files.length > 1 && !json) console.log(`[${TOOL}] พบ ${files.length} ไฟล์ — แพตช์ทุกไฟล์ (ใหม่สุดก่อน)`)
+
+  const r = applyAll({ dryRun, targets: targets.length ? targets : null, quiet: json, verbose })
+  if (json) {
+    console.log(jsonReport({
+      mode: 'apply',
+      ok: r.errors === 0,
+      dryRun,
+      totals: { targets: r.targets, discovered: r.discovered, applied: r.applied, skipped: r.skipped, errors: r.errors },
+      missing: r.missing,
+      targets: r.details,
+      notInVersion: r.notInVersion,
+    }))
+    return r.errors ? 1 : 0
+  }
   console.log(`TOTAL applied=${r.applied} skipped=${r.skipped} targets=${r.targets} errors=${r.errors} dryRun=${dryRun}`)
+  for (const n of r.notInVersion) console.log(`[${TOOL}] จุด ${n.id} ไม่มีในเวอร์ชันนี้: ${n.file}`)
   return r.errors ? 1 : 0
 }
+
+assertNeedlesDisjoint()
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     process.exitCode = main(process.argv.slice(2))
   } catch (error) {
-    console.error(`[patch-plannotator] ABORT — ${error.message}`)
+    console.error(`[${TOOL}] ABORT — ${error.message}`)
     console.error('TOTAL applied=0 skipped=0 targets=0 errors=1 (ไม่มีการเขียนไฟล์)')
     process.exitCode = 1
   }

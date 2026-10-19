@@ -9,6 +9,17 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import {
+  INVARIANTS,
+  PATCHES,
+  assertNeedlesDisjoint,
+  check as plannotatorCheck,
+  count as plannotatorCount,
+  deleteHintSpan as removeHintSpan,
+  plan as plannotatorPlan,
+  syntaxBad as plannotatorSyntaxBad,
+  syntaxOf as plannotatorSyntax,
+} from './patch-plannotator.mjs';
+import {
   approvalsFromMessages,
   builderTarget,
   decide,
@@ -203,7 +214,8 @@ test('bundle: buddha declares approve-to-buddha → builder inline', () => {
   assert.match(md, /GATE 2[\s\S]{0,400}builder/);
 });
 
-/** ตัวเฝ้า vendor: Plannotator อัปเดต/ติดตั้งใหม่เมื่อไร patch ปุ่ม approve จะหลุด — เตือน (WARN) ไม่ทำให้ FAIL */
+/** ตัวเฝ้า vendor: Plannotator อัปเดต/ติดตั้งใหม่เมื่อไร patch ปุ่ม approve จะหลุด — เตือน (WARN) ไม่ทำให้ FAIL
+ *  เกณฑ์ "แพตช์ครบ" ยืมจาก patch-plannotator เอง (แหล่งความจริงเดียวกับ --check · ไม่ hardcode สตริงซ้ำ) */
 function plannotatorHtmlCopies() {
   const home = HOME;
   const roots2 = [
@@ -225,25 +237,131 @@ function plannotatorHtmlCopies() {
   return found;
 }
 
+/* สตริงที่ต้องเฝ้า มาจาก patch-plannotator (ไม่ประกาศซ้ำที่นี่) */
+const plKeyPatch = PATCHES.find((p) => p.id === 'localstorage-key');
+const plHintNeedle = INVARIANTS.find((i) => i.id === 'hint/child-gone').needle;
+const plFixCmd = 'node patch-plannotator.mjs';
+const plCheckCmd = 'node patch-plannotator.mjs --check';
+
+/** เกณฑ์ "ถึงปลายทาง" บนข้อความจริง — ยืม invariant required จาก patch-plannotator ตรง ๆ (แหล่งเดียวกับ --check และ Console)
+ *  เดิมนับเองแค่ "(?)" + key + syntax: ไฟล์ที่ "5 จุด applied แต่โครงปุ่มพัง" (span ชื่อ agent หาย / array ไม่ปิด)
+ *  จึงถูกนับว่าถึงปลายทางทั้งที่ `--check` ไม่ผ่าน
+ *  หมายเหตุ: ฟังก์ชันนี้ throw ได้ (plan/check throw เมื่อเจอรูปแบบเดิมซ้ำ เช่น span "(?)" 2 ก้อน ตามสัญญาของแพตเชอร์) — ผู้เรียกต้องดัก */
+function plannotatorPatchProblems(text) {
+  const problems = [];
+  const states = plannotatorPlan(text);
+  const todo = states.filter((s) => s.state === 'todo');
+  const na = states.filter((s) => s.state === 'na');
+  if (todo.length) problems.push(`ยังไม่แพตช์ ${todo.length} จุด (${todo.map((s) => s.patch.id).join(', ')})`);
+  for (const s of na) problems.push(`จุด ${s.patch.id} ไม่มีในเวอร์ชันนี้`);
+  const inv = plannotatorCheck(text);
+  for (const f of inv.failed) problems.push(`invariant ${f.id} ไม่ผ่าน (${f.subject} = ${f.actual} · ต้องเป็น ${f.expected})`);
+  const syntax = plannotatorSyntax(text);
+  if (inv.recognised && plannotatorSyntaxBad(syntax)) problems.push(`syntax = ${syntax} (ต้อง ok)`);
+  return { problems, todo, na };
+}
+
 {
   const copies = plannotatorHtmlCopies();
   if (!copies.length) {
     add('PASS', 'plannotator: approve button', 'ยังไม่ติดตั้ง Plannotator — ข้าม');
   } else {
-    const stale = copies.filter((f) => {
-      const t = readText(f) || '';
-      return t.includes('{switchTo:"build"}') || t.includes('{switchTo:"builder"}');
-    });
-    const patched = copies.filter((f) => (readText(f) || '').includes('{switchTo:"buddha"}'));
-    if (stale.length) {
-      add('WARN', 'plannotator: approve button', `${stale.length}/${copies.length} ไฟล์ยังชี้ build/builder — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
-    } else if (patched.length) {
-      add('PASS', 'plannotator: approve button', `${patched.length}/${copies.length} ไฟล์ชี้ buddha แล้ว (label "Buddha")`);
+    const done = [];
+    const todoFiles = [];   // ยังไม่แพตช์ (มีจุด todo) = เรื่องปกติ → WARN + คำสั่งแก้
+    const naIds = new Set(); // จุดที่ไม่มีในเวอร์ชันนี้
+    const other = [];        // แพตช์ไม่ครบแบบอื่น (syntax พัง / โครงเปลี่ยน) — รายละเอียดรายไฟล์
+    for (const f of copies) {
+      /* กันไฟล์ที่ประเมินไม่ได้ (plan/check throw ตามสัญญา) ไม่ให้ทำ flow-check พังทั้งตัว —
+         ต้องออกมาเป็น WARN รายไฟล์ ไม่ใช่ stack trace */
+      let verdict;
+      try { verdict = plannotatorPatchProblems(readText(f) || ''); }
+      catch (error) {
+        other.push(`${f} → ประเมินไม่ได้: ${error.message}`);
+        continue;
+      }
+      const { problems, todo, na } = verdict;
+      for (const s of na) naIds.add(s.patch.id);
+      if (!problems.length) done.push(f);
+      else if (todo.length) todoFiles.push(f);
+      else other.push(`${f} → ${problems.join(' · ')}`);
+    }
+    if (done.length === copies.length) {
+      add('PASS', 'plannotator: approve button', `${done.length}/${copies.length} ไฟล์ถึงปลายทาง (5 จุดครบ · ไม่มี "(?)" · key ${plKeyPatch.to} · syntax ok)`);
     } else {
-      add('WARN', 'plannotator: approve button', 'ไม่พบเครื่องหมายของ patch — Plannotator อาจเปลี่ยนโครง html');
+      const bits = [];
+      if (todoFiles.length) bits.push(`${todoFiles.length}/${copies.length} ไฟล์ยังไม่แพตช์ — รัน "${plFixCmd}" แล้วรีสตาร์ท OpenCode`);
+      if (naIds.size) bits.push(`มีจุดที่ไม่มีในเวอร์ชันนี้`);
+      bits.push(`ตรวจซ้ำ "${plCheckCmd}"`);
+      add('WARN', 'plannotator: approve button', bits.join(' · '));
+      if (naIds.size) add('WARN', 'plannotator: จุดที่ไม่มีในเวอร์ชันนี้', `จุด ${[...naIds].join(', ')} ไม่มีในเวอร์ชันนี้`);
+      for (const line of other) add('WARN', 'plannotator: แพตช์ไม่ครบ (รายไฟล์)', line);
     }
   }
 }
+
+/* ---- เทสต์ในหน่วยความจำ: กลไกของ patch-plannotator ที่ Console/flow-check พึ่งพา ---- */
+
+/** snippet จิ๋วที่ "รู้จัก" จุดหนึ่ง (default-approve-target) กันไม่ให้จุดโครงปุ่มถูกข้ามเพราะไฟล์ไม่รู้จัก
+ *  โครงปุ่มจริงจาก vendor: `...{className:"max-w-[120px] truncate",children:<X>.name})` แล้วปิด array */
+const plMini = (tail) => `{switchTo:"build"}zzz${tail}`
+const plButtonTodo = (names) =>
+  plMini(`className:"max-w-[120px] truncate",children:XX.name}),` +
+  `${names[0]}&&${names[1]}.jsx("span",{className:"opacity-60 text-[10px]",children:"(?)"})]}):"Approve"`)
+const plButtonDone = () => plMini(`className:"max-w-[120px] truncate",children:XX.name})]}):"Approve"`)
+const plan1 = (text, point) => plannotatorPlan(text).find((s) => s.patch.id === point).state
+
+test('plannotator: regex ลบ span "(?)" ยังทำงานเมื่อชื่อ minified เปลี่ยน', () => {
+  const html = plButtonTodo(['Qq7', 'Zz_9$']); // ชื่อคนละชุดกับ vendor (A/I)
+  assert.equal(plannotatorCount(html, plHintNeedle), 1, 'snippet ตั้งต้นต้องมี span "(?)" 1 ครั้ง');
+  assert.equal(plan1(html, 'button-hint-span'), 'todo', 'ต้องมองว่า span นี้ยังต้องลบ (ไม่ผูกชื่อตัวแปร)');
+  const fixed = removeHintSpan(html);
+  assert.equal(plannotatorCount(fixed, plHintNeedle), 0, 'หลังลบต้องไม่เหลือ "(?)"');
+  assert.equal(plan1(fixed, 'button-hint-span'), 'applied', 'จุดนั้นต้องเป็น applied หลังลบ');
+  assert.equal(plan1(fixed, 'default-approve-target'), 'todo', 'จุดอื่นต้องไม่ถูกแตะ');
+});
+
+test('plannotator: needle ไม่ทับกัน (assertNeedlesDisjoint)', () => {
+  assert.equal(assertNeedlesDisjoint(), true, 'ชุด invariant จริงต้องไม่ทับกัน');
+  assert.throws(() => assertNeedlesDisjoint([
+    { id: 'a/to', needle: 'plannotator-approve-buddha-v2' },
+    { id: 'b/from', needle: 'plannotator-approve-buddha' },
+  ]), /substring/, 'needle ที่เป็น substring กันต้อง throw (กับดัก count())');
+  assert.throws(() => assertNeedlesDisjoint([
+    { id: 'a/to', needle: 'same' },
+    { id: 'b/from', needle: 'same' },
+  ]), /นับซ้ำ/, 'needle ซ้ำต้อง throw');
+});
+
+test('plannotator: เจอ "(?)" 2 ครั้งต้อง throw (ไม่เดา ไม่แตะไฟล์)', () => {
+  const two = plButtonTodo(['A', 'I']).replace(']}):"Approve"', ',A&&I.jsx("span",{className:"opacity-60 text-[10px]",children:"(?)"})]}):"Approve"');
+  assert.equal(plannotatorCount(two, plHintNeedle), 2, 'snippet ต้องมี "(?)" 2 ครั้ง');
+  assert.throws(() => plannotatorPlan(two), /2 ครั้ง/, 'plan() ต้อง throw เมื่อรูปแบบเดิมซ้ำ');
+  assert.throws(() => removeHintSpan(two), /พอดี 1 ก้อน/, 'ตัวลบต้อง throw เมื่อเจอ 2 ก้อน');
+});
+
+test('plannotator: โครงปุ่มพังต้องถูกจับ (button/label-structure-intact)', () => {
+  const word = 'button/label-structure-intact';
+  const good = plButtonDone();
+  assert.ok(!plannotatorCheck(good).failed.map((f) => f.id).includes(word), 'รูปที่ถูกต้องต้องไม่ถูกจับ');
+  const broken = good.replace('})]}):"Approve"', '})}):"Approve"'); // array ไม่ปิด
+  assert.notEqual(broken, good, 'ต้องแก้ snippet ได้จริง (ไม่งั้นเทสต์นี้ไม่ได้ทดสอบอะไร)');
+  assert.ok(plannotatorCheck(broken).failed.map((f) => f.id).includes(word), 'array ไม่ปิด = ต้อง fail');
+  const noSpan = plMini('className:"opacity-60",children:"→"');
+  assert.ok(plannotatorCheck(noSpan).failed.map((f) => f.id).includes(word), 'span ชื่อ agent หาย = ต้อง fail');
+});
+
+test('plannotator: ค่า to ผิดนับต้องไม่ถูกกลืน (needle ฝั่งปลายทางยังอยู่ในไฟล์)', () => {
+  /* กับดักที่แก้ใน U9: คีย์ใหม่โผล่ 2 ครั้ง (ไบต์มีจริง แต่ไม่ใช่รูปแบบ "ก่อนแพตช์") → state ออกมาเป็น na
+     ถ้า survey() ตัดสิน "รู้จักจุดนี้" จาก state อย่างเดียว invariant ที่ fail จะถูกกลืน → --check/Console/flow-check ผ่านผิด */
+  const KEY = '"plannotator-approve-target-v2"';
+  const one = `${plButtonTodo(['A', 'I'])}${KEY}`;
+  const two = `${plButtonTodo(['A', 'I'])}${KEY}||${KEY}`;
+  assert.equal(plannotatorCount(one, KEY), 1, 'snippet แรกต้องมีคีย์ 1 ครั้ง');
+  assert.equal(plannotatorCount(two, KEY), 2, 'snippet ที่สองต้องมีคีย์ 2 ครั้ง');
+  assert.ok(!plannotatorCheck(one).failed.map((f) => f.id).includes('localstorage-key/to'), 'คีย์ 1 ครั้งต้องไม่ถูกฟ้อง');
+  assert.ok(plannotatorCheck(two).failed.map((f) => f.id).includes('localstorage-key/to'), 'คีย์ 2 ครั้งต้องถูกฟ้อง (ไม่ถูกกลืน)');
+  assert.equal(plan1(two, 'localstorage-key'), 'na', 'state ยังเป็น na ตามเดิม (ไม่ใช่รูปร่างที่รู้จัก — แต่ต้องถูกตัดสิน)');
+});
 
 test('bundle: plan gate code has deny default', () => {
   const src = readText(path.join(DIR, 'bundle', 'plugins', 'bazer-flow', 'index.ts')) || '';
