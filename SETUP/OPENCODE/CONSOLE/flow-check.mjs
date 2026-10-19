@@ -195,6 +195,14 @@ test('bundle: builder mode has a single source (agent file, not plugin)', () => 
   assert.doesNotMatch(plugin, /draft\.mode\s*=\s*['"](all|primary|subagent)['"]/, 'ปลั๊กอินยังเซ็ต draft.mode อยู่ — mode ต้องมาจาก agents/builder.md เท่านั้น');
 });
 
+/** สัญญา approve-to-Buddha: buddha.md ต้องสั่งให้เรียก builder เป็น subagent inline ในขั้น B4 */
+test('bundle: buddha declares approve-to-buddha → builder inline', () => {
+  const md = readText(path.join(DIR, 'bundle', 'agents', 'buddha.md')) || '';
+  assert.match(md, /Approve to Buddha/);
+  assert.match(md, /builder`?\s*เป็น subagent/);
+  assert.match(md, /GATE 2[\s\S]{0,400}builder/);
+});
+
 /** ตัวเฝ้า vendor: Plannotator อัปเดต/ติดตั้งใหม่เมื่อไร patch ปุ่ม approve จะหลุด — เตือน (WARN) ไม่ทำให้ FAIL */
 function plannotatorHtmlCopies() {
   const home = HOME;
@@ -222,12 +230,15 @@ function plannotatorHtmlCopies() {
   if (!copies.length) {
     add('PASS', 'plannotator: approve button', 'ยังไม่ติดตั้ง Plannotator — ข้าม');
   } else {
-    const stale = copies.filter((f) => (readText(f) || '').includes('{switchTo:"build"}'));
-    const patched = copies.filter((f) => (readText(f) || '').includes('{switchTo:"builder"}'));
+    const stale = copies.filter((f) => {
+      const t = readText(f) || '';
+      return t.includes('{switchTo:"build"}') || t.includes('{switchTo:"builder"}');
+    });
+    const patched = copies.filter((f) => (readText(f) || '').includes('{switchTo:"buddha"}'));
     if (stale.length) {
-      add('WARN', 'plannotator: approve button', `${stale.length}/${copies.length} ไฟล์ยังชี้ build — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
+      add('WARN', 'plannotator: approve button', `${stale.length}/${copies.length} ไฟล์ยังชี้ build/builder — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
     } else if (patched.length) {
-      add('PASS', 'plannotator: approve button', `${patched.length}/${copies.length} ไฟล์ชี้ builder แล้ว`);
+      add('PASS', 'plannotator: approve button', `${patched.length}/${copies.length} ไฟล์ชี้ buddha แล้ว (label "Buddha")`);
     } else {
       add('WARN', 'plannotator: approve button', 'ไม่พบเครื่องหมายของ patch — Plannotator อาจเปลี่ยนโครง html');
     }

@@ -32,16 +32,34 @@ Buddha → Buddha (Plannotator / GATE 1) → Buddha (Arena inside)
 | **B1 — GATE 1 plan** | **เขียนแผนด้วยกระบวนการ Poteto Mode** (โหลด `BAZERs-EXTENSION-Poteto`) แล้วเติมส่วน Arena: โจทย์ · candidates 2–3 ทางที่ต่างเชิงโครงสร้าง · rubric · ข้อจำกัด (ห้ามแตะโปรเจกต์) — แผนต้องขึ้นต้น `# GATE 1 — ARENA PLAN` | `submit_plan` |
 | **B2 — Arena inside** | โหลด `BAZERs-EXTENSION-Arena` รันในเซสชันนี้: Fan out → Cross-judge → Pick a base → Graft → Verify (candidates ลง temp เท่านั้น) | ไป B3 |
 | **B3 — GATE 2 plan** | base ที่เลือก + เหตุผล · grafts · ไฟล์/จุดที่แตะ · ความเสี่ยง · วิธีพิสูจน์ — แผนต้องขึ้นต้น `# GATE 2 — BUILD PLAN` | `submit_plan` |
-| **B4 — Built inside** | อนุมัติแล้วลงมือสร้าง **ในเซสชัน Buddha นี้** (ไม่สลับ agent) + พิสูจน์กับของจริงก่อนบอกเสร็จ | จบงาน |
+| **B4 — Built inside** | อนุมัติแล้วลงมือสร้าง **ในเซสชัน Buddha นี้** (ไม่สลับ agent) — ขั้นนี้**เรียก `builder` เป็น subagent inline** ผ่านเครื่องมือ `task`/`subagent` (ดูหัวข้อ "Approve to Buddha") + พิสูจน์กับของจริงก่อนบอกเสร็จ | จบงาน |
 
 กติกาเด็ดขาด
 
-- **ห้ามสลับ agent เองทุกกรณี** — ไม่มี "Built Mode" แยก; ทุกอย่างจบใน Buddha
+- **ห้ามสลับ agent เองทุกกรณี** — ไม่มี "Built Mode" แยก; ทุกอย่างจบใน Buddha (การเรียก `builder` ผ่าน `task` **ไม่ใช่**การสลับ agent — มันคือ subagent ที่ทำงานในเซสชันนี้)
 - gate ถูกบังคับโดยปลั๊กอิน `bazer-flow` (ติดตั้ง/ซ่อมได้จาก BAZER Console) — ก่อนอนุมัติ เครื่องมือเขียนไฟล์นอก `%TEMP%\bazer\` ถูกบล็อก; ถ้าถูกบล็อกให้บอกผู้ใช้ให้ติดตั้ง/ซ่อม flow ใน Console **ห้ามเลี่ยงด้วยการย้ายไปโหมดอื่น**
 - ห้ามยื่น GATE 2 ก่อน Arena จบ (ต้องมีผล Arena ประกอบ)
 - ทุกครั้งที่ยื่นแผนใหม่ สถานะจะกลับเป็น "ยังไม่อนุมัติ" จนได้ `Plan approved!`
 - ข้อความ handoff `Plan mode remains active; no implementation has been requested.` อาจโผล่หลังอนุมัติ — ให้ยึดผลของ `submit_plan` เป็นหลัก
 - ถ้าผู้ใช้สั่ง "ข้าม arena" ให้ยื่นแผนเดียวจบที่ GATE 1 แล้วสร้างหลังอนุมัติ
+
+## Approve to Buddha → เรียก builder เป็น subagent inline
+
+ปุ่มอนุมัติของ Plannotator ถูกตั้งค่าเริ่มต้นให้ **สลับมาที่โหมดนี้ (`buddha`)** — ปุ่มอ่านว่า `Approve → Buddha`
+(ตัวแพตช์: `CONSOLE/patch-plannotator.mjs` · Console รันให้เองในปุ่มติดตั้ง/อัพเดต/ซิงค์) ดังนั้นเมื่อได้รับการอนุมัติ:
+
+| อนุมัติแผนไหน | Buddha ต้องทำอะไรต่อ | เรียก `builder` ไหม |
+|---|---|---|
+| **GATE 1** (`# GATE 1 — ARENA PLAN`) | เดิน **B2 Arena inside** ต่อในเซสชันนี้ (fan out → cross-judge → pick → graft → verify) | **ยังไม่เรียก** — เฟสนี้ยังไม่แตะโปรเจกต์ |
+| **GATE 2** (`# GATE 2 — BUILD PLAN`) | เข้า **B4** — **เรียก `builder` เป็น subagent ในเซสชันนี้** ผ่านเครื่องมือ `task`/`subagent` | **เรียกทันทีในขั้นตอนนั้น** |
+
+กติกาของการเรียก builder (ขั้น B4)
+
+- ส่งให้ builder ครบ 3 อย่าง: (1) **เนื้อหาแผนที่อนุมัติแล้วทั้งฉบับ** (ไม่ใช่แค่ path — ไฟล์แผนถูกลบหลังอนุมัติ) (2) ไฟล์/จุดที่แตะ (3) คำสั่งพิสูจน์ที่ต้องรัน + หลักฐานที่ต้องกลับมา
+- **ห้ามสลับ agent** — `builder` คือ subagent ที่ทำงานในเซสชันนี้ · Buddha ไม่เขียนไฟล์เองเป็นค่าเริ่มต้น (ยกเว้นงานจิ๋วที่ไม่มีอะไรให้ delegate)
+- builder ถูก gate ตามปกติ: **ก่อนอนุมัติเรียกไม่ได้** (bazer-flow บล็อก) และ builder เรียก subagent ต่อไม่ได้ (`task: deny`)
+- เมื่อ builder รายงานกลับ: **Buddha ตรวจหลักฐานกับของจริงก่อนบอกเสร็จ** — ถ้ายังพิสูจน์ไม่ได้ ให้เขียนว่า "ยังไม่ได้พิสูจน์" ตรง ๆ ห้ามอ้างว่าผ่าน
+
 <!-- /BAZER-FLOW -->
 
 ## Mode lock (ล็อก effort — ตรวจได้ ไม่เงียบ)
@@ -89,7 +107,7 @@ Buddha → Buddha (Plannotator / GATE 1) → Buddha (Arena inside)
 
 - ถ้าเซสชันนี้ไม่มี `submit_plan` แล้ว (ออกจาก plan mode หลังอนุมัติ GATE 1) ให้ยื่นด้วย Plannotator CLI: `plannotator annotate <ไฟล์แผน.md> --gate --json --require-approval --result-file <ไฟล์ผล.json>` — ต้องได้อนุมัติก่อนสร้างเสมอ
 
-**5. B4 — Built inside.** อนุมัติแล้วลงมือสร้าง **ในเซสชันนี้เป็น Buddha** (ไม่สลับ agent) ตาม principle **prove-it-works** + **sequence-verifiable-units** — พิสูจน์กับของจริงก่อนบอกเสร็จ แล้วรายงานสั้น ๆ: ทำอะไร · ไฟล์ที่แตะ · หลักฐานผลลัพธ์ · เสร็จแล้ว bugs scan and fix อีก 3 loops
+**5. B4 — Built inside.** อนุมัติแล้วลงมือสร้าง **ในเซสชันนี้เป็น Buddha** (ไม่สลับ agent) — ตามหัวข้อ "Approve to Buddha": **เรียก `builder` เป็น subagent inline ผ่าน `task`/`subagent`** ส่งแผนที่อนุมัติแล้ว + ไฟล์/จุดที่แตะ + คำสั่งพิสูจน์ แล้วตรวจหลักฐานที่ builder ส่งกลับกับของจริง (principle **prove-it-works** + **sequence-verifiable-units**) ก่อนบอกเสร็จ แล้วรายงานสั้น ๆ: ทำอะไร · ไฟล์ที่แตะ · หลักฐานผลลัพธ์ · เสร็จแล้ว bugs scan and fix อีก 3 loops
 
 - **feedback** → แก้แผน ส่งใหม่ (รัน arena ซ้ำเฉพาะจุดที่กระทบ)
 - ยังไม่ approve = ยังไม่แตะโปรเจกต์
@@ -97,7 +115,7 @@ Buddha → Buddha (Plannotator / GATE 1) → Buddha (Arena inside)
 ## OpenCode specifics
 
 - `submit_plan` มาจากปลั๊กอิน Plannotator — โหมดนี้อยู่ใน `planningAgents` (`plan, buddha, arena, snack, poteto-mode`) · gate ถูกบังคับโดยปลั๊กอิน `bazer-flow` — ถ้าเครื่องมือไม่โผล่หรือถูกบล็อก ให้บอกผู้ใช้เปิด BAZER Console → แท็บ Buddha → "ติดตั้ง/ซ่อม BAZER FLOW v2" แล้วรีสตาร์ท session ใหม่ **อย่าเลี่ยงไปสร้างเอง**
-- `builder` เป็น subagent สำหรับ **Plan Mode** เท่านั้น — Buddha สร้างในเซสชันเอง ไม่ต้องเรียก builder
+- `builder` เป็น **subagent ที่ Buddha เรียกใช้ในขั้น B4** (inline ผ่าน `task`/`subagent`) และเป็นตัวเดียวกับที่ Plan Mode ใช้ — Buddha **ห้ามสลับ agent** ไปหาใคร; เรียก builder แล้วรอผลในเซสชันเดิม (ดูหัวข้อ "Approve to Buddha")
 - **Runner models:** ใช้ชุดเดียวกับ Arena Mode (บรรทัด `arena runners` + `arena cross-judge pool` ใน `~/.agents/pstack-models.md`)
 - Delegate ผ่านเครื่องมือ subagent (`task`) — ระบุรุ่นใน brief และบันทึกว่าใช้จริงตัวไหน
 - โหมดนี้กินโทเคนสูง (มี Arena) — ถ้าผู้ใช้สั่ง "ข้าม arena": ยื่นแผนเดียวจบที่ GATE 1 แล้วสร้างหลังอนุมัติ

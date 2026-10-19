@@ -20,12 +20,16 @@
  *   - `flow-check.mjs` เฝ้าว่า patch ยังอยู่ (WARN + บอกคำสั่งนี้เมื่อ Plannotator อัปเดตแล้วหลุด)
  *
  * 4 จุด (แต่ละจุดต้องเจอ "หนึ่งครั้งเท่านั้น" ไม่เช่นนั้น target นั้นไม่ถูกแตะ):
- *   1 default หลังอนุมัติ      {switchTo:"build"}            -> {switchTo:"builder"}
- *   2 เมนู "After approval"    value/label/description       -> builder / Builder / subagent
- *   3 label บนปุ่ม             t.find(...)?.name??e.switchTo -> ห่อ capitalize (โชว์ "Builder")
- *                             (ค่า switchTo ต้องคง "builder" ตัวเล็ก เพราะ server เทียบ agent.name)
- *   4 key localStorage         "plannotator-agent-switch"    -> "plannotator-approve-agent"
- *                             (กันค่าเก่าในเบราว์เซอร์ชนะ default ใหม่)
+ *   1 default หลังอนุมัติ      {switchTo:"build"} หรือ {switchTo:"builder"} (ของเดิม) -> {switchTo:"buddha"}
+ *   2 เมนู "After approval"    value/label/description       -> buddha / Buddha
+ *   3 label บนปุ่ม             t.find(...)?.name??e.switchTo -> ห่อ capitalize (โชว์ "Buddha")
+ *                             (ค่า switchTo ต้องคง "buddha" ตัวเล็ก เพราะ server เทียบ agent.name)
+ *   4 key localStorage         "plannotator-agent-switch" / "plannotator-approve-agent" -> "plannotator-approve-buddha"
+ *                             (กันค่าเก่าในเบราว์เซอร์ชนะ default ใหม่ — เปลี่ยน key ทุกครั้งที่เปลี่ยนเป้าหมาย)
+ *
+ * ทำไม buddha ไม่ใช่ builder: host เทียบ `agent.name` กับค่า switchTo — "buddha" เป็น primary agent ที่สลับได้จริง
+ * (name ตรงเป๊ะ) แล้ว Buddha เป็นคนเรียก `builder` เป็น subagent ในเซสชันต่อ (ดู bundle/agents/buddha.md)
+ * ส่วน "builder" เป็น subagent ล้วน — ใช้เป็นเป้าหมายการสลับ session ไม่ได้
  *
  * Usage:
  *   node patch-plannotator.mjs [--dry-run] [--list] [--target <plannotator.html>]...
@@ -47,13 +51,19 @@ export const count = (text, needle) => {
   return n
 }
 
-const MENU_FROM = '{value:"build",label:"Build",description:"Switch to build agent after approval"}'
-const MENU_TO = '{value:"builder",label:"Builder",description:"Switch to builder subagent after approval"}'
+const TARGET_TO = '{switchTo:"buddha"}'
+/* ต้นทางที่ยอมรับได้: ไฟล์ต้นฉบับ (build) หรือไฟล์ที่เคยแพตช์เป็น builder มาก่อน (transition) */
+const TARGET_FROM = ['{switchTo:"build"}', '{switchTo:"builder"}']
+const MENU_TO = '{value:"buddha",label:"Buddha",description:"Switch to Buddha after approval (Buddha runs builder as a subagent)"}'
+const MENU_FROM = [
+  '{value:"build",label:"Build",description:"Switch to build agent after approval"}',
+  '{value:"builder",label:"Builder",description:"Switch to builder subagent after approval"}',
+]
 const LABEL_MARK = ')?.name??e.switchTo}' // ก่อนแพตช์
 const LABEL_DONE = '?.name??e.switchTo)}' // หลังแพตช์ (ปิด call ก่อน `}` ของฟังก์ชัน)
 const LABEL_WRAP = '((n)=>n?n.charAt(0).toUpperCase()+String(n).slice(1):n)('
-const KEY_FROM = '"plannotator-agent-switch"'
-const KEY_TO = '"plannotator-approve-agent"'
+const KEY_TO = '"plannotator-approve-buddha"'
+const KEY_FROM = ['"plannotator-agent-switch"', '"plannotator-approve-agent"']
 const FIND_CALL = 't.find('
 
 /** หา expression ของ label ที่ลงท้ายด้วย LABEL_MARK: คืน { start, end, region, wrapped } (region รวม `}` ตัวสุดท้าย) */
@@ -68,7 +78,7 @@ function labelRegion(text) {
 }
 
 export const PATCHES = [
-  { id: 'default-approve-target', from: '{switchTo:"build"}', to: '{switchTo:"builder"}' },
+  { id: 'default-approve-target', from: TARGET_FROM, to: TARGET_TO },
   { id: 'settings-menu-entry', from: MENU_FROM, to: MENU_TO },
   { id: 'label-capitalisation' },
   { id: 'localstorage-key', from: KEY_FROM, to: KEY_TO },
@@ -85,12 +95,13 @@ function stateOf(patch, text) {
     if (wraps === 0 && done === 0 && naive === 0) return 'na'
     throw new Error(`${patch.id}: สภาพไฟล์ตีความไม่ได้ (wrapper=${wraps}, done=${done}, marker=${naive})`)
   }
-  const before = count(text, patch.from)
   const after = count(text, patch.to)
-  if (before === 1 && after === 0) return 'todo'
-  if (before === 0 && after === 1) return 'applied'
-  if (before === 0 && after === 0) return 'na'
-  throw new Error(`${patch.id}: พบต้นฉบับ ${before} / ปลายทาง ${after} (ต้องเป็น 1/0 หรือ 0/1)`)
+  const beforeCounts = patch.from.map((f) => count(text, f))
+  const before = beforeCounts.reduce((a, b) => a + b, 0)
+  if (after === 1 && before === 0) return 'applied'
+  if (after === 0 && before === 1) return 'todo'
+  if (after === 0 && before === 0) return 'na'
+  throw new Error(`${patch.id}: พบต้นฉบับ ${before} (${beforeCounts.join('/')}) / ปลายทาง ${after} — ต้องเป็น 1/0 หรือ 0/1`)
 }
 
 function applyPatch(patch, text) {
@@ -98,8 +109,9 @@ function applyPatch(patch, text) {
     const r = labelRegion(text)
     return text.slice(0, r.start) + r.wrapped + text.slice(r.end)
   }
-  const at = text.indexOf(patch.from)
-  return text.slice(0, at) + patch.to + text.slice(at + patch.from.length)
+  const from = patch.from.find((f) => text.includes(f))
+  const at = text.indexOf(from)
+  return text.slice(0, at) + patch.to + text.slice(at + from.length)
 }
 
 export function plan(text) {

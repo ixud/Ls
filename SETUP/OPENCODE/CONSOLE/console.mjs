@@ -465,8 +465,8 @@ function plannotatorPatchState() {
   let stale = 0, patched = 0;
   for (const f of found) {
     const t = readText(f) || '';
-    if (t.includes('{switchTo:"build"}')) stale++;
-    else if (t.includes('{switchTo:"builder"}')) patched++;
+    if (t.includes('{switchTo:"buddha"}')) patched++;
+    else if (t.includes('{switchTo:"build"}') || t.includes('{switchTo:"builder"}')) stale++;
   }
   return { total: found.length, stale, patched };
 }
@@ -1988,12 +1988,12 @@ const ACTIONS = {
       const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
       steps.push({
         id: 'plannotator-patch',
-        label: 'แพตช์ปุ่มอนุมัติ Plannotator → subagent builder (label "Builder")',
+        label: 'แพตช์ปุ่มอนุมัติ Plannotator → Buddha (label "Buddha" — Buddha เรียก builder เป็น subagent inline)',
         detail: !st.total
           ? 'ยังไม่พบ plannotator.html — จะลองใหม่ให้อัตโนมัติทุกครั้งที่กดอัพเดต/ซิงค์ (หลังเปิด OpenCode ครั้งแรก)'
           : st.stale
-            ? `จะแพตช์ ${st.stale}/${st.total} ไฟล์ (สำรอง .bak ก่อนเขียนทุกไฟล์)`
-            : `แพตช์แล้ว ${st.patched}/${st.total} ไฟล์ (ค่าเริ่มต้นของปุ่ม + label "Builder")`,
+            ? `จะแพตช์ ${st.stale}/${st.total} ไฟล์ (เปลี่ยนจาก build/builder → buddha · สำรอง .bak ก่อนเขียน)`
+            : `แพตช์แล้ว ${st.patched}/${st.total} ไฟล์ (ค่าเริ่มต้นของปุ่ม + label "Buddha")`,
         will: st.stale > 0,
       });
     }
@@ -2184,7 +2184,7 @@ const ACTIONS = {
     return { message: `อัพเดตแล้ว ${n} รายการ (สำรองอัตโนมัติก่อนเขียน)${tail}`, applied: n };
   },
 
-  /* Plannotator: ปุ่มอนุมัติชี้ subagent builder (patch vendor ไฟล์ html) — เรียกได้จากปุ่ม + ติดไปกับ install/update */
+  /* Plannotator: ปุ่มอนุมัติชี้ buddha (patch vendor ไฟล์ html) — เรียกได้จากปุ่ม + ติดไปกับ install/update */
   'plannotator-patch': async ({ dryRun } = {}) => {
     const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
     const r = safe(() => plPatchApplyAll({ dryRun: !!dryRun, home: HOME }), { targets: 0, discovered: 0, applied: 0, skipped: 0, errors: 1, details: [] });
@@ -2194,7 +2194,7 @@ const ACTIONS = {
       return { message: 'ยังไม่พบ plannotator.html (Plannotator ยังไม่ถูกติดตั้งบนเครื่องนี้) — ปุ่มติดตั้ง/อัพเดต/ซิงค์จะลองให้ใหม่ทุกครั้ง', ...r, state: st };
     }
     const where = (r.details || []).filter(d => d.applied).map(d => `${path.basename(path.dirname(path.dirname(d.file)))}/${path.basename(path.dirname(d.file))}`);
-    const msg = `${dryRun ? 'ทดสอบ: ' : ''}แพตช์ปุ่มอนุมัติ Plannotator → subagent builder (label "Builder") — ${parts.join(' · ')}${where.length ? ' · ' + where.join(', ') : ''}${r.errors ? ' · มีไฟล์ที่แพตช์ไม่ได้ (ดู log)' : ''}`;
+    const msg = `${dryRun ? 'ทดสอบ: ' : ''}แพตช์ปุ่มอนุมัติ Plannotator → Buddha (label "Buddha" แล้ว Buddha เรียก builder เป็น subagent ต่อ) — ${parts.join(' · ')}${where.length ? ' · ' + where.join(', ') : ''}${r.errors ? ' · มีไฟล์ที่แพตช์ไม่ได้ (ดู log)' : ''}`;
     return { message: msg, ...r, state: st };
   },
 

@@ -52,7 +52,7 @@ function reminder(agent, approved) {
       '## BAZER FLOW v2 — BUDDHA (approved)',
       'The Plannotator plan-mode reminder above is superseded for edits in this session: writes are allowed now.',
       'If the approved plan was GATE 1, run Arena inside this session (temp only) and then submit the GATE 2 plan.',
-      'If it was GATE 2, implement in this session as Buddha. Do not switch agents.',
+      'If it was GATE 2, implement in this session as Buddha and call the `builder` subagent inline (tool `subagent`): pass the approved plan content, the files/areas to touch, and the proof commands — then verify builder\'s report with real evidence. Do not switch agents.',
     ].join('\n');
   }
   if (approved) {

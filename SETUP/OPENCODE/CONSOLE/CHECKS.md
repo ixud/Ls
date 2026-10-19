@@ -411,3 +411,32 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 
 - ปุ่มใหม่จะทำงานหลัง **ปิด-เปิด BAZER Console** (แอปโหลดโค้ดตอนเปิด) — ถ้ายังไม่รีสตาร์ทแล้วกด จะขึ้นข้อความ "แอปที่เปิดอยู่ยังเป็นโค้ดเก่า" (มีอยู่เดิมใน `act()`)
 - เครื่องใหม่ที่ยังไม่เคยเปิด OpenCode: cache ของ Plannotator ยังไม่มี → ขั้นนี้จะ `will=false` และจะแพตช์ให้อัตโนมัติเมื่อกดอัพเดต/ซิงค์หลังเปิด OpenCode ครั้งแรก
+
+
+## รอบ 11 — เปลี่ยน approve target เป็น `buddha` + Buddha เรียก builder เป็น subagent inline
+
+วันที่: 19 ต.ค. 2026 · Console v1.5.0 · โจทย์: (1) ปุ่มอนุมัติต้องเป็น approve-to-buddha (ไม่ใช่ approve-to-builder) (2) เขียนใน `buddha.md` เองว่าเมื่อได้ approve ให้เรียก `builder` เป็น sub-agent inside Buddha ในขั้นตอนนั้น (3) Console ต้องติดตั้งการตั้งนี้ให้
+
+| เรื่อง | ผล |
+|---|---|
+| `patch-plannotator.mjs` | เป้าหมายใหม่ `{switchTo:"buddha"}` + เมนู `{value:"buddha",label:"Buddha",...}` + key ใหม่ `plannotator-approve-buddha` · **รองรับ transition**: ไฟล์ต้นฉบับ (`build`) และไฟล์ที่เคยแพตช์เป็น `builder` → จบที่ buddha (ผลลัพธ์ byte-identical กัน) |
+| `bundle/agents/buddha.md` | เพิ่มหัวข้อ "Approve to Buddha → เรียก builder เป็น subagent inline" (ตาราง GATE 1 vs GATE 2 + กฎ 4 ข้อของขั้น B4) · B4 row/ลำดับตายตัว/OpenCode specifics ชี้การเรียก `builder` ผ่าน `task` (ไม่สลับ agent) |
+| `bazer-flow` (bundle + installed) | reminder ของ Buddha-after-approval สั่งให้เรียก `builder` เป็น subagent inline ในขั้น B4 (hash bundle=installed `True`) |
+| Console | ปุ่ม "แพตช์ปุ่มอนุมัติ → Buddha" · แถวตรวจ/ข้อความ/ขั้น `plannotator-patch` ใน setup-preview อัปเดตเป็น buddha; เกณฑ์ stale จับทั้ง `build` และ `builder` |
+| `flow-check.mjs` | guard ใหม่ของ Plannotator (buddha) + เทสต์สัญญา `buddha.md` ("Approve to Buddha" + `builder` เป็น subagent + ผูกกับ GATE 2) → **PASS 27 · WARN 0** |
+
+### หลักฐาน (รันจริง)
+
+| ตรวจ | ผล |
+|---|---|
+| patcher บน sandbox | ไฟล์ต้นฉบับ → buddha: applied=4 sha เปลี่ยน · รันซ้ำ applied=0 · ไฟล์ที่แพตช์ `builder` มาก่อน → buddha: applied=3 skipped=1 และ **sha เท่ากับเส้นทางต้นฉบับเป๊ะ** · `node --check` module block exit 0 |
+| ปุ่มอ่านว่าอะไร (eval `iXa`) | `switchTo=buddha` → คืน `"Buddha"` ทั้งกรณีมี/ไม่มี agent ในลิสต์ · default ของ plan = `{"switchTo":"buddha"}` (review ยัง `disabled`) |
+| html จริงบนเครื่อง | `{switchTo:"buddha"}`=1 · `{switchTo:"builder"}`=0 · `{switchTo:"build"}`=0 · key ใหม่=1 · key เก่า=0 (ทั้ง 2 copy) |
+| Console action จริง (พอร์ต 4310) | `install-agent buddha.md` ✔ · `install-agent builder.md` ✔ · `mirror-agents` ✔ (mirror `BAZERs-EXTENSION-Buddha` มีหัวข้อใหม่แล้ว) · `plannotator-patch` → `applied=6 · skipped=2 · targets=2` (transition สำเร็จ) |
+| ไฟล์ที่ติดตั้ง | `~/.config/opencode/agents/buddha.md` และ `builder.md` hash ตรงกับ bundle · plugin `index.ts` ตรงกับ bundle |
+| `/api/agent` (runtime) | `buddha: name=buddha mode=primary` → ค่า `switchTo:"buddha"` ผ่านการเทียบ `agent.name` ของ Plannotator |
+
+### ต้องรู้
+
+- **ต้องรีสตาร์ท OpenCode** ให้ html ที่แพตช์มีผลกับปุ่ม (cache ต่อ process)
+- ถ้าผู้ใช้เคยเลือก "Builder" ไว้ในเมนู After approval ค่าเก่าจะไม่ชนะ เพราะ key เปลี่ยนเป็น `plannotator-approve-buddha`
