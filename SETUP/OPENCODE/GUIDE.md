@@ -551,6 +551,10 @@ BAZER Console คือแอปหน้าจอในเครื่อง �
 
 หมายเหตุเรื่องปุ่มในหน้าอนุมัติ: ปุ่มและตัวเลือกทั้งหมดเป็นของ Plannotator เอง — ถ้าผู้ใช้เลือกสลับเป็น `arena` เองในหน้าอนุมัติ ให้ทำตาม `arena.md` ในเซสชันนั้น (ไม่ใช่ค่าเริ่มต้นของ BAZER FLOW v1)
 
+**อัปเดต 19 ต.ค. 2026 — เป้าหมายของปุ่มอนุมัติ:** ค่าเริ่มต้นของ Plannotator ถูกตั้งเป็น subagent `builder` แล้ว (ปุ่มอ่านว่า `Approve → Builder`) และค่าเก่าในเบราว์เซอร์ถูกกันด้วย key ใหม่ (`plannotator-approve-agent`) — ผลคือ:
+- **Plan Mode:** อนุมัติ = ลุยสร้างต่อด้วย `builder` ตามที่ต้องการ
+- **Buddha / Arena / Snack / Poteto:** หน้าอนุมัติใช้ปุ่มตัวเดียวกัน — ถ้าโฮสต์รองรับ `session.switchAgent` เซสชันจะถูกสลับเป็น `builder` ซึ่ง **ขัดกับกติกา "Buddha ไม่สลับ agent"** จึงควรเลือก **Disabled** (หรือ Custom) ในเมนู "After approval" ของ Plannotator ก่อนใช้ Buddha — วิธีแก้ถาวรบนเครื่องนี้: รัน `node CONSOLE\patch-plannotator.mjs` แล้วเลือกเมนู (ค่าเริ่มต้นอยู่ในไฟล์ `plannotator.html`)
+
 
 ### 🪞 โหมด "เรียก" กันได้อย่างไร — mirror (BAZERs-EXTENSION-*)
 

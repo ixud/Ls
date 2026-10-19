@@ -19,7 +19,7 @@ pstack คือชุด "ทักษะ" (skills) ที่สอน AI agent
 | โฟลเดอร์ | มีอะไร | ปลายทางตอนติดตั้ง |
 |---|---|---|
 | `skills/` | 54 skills รวม playbooks ของ poteto-mode | `~/.agents/skills/` |
-| `agents/` | agent 9 ตัวของชุดนี้ (advisor, arena, bazer, buddha, builder, comment-sicko, poteto-agent, poteto-mode, snack) — โหมด `buddha` เดิน BAZER FLOW v2 และโหมดอื่นถูก "เรียก" ผ่าน mirror `BAZERs-EXTENSION-*` · `builder` เป็น subagent (`mode: all`) สำหรับ Plan Mode | `~/.config/opencode/agents/` |
+| `agents/` | agent 9 ตัวของชุดนี้ (advisor, arena, bazer, buddha, builder, comment-sicko, poteto-agent, poteto-mode, snack) — โหมด `buddha` เดิน BAZER FLOW v2 และโหมดอื่นถูก "เรียก" ผ่าน mirror `BAZERs-EXTENSION-*` · `builder` เป็น subagent (`mode: subagent`) สำหรับ Plan Mode — ไม่โชว์ใน Main Agents | `~/.config/opencode/agents/` |
 | `commands/` | slash command `/poteto-mode` | `~/.config/opencode/commands/` |
 | `config/` | template ไฟล์ตั้งค่าโมเดล | `~/.agents/pstack-models.md` |
 | `docs/`, `README.md` | เอกสารต้นฉบับของ pstack (ยังอ้าง Cursor — ดูหมายเหตุ) | ไม่ต้องติดตั้ง |

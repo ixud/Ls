@@ -184,10 +184,55 @@ test('bundle: plugin files', () => {
 test('bundle: builder agent', () => {
   const md = readText(path.join(DIR, 'bundle', 'agents', 'builder.md')) || '';
   const fm = frontmatter(md);
-  assert.match(fm, /^mode:\s*all$/m);
+  assert.match(fm, /^mode:\s*subagent$/m);
   assert.match(fm, /submit_plan:\s*deny/);
   assert.match(fm, /edit:\s*allow/);
 });
+
+/** builder ต้องเป็น subagent จาก "ไฟล์" เท่านั้น — ห้ามมีใครไปเซ็ต mode ในโค้ดปลั๊กอินอีก (คนละแหล่งความจริง) */
+test('bundle: builder mode has a single source (agent file, not plugin)', () => {
+  const plugin = readText(path.join(DIR, 'bundle', 'plugins', 'bazer-flow', 'index.ts')) || '';
+  assert.doesNotMatch(plugin, /draft\.mode\s*=\s*['"](all|primary|subagent)['"]/, 'ปลั๊กอินยังเซ็ต draft.mode อยู่ — mode ต้องมาจาก agents/builder.md เท่านั้น');
+});
+
+/** ตัวเฝ้า vendor: Plannotator อัปเดต/ติดตั้งใหม่เมื่อไร patch ปุ่ม approve จะหลุด — เตือน (WARN) ไม่ทำให้ FAIL */
+function plannotatorHtmlCopies() {
+  const home = HOME;
+  const roots2 = [
+    path.join(home, '.cache', 'opencode', 'npm', '@plannotator'),
+    path.join(home, '.cache', 'opencode', 'packages', '@plannotator'),
+  ];
+  const found = [];
+  const walk = (dir, depth = 0) => {
+    if (depth > 6) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.name === 'plannotator.html') found.push(p);
+    }
+  };
+  for (const r of roots2) walk(r);
+  return found;
+}
+
+{
+  const copies = plannotatorHtmlCopies();
+  if (!copies.length) {
+    add('PASS', 'plannotator: approve button', 'ยังไม่ติดตั้ง Plannotator — ข้าม');
+  } else {
+    const stale = copies.filter((f) => (readText(f) || '').includes('{switchTo:"build"}'));
+    const patched = copies.filter((f) => (readText(f) || '').includes('{switchTo:"builder"}'));
+    if (stale.length) {
+      add('WARN', 'plannotator: approve button', `${stale.length}/${copies.length} ไฟล์ยังชี้ build — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
+    } else if (patched.length) {
+      add('PASS', 'plannotator: approve button', `${patched.length}/${copies.length} ไฟล์ชี้ builder แล้ว`);
+    } else {
+      add('WARN', 'plannotator: approve button', 'ไม่พบเครื่องหมายของ patch — Plannotator อาจเปลี่ยนโครง html');
+    }
+  }
+}
 
 test('bundle: plan gate code has deny default', () => {
   const src = readText(path.join(DIR, 'bundle', 'plugins', 'bazer-flow', 'index.ts')) || '';
@@ -216,9 +261,15 @@ test('bundle: TUI uses a real slot', () => {
     add('WARN', 'installed flow kit', 'ยังไม่ติดตั้งในเครื่องนี้ — กด "ติดตั้ง BAZER FLOW v2" ใน Console');
   } else {
     test('installed: plugin', () => assert.equal(fs.existsSync(plugin), true, 'plugin ยังไม่ติดตั้ง'));
-    test('installed: builder mode all', () => {
+    test('installed: builder mode subagent', () => {
       assert.equal(fs.existsSync(builder), true, 'builder.md ยังไม่ติดตั้ง (หรือถูกปิด)');
-      assert.match(frontmatter(readText(builder) || ''), /^mode:\s*all$/m);
+      assert.match(frontmatter(readText(builder) || ''), /^mode:\s*subagent$/m);
+    });
+    test('installed: builder mode has a single source', () => {
+      const src = readText(plugin) || '';
+      assert.doesNotMatch(src, /draft\.mode\s*=\s*['"](all|primary|subagent)['"]/, 'ปลั๊กอินในเครื่องยังเซ็ต draft.mode อยู่');
+      const bundleSrc = readText(path.join(DIR, 'bundle', 'plugins', 'bazer-flow', 'index.ts')) || '';
+      assert.equal(src.replace(/\r\n/g, '\n'), bundleSrc.replace(/\r\n/g, '\n'), 'ปลั๊กอินในเครื่องไม่ตรงกับ bundle — กด "ติดตั้ง/ซ่อม BAZER FLOW v2"');
     });
     test('installed: AGENTS gate marker', () => {
       assert.match(readText(agentsMd) || '', /<!--\s*BAZER-FLOW-GATE:\s*v2\s*-->/);

@@ -292,7 +292,7 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 **สรุป:** ปิด bug จาก error `Plugin must export a default definition...` แล้ว และพิสูจน์ด้วยการรันจริงว่า gate บล็อกการเขียนไฟล์ก่อนอนุมัติ
 
 - `workflow` ยังเป็น `plan-agent` ตามเดิม (ไม่แตะ mode-lock R1)
-- `builder` เป็น `mode: all` ตามคำขอ (เห็นใน Main Agents) — ผู้ใช้กดเลือกเองได้ แต่ผู้ใช้คือมนุษย์ ไม่ใช่โมเดลหลบ gate
+- `builder` เป็น `mode: all` ตามคำขอของรอบนั้น (เห็นใน Main Agents) — **อัปเดต 19 ต.ค. 2026:** เปลี่ยนเป็น `mode: subagent` แล้ว ไม่โชว์ใน Main Agents (ดูรอบ 9)
 
 
 ## รอบ 8 — default keybind + shortcut (bug scan & fix 3 loops)
@@ -330,3 +330,84 @@ git show 889fad3:SETUP/OPENCODE/CONSOLE/console.mjs | Select-String -Pattern "pl
 **สรุป:** clone → ติดตั้งเสร็จสรรพ → ได้ keybind `ctrl+alt+m, ctrl+alt+o` และ shortcut `BAZER CONSOLE - WINDOW` โดยไม่ฝัง path ของเครื่องใดเครื่องหนึ่ง
 
 
+
+
+## รอบ 9 — builder เป็น subagent + ปุ่มอนุมัติ Plannotator ชี้ builder
+
+วันที่: 19 ต.ค. 2026 · Console v1.5.0 · โจทย์: (1) เปลี่ยน `builder` จาก Primary → Sub Agent + ซ่อมไฟล์ที่ได้รับผลกระทบ (2) ปุ่ม approve ของ Plannotator (ฝังใน Plan Mode) เปลี่ยนจาก `build` → subagent `builder` (label "Builder")
+
+ผลคัดเลือกจาก Arena (3 candidates + cross-judge): base = C3 "single source of truth" (คะแนน 24) + graft จาก C2 (patch ทุก copy + post-write verify/rollback/backup ไม่ซ้ำชื่อ) และ C1 (UTF-8 round-trip guard + exit code 2)
+
+### Loop 1 — patch mechanics (ทดสอบกับสำเนาเท่านั้น)
+
+| ตรวจ | ผล |
+|---|---|
+| `patch-plannotator.mjs --dry-run` ใส่ไฟล์จริง | `applied=8` (2 ไฟล์ × 4 จุด) · ไม่เขียน · hash live ไม่ขยับ · ไม่มี `.bak` เกิด |
+| apply บนสำเนา | `applied=4` sha256 = `715a572f…f32726` (ตรงกับที่ Arena พิสูจน์) |
+| รันซ้ำ (idempotent) | `applied=0 skipped=4` · ไม่มี backup เพิ่ม |
+| fixture patch ครึ่ง (2/4) | รันแล้วจบครบ 4 — sha256 เท่ากับไฟล์ที่แพตช์เต็มเป๊ะ |
+| fixture UTF-8 พัง | abort `UTF-8 round-trip ไม่ตรง` · ไม่เขียนไฟล์ |
+| syntax A/B | สกัด `<script type="module">` ก่อน/หลัง → `node --check` exit 0 ทั้งคู่ (+69 chars = 4 จุด) |
+
+### Loop 2 — apply จริง + กลไก mode
+
+| ตรวจ | ผล |
+|---|---|
+| patch ไฟล์จริง | 2 ไฟล์ (0.28.22 live + 0.28.8 ใน `packages/`) · `.bak-20261019-093126/093127` อยู่ข้างไฟล์ |
+| counts บนไฟล์จริง | `{switchTo:"builder"}`=1 · `{switchTo:"build"}`=0 · key ใหม่=1 · key เก่า=0 · menu Builder=1 · wrapper=1 |
+| `opencode debug agent` (ผ่าน `debug agents`) | `builder: name=builder mode=subagent` |
+| กลไก override ของปลั๊กอิน | ทดลอง 2 รอบ: ตั้ง `draft.mode='all'` และ `'primary'` → runtime ยังเป็น `subagent` (frontmatter ชนะ) · probe เขียนไฟล์ใน transform ไม่เกิด → callback ไม่ถูกเรียกในพาธนี้ |
+| ทางแก้ | ลบบรรทัด `draft.mode` ออกทั้ง 2 ไฟล์ (bundle + installed, hash `55a83bb2…` เท่ากัน) — mode เหลือแหล่งเดียวคือ `agents/builder.md` |
+| `task(builder)` หลังเปลี่ยน mode | PASS — spawn subagent `builder` งาน read-only: รายงาน `mode: subagent`, 34 บรรทัด, `submit_plan: deny` มีจริง |
+
+### Loop 3 — ตัวตรวจ + Console + เอกสาร
+
+| ตรวจ | ผล |
+|---|---|
+| `node flow-check.mjs` | PASS 26 · FAIL 0 · WARN 0 — เทสต์ใหม่: single-source ของ builder (bundle + installed) และตัวเฝ้า Plannotator (2/2 ไฟล์ชี้ builder) |
+| `node mode-lock.mjs` | FAIL 1 = R4 (`model.json` variant = `low` จากการกด `Ctrl+T` เมื่อ 06:47 — มีมาก่อนงานนี้ แก้ผ่าน Console เท่านั้น) · ที่เหลือ PASS |
+| `node --check console.mjs` | exit 0 |
+| parse `<script>` ใน `console.html` | inline 1 บล็อก (122,681 chars) exit 0 |
+| Console ใหม่ | แถว `builder (subagent)` + แถว `Plannotator: ปุ่มอนุมัติ` ใน flowCard · `AGENT_META.builder.sub=true` · ย้าย `builder.md` จาก `MODE_ORDER` → `SUB_ORDER` |
+| เอกสาร | `FLOW.md` (Plan Mode + ตัวตรวจ §5) · `bundle/README-OPENCODE.md:22` · `CHECKS.md` (รอบนี้) · `mode-lock.mjs` R11 ปรับข้อความให้ตรงสถานะปัจจุบัน |
+
+### ข้อควรระวัง
+
+- ปุ่มอนุมัติตัวเดียวกันถูกใช้ทุก planning agent (`plan`, `buddha`, `arena`, `snack`, `poteto-mode`) — ตั้งเป้า `builder` แล้วจึงเหมาะกับ Plan Mode; ใน Buddha ถ้าโฮสต์รองรับ `switchAgent` session จะถูกสลับเป็น `builder` (ขัดกติกา "Buddha ไม่สลับ agent") → เลือก **Disabled** ในเมนู "After approval" ก่อนใช้ Buddha (บันทึกไว้ใน `GUIDE.md` แล้ว)
+
+### สิ่งที่ยังพิสูจน์ไม่ได้ในรอบนี้
+
+- กดปุ่ม `Approve → Builder` จริงในเบราว์เซอร์ (ต้องมีคนกด) — ตรวจผลด้วย `Select-String -LiteralPath "$env:USERPROFILE\.local\share\opencode\log\opencode.log" -Pattern "not available|does not expose|Could not switch"` (ไม่เจอ = สลับสำเร็จ)
+- การสลับ agent ในเซสชันจริง (`ctx.session.switchAgent` ของโฮสต์) — ยืนยันได้เฉพาะตอนกดอนุมัติ
+- transform ของปลั๊กอินในเซสชันจริง (พิสูจน์แล้วว่าไม่ถูกเรียกในพาธ `debug agents`; ถ้าถูกเรียกในเซสชัน ผลลัพธ์ mode ยังเป็น subagent เพราะไม่มีบรรทัด override แล้ว)
+- Console ต้องปิด-เปิดแอปถึงเห็นแถวใหม่ (แอปอ่านโค้ดตอนเปิด)
+
+
+## รอบ 10 — ผูก patch ปุ่มอนุมัติเข้ากับการติดตั้ง/อัพเดตของ Console
+
+วันที่: 19 ต.ค. 2026 · Console v1.5.0 · โจทย์: clone ใหม่ต้องได้ค่าตั้งนี้จากการติดตั้ง และ "ทั้งสองปุ่ม" (การ์ด BAZER FLOW v2 ที่ขึ้นทั้งแท็บ Buddha และแท็บ Plannotator) ต้อง apply ให้
+
+| จุดที่ผูก | ทำอะไร |
+|---|---|
+| action `plannotator-patch` | เรียก `applyAll()` จาก `patch-plannotator.mjs` (import ตรง ไม่ spawn) — idempotent, dry-run ได้, ไม่ throw เมื่อไม่มี Plannotator |
+| `flow-apply` (ปุ่มการ์ด ทั้ง 2 แท็บ) | แพตช์ต่อท้ายหลัง mirror (เฉพาะตอน enable) — log ขึ้น `plannotator patch` |
+| `update-apply` (อัพเดตทั้งหมด) | แพตช์ต่อท้าย `extra` — เห็นในข้อความสรุปเมื่อมีการแพตช์จริง |
+| `sync-all` (ซิงค์ทั้งหมด) | ได้ผ่านการเรียก `update-apply` + การซ่อม flow |
+| `setup-apply` (ติดตั้งเสร็จสรรพ) | ขั้นใหม่ `plannotator-patch` (checkbox ในพรีวิว, `will` ตามสถานะจริง) |
+| flowCard | ปุ่ม "แพตช์ปุ่มอนุมัติ → builder" + แถวสถานะ `Plannotator: ปุ่มอนุมัติ` |
+
+### หลักฐาน (รันจริงทั้งหมด)
+
+| ตรวจ | ผล |
+|---|---|
+| `node --check` (`console.mjs`, `patch-plannotator.mjs`) | exit 0 ทั้งคู่ |
+| API test (`applyAll`, sandbox HOME) | apply 4/4 + sha `715a572f…` ตรงเป้า · รันซ้ำ applied=0 · เครื่องใหม่ targets=0 ไม่ error · dry-run ไม่เขียนไฟล์ |
+| e2e ผ่าน HTTP (สำเนา Console ใน %TEMP% + `BAZER_CONSOLE_HOME` sandbox + port 4312) | state ok · `setup-preview` มีขั้นใหม่ (will=true) · ปุ่ม dry-run ไม่เขียน · ปุ่มจริง applied=4 sha ตรง + `.bak` 1 ไฟล์ · รันซ้ำ applied=0 · `update-apply` ขึ้น "plannotator patch 4" · `flow-apply` log มี plannotator patch · `setup-apply` ขั้นเดียวแพตช์สำเร็จ |
+| บั๊กที่เจอจากการทดสอบ | `applyAll()` เคยใช้ `os.homedir()` แทน `HOME` ของ Console → ใน sandbox แพตช์ผิดเครื่อง; แก้เป็น `{ home: HOME }` แล้ว e2e ผ่าน |
+| ไฟล์จริงบนเครื่อง | ไม่ถูกแตะระหว่าง e2e (ทดสอบในสำเนาเท่านั้น) · `node flow-check.mjs` ยัง PASS 26 · WARN 0 |
+| ปิด flow (`flow-apply { enable:false }`) | **ไม่แตะ html** (sha ยังเป็นไฟล์ต้นฉบับ · backups = 0) · เปิดกลับ (`enable:true`) แพตช์ให้ทันที (sha `715a572f…` · backups = 1) — หลักฐาน `S11-disable-evidence.txt` |
+
+### หมายเหตุการใช้งาน
+
+- ปุ่มใหม่จะทำงานหลัง **ปิด-เปิด BAZER Console** (แอปโหลดโค้ดตอนเปิด) — ถ้ายังไม่รีสตาร์ทแล้วกด จะขึ้นข้อความ "แอปที่เปิดอยู่ยังเป็นโค้ดเก่า" (มีอยู่เดิมใน `act()`)
+- เครื่องใหม่ที่ยังไม่เคยเปิด OpenCode: cache ของ Plannotator ยังไม่มี → ขั้นนี้จะ `will=false` และจะแพตช์ให้อัตโนมัติเมื่อกดอัพเดต/ซิงค์หลังเปิด OpenCode ครั้งแรก

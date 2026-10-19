@@ -240,8 +240,8 @@ function runLockCheck(opts = {}) {
     else add(`R10:${mode}`, 'PASS', `หัวข้อ = ${h1}`, f);
   }
 
-  // R11 — เป้าหมาย agentSwitch: Plannotator เทียบ name ไม่ใช่ id
-  add('R11', 'INFO', 'Plannotator เทียบ agent.name === "build" แต่ builtin id=build มี name="Build" (opencode debug agents) — ต้องยืนยันกับ server 4096 ก่อนสรุป', 'dist/index.js:14216');
+  // R11 — เป้าหมาย agentSwitch ของ Plannotator (อัปเดต 2026-10-19: default เป็น builder ที่ name ตรงเป๊ะ)
+  add('R11', 'INFO', 'Plannotator ปุ่มอนุมัติ default = "builder" (subagent) — id=builder และ name=builder จึงผ่านการเทียบ name; ของเดิมชี้ "build" แต่ name จริงคือ "Build" = mismatch (ไม่สลับ agent) · ตัวตรวจ: node flow-check.mjs + node patch-plannotator.mjs --dry-run', 'plannotator.html → patch-plannotator.mjs');
 
   return finish(results, lockOn);
 }

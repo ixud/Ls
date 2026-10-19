@@ -1,6 +1,6 @@
 ---
-description: "BUILD executor for Plan Mode — รับแผนที่อนุมัติแล้วจาก Plan agent ลงมือแก้ไฟล์/รันคำสั่ง แล้วรายงานหลักฐานกลับ (แสดงใน Main Agents ตามที่ผู้ใช้กำหนด)"
-mode: all
+description: "BUILD executor for Plan Mode — รับแผนที่อนุมัติแล้วจาก Plan agent ลงมือแก้ไฟล์/รันคำสั่ง แล้วรายงานหลักฐานกลับ (subagent เท่านั้น — ไม่แสดงใน Main Agents)"
+mode: subagent
 color: "#EB895B"
 permission:
   read: allow

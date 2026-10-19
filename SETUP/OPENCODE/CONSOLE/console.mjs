@@ -7,6 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { applyAll as plPatchApplyAll } from './patch-plannotator.mjs';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -443,6 +444,32 @@ function flowRegistered() {
     return Array.isArray(arr) && arr.some(x => String(typeof x === 'string' ? x : x?.package || '').includes(FLOW_PLUGIN_ID));
   } catch { return false; }
 }
+/** Plannotator approve button: อ่าน patch state จาก html จริง (vendor — patch หลุดเมื่ออัปเดต) */
+function plannotatorPatchState() {
+  const roots = [
+    path.join(HOME, '.cache', 'opencode', 'npm', '@plannotator'),
+    path.join(HOME, '.cache', 'opencode', 'packages', '@plannotator'),
+  ];
+  const found = [];
+  const walk = (dir, depth = 0) => {
+    if (depth > 6) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.name === 'plannotator.html') found.push(p);
+    }
+  };
+  for (const r of roots) walk(r);
+  let stale = 0, patched = 0;
+  for (const f of found) {
+    const t = readText(f) || '';
+    if (t.includes('{switchTo:"build"}')) stale++;
+    else if (t.includes('{switchTo:"builder"}')) patched++;
+  }
+  return { total: found.length, stale, patched };
+}
 function gatherFlowkit() {
   const pluginFile = fs.existsSync(path.join(flowPluginDir(), 'index.ts'));
   const builderPath = flowBuilderFile();
@@ -459,6 +486,7 @@ function gatherFlowkit() {
     builderMode: mode,
     gateMarker: agentsMd.includes(FLOW_GATE_MARKER),
     version: (bundleBud.match(FLOW_MARKER_RE) || [])[1] || null,
+    plPatch: safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 }),
   };
 }
 /** Real load proof: the host must list bazer.flow, not just have the file registered. */
@@ -843,10 +871,17 @@ async function runVerify() {
     else if (bundleV2 && !fk.pluginFile) add('fail', 'BAZER FLOW v2 · ยังไม่ติดตั้ง kernel', 'gate ยังไม่ถูกบังคับ — กด "ติดตั้ง/ซ่อม BAZER FLOW v2" ในแท็บ Buddha');
     else if (fk.pluginFile && !fk.registered) add('fail', 'BAZER FLOW v2 · kernel ไม่ได้ลงทะเบียน', 'มีไฟล์แต่ไม่ได้อยู่ใน plugins[] — กด "ติดตั้ง/ซ่อม" ในแท็บ Buddha');
     else add('info', 'BAZER FLOW v2 · kernel', 'ยังไม่ติดตั้ง (โหมดเดิมยังทำงานได้)');
-    if (fk.builder && fk.builderMode === 'all') add('ok', 'builder (mode all)', 'เห็นใน Main Agents + เรียกผ่าน task ได้');
+    if (fk.builder && fk.builderMode === 'subagent') add('ok', 'builder (subagent)', 'ไม่โชว์ใน Main Agents — เรียกผ่าน task ได้ (Plan Mode)');
     else if (!bundleV2) add('info', 'builder', 'ยังไม่ติดตั้ง');
     else if (!fk.builder) add('warn', 'builder', fk.builderDisabled ? 'ปิดอยู่ (builder.md.disabled) — กด "ติดตั้ง/ซ่อม"' : 'ยังไม่ติดตั้ง — กด "ติดตั้ง/ซ่อม"');
-    else add('warn', 'builder', `mode = ${fk.builderMode || '?'} — ต้องเป็น all`);
+    else add('warn', 'builder', `mode = ${fk.builderMode || '?'} — ต้องเป็น subagent`);
+    {
+      const pl = fk.plPatch || { total: 0, stale: 0, patched: 0 };
+      if (!pl.total) add('info', 'Plannotator: ปุ่มอนุมัติ', 'ยังไม่พบ plannotator.html — ข้าม');
+      else if (pl.stale) add('warn', 'Plannotator: ปุ่มอนุมัติชี้ builder', `${pl.stale}/${pl.total} ไฟล์ยังชี้ build — รัน "node patch-plannotator.mjs" แล้วรีสตาร์ท OpenCode`);
+      else if (pl.patched) add('ok', 'Plannotator: ปุ่มอนุมัติชี้ builder', `${pl.patched}/${pl.total} ไฟล์ (label "Builder")`);
+      else add('warn', 'Plannotator: ปุ่มอนุมัติ', 'ไม่พบเครื่องหมายของ patch — Plannotator อาจเปลี่ยนโครง html');
+    }
     if (fk.gateMarker) add('ok', 'AGENTS gate (BAZER-FLOW-GATE v2)', 'กฎระดับเครื่องมี gate ครบ');
     else add('warn', 'AGENTS gate', 'ยังไม่มี marker — กด "ติดตั้ง/ซ่อม BAZER FLOW v2" หรือ "รีเซ็ตจาก template"');
   }
@@ -1745,6 +1780,12 @@ const ACTIONS = {
     bk.finalize();
     try { if (!configDrift().ok) await ACTIONS['refresh-config']({}); } catch {}
     try { await ACTIONS['mirror-agents']({}); log.push('mirror'); } catch {}
+    if (enable) {
+      try {
+        const pl = await ACTIONS['plannotator-patch']({});
+        log.push(pl.targets ? 'plannotator patch' : 'plannotator (ยังไม่มี cache)');
+      } catch (e) { log.push('plannotator patch (ข้าม — ' + e.message + ')'); }
+    }
     patchConfig({ flowkit: { on: !!enable } });
     const tail = log.length ? log.join(' · ') : 'ไม่มีอะไรต้องเปลี่ยน';
     return { message: `${enable ? 'ติดตั้ง/ซ่อม' : 'ปิด'} BAZER FLOW v2 แล้ว (${tail}) — มีผลกับ session ใหม่`, flowkit: gatherFlowkit() };
@@ -1943,6 +1984,19 @@ const ACTIONS = {
         will: !(fk.pluginFile && fk.registered && fk.builder),
       });
     }
+    {
+      const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
+      steps.push({
+        id: 'plannotator-patch',
+        label: 'แพตช์ปุ่มอนุมัติ Plannotator → subagent builder (label "Builder")',
+        detail: !st.total
+          ? 'ยังไม่พบ plannotator.html — จะลองใหม่ให้อัตโนมัติทุกครั้งที่กดอัพเดต/ซิงค์ (หลังเปิด OpenCode ครั้งแรก)'
+          : st.stale
+            ? `จะแพตช์ ${st.stale}/${st.total} ไฟล์ (สำรอง .bak ก่อนเขียนทุกไฟล์)`
+            : `แพตช์แล้ว ${st.patched}/${st.total} ไฟล์ (ค่าเริ่มต้นของปุ่ม + label "Builder")`,
+        will: st.stale > 0,
+      });
+    }
     steps.push({ id: 'lock-file', label: 'ไฟล์ล็อก server (serve-restricted.jsonc)', detail: fs.existsSync(P.serveRestricted) ? 'มีอยู่แล้ว — ข้าม' : 'จะสร้างค่าเริ่มต้นแบบปลดล็อก (สลับโหมดได้ในแท็บ ล็อก & โมเดล)', will: !fs.existsSync(P.serveRestricted) });
     const launchTarget = launchDirResolved();
     const serveExists = fs.existsSync(path.join(launchTarget, PLAT ? PLAT.SERVER_LAUNCHER : 'opencode-serve.vbs'));
@@ -2042,6 +2096,10 @@ const ACTIONS = {
       try { const f = await ACTIONS['flow-apply']({ enable: true }); log.push(f.message); }
       catch (e) { log.push('flow (ข้าม — ' + e.message + ')'); }
     }
+    if (has('plannotator-patch')) {
+      try { const pl = await ACTIONS['plannotator-patch']({}); log.push(pl.targets ? pl.message : 'plannotator patch (ยังไม่มี cache — จะแพตช์ตอนอัพเดต)'); }
+      catch (e) { log.push('plannotator patch (ข้าม — ' + e.message + ')'); }
+    }
     if (has('tui-defaults')) {
       try { const t = await ACTIONS['tui-defaults']({}); log.push(t.message); }
       catch (e) { log.push('tui-defaults (ข้าม — ' + e.message + ')'); }
@@ -2116,9 +2174,28 @@ const ACTIONS = {
     const extra = [];
     try { await ACTIONS['mirror-agents']({}); extra.push('mirror'); } catch { extra.push('mirror ข้าม (error)'); }
     try { if (!configDrift().ok) { await ACTIONS['refresh-config']({}); extra.push('planningAgents'); } } catch {}
+    try {
+      const pl = await ACTIONS['plannotator-patch']({});
+      if (pl.applied) extra.push(`plannotator patch ${pl.applied}`);
+      else if (pl.state && pl.state.stale) extra.push('plannotator patch ล้มเหลว (ดู log)');
+    } catch { extra.push('plannotator patch ข้าม (error)'); }
     const tail = extra.length ? ' + ' + extra.join(' · ') : '';
     if (!n) return { message: `ไม่มีไฟล์ต้องอัพเดต${tail ? ' (ปรับให้แล้ว:' + tail + ')' : ''}`, applied: 0 };
     return { message: `อัพเดตแล้ว ${n} รายการ (สำรองอัตโนมัติก่อนเขียน)${tail}`, applied: n };
+  },
+
+  /* Plannotator: ปุ่มอนุมัติชี้ subagent builder (patch vendor ไฟล์ html) — เรียกได้จากปุ่ม + ติดไปกับ install/update */
+  'plannotator-patch': async ({ dryRun } = {}) => {
+    const st = safe(plannotatorPatchState, { total: 0, stale: 0, patched: 0 });
+    const r = safe(() => plPatchApplyAll({ dryRun: !!dryRun, home: HOME }), { targets: 0, discovered: 0, applied: 0, skipped: 0, errors: 1, details: [] });
+    const parts = [`applied=${r.applied}`, `skipped=${r.skipped}`, `targets=${r.targets}`];
+    if (r.errors) parts.push(`errors=${r.errors}`);
+    if (!r.targets) {
+      return { message: 'ยังไม่พบ plannotator.html (Plannotator ยังไม่ถูกติดตั้งบนเครื่องนี้) — ปุ่มติดตั้ง/อัพเดต/ซิงค์จะลองให้ใหม่ทุกครั้ง', ...r, state: st };
+    }
+    const where = (r.details || []).filter(d => d.applied).map(d => `${path.basename(path.dirname(path.dirname(d.file)))}/${path.basename(path.dirname(d.file))}`);
+    const msg = `${dryRun ? 'ทดสอบ: ' : ''}แพตช์ปุ่มอนุมัติ Plannotator → subagent builder (label "Builder") — ${parts.join(' · ')}${where.length ? ' · ' + where.join(', ') : ''}${r.errors ? ' · มีไฟล์ที่แพตช์ไม่ได้ (ดู log)' : ''}`;
+    return { message: msg, ...r, state: st };
   },
 
   'refresh-config': async ({ dryRun }) => {

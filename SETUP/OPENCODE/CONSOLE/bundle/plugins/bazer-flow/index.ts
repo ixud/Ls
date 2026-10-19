@@ -4,6 +4,8 @@
    - plan   : implements only through the `builder` subagent (never edits itself)
    - buddha : implements in the same session after approval (no agent switch)
    - others : pass-through (build, builder, subagents untouched)
+   - builder: mode is NOT set here — it comes from agents/builder.md (mode: subagent for Main Agents list);
+              this plugin only pins submit_plan/task deny as a second layer.
    The Console installs this file; `flow-toggle` removes its registration. */
 
 import { Plugin } from '@opencode/plugin';
@@ -160,7 +162,6 @@ export default Plugin.define({
       const builder = editor.get('builder');
       if (builder) {
         editor.update('builder', (draft) => {
-          draft.mode = 'all';
           setRules(draft, [
             { action: 'submit_plan', resource: '*', effect: 'deny' },
             { action: 'subagent', resource: '*', effect: 'deny' },

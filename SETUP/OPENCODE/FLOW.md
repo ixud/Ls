@@ -76,7 +76,7 @@ flowchart TD
 | **B3** | แผนสร้างขึ้นต้น `# GATE 2 — BUILD PLAN` · base + grafts + ไฟล์/จุดที่แตะ + ความเสี่ยง + วิธีพิสูจน์ | `submit_plan` |
 | **B4** | อนุมัติแล้วสร้างในเซสชัน Buddha นี้ + พิสูจน์กับของจริง | จบงาน |
 
-**Plan Mode (นอก Buddha):** `Plan Mode → submit_plan → อนุมัติ → Plan ยังเป็น agent เดิม แต่สร้างผ่าน subagent `builder` เท่านั้น` — Plan ห้ามเขียนไฟล์เองแม้อนุมัติแล้ว · prompt tab แสดง `PLAN` → `BUILD` · ทางเดิม (ผู้ใช้สลับเป็น `build` เอง) ยังใช้ได้
+**Plan Mode (นอก Buddha):** Plan Mode → `submit_plan` → อนุมัติ → สร้างผ่าน subagent `builder` — ปุ่มอนุมัติของ Plannotator ตั้งเป้าเป็น `builder` แล้ว (label "Builder"): host ที่รองรับ `session.switchAgent` จะสลับ session ให้เอง; host ที่ไม่รับจะอนุมัติผ่านแล้วเขียน log ว่าไม่สลับ — Plan ยังสร้างผ่าน `builder` ด้วย `task` เหมือนเดิม · Plan ห้ามเขียนไฟล์เองแม้อนุมัติแล้ว · prompt tab แสดง `PLAN` → `BUILD`
 
 กติกาเด็ดขาด
 
@@ -114,7 +114,8 @@ git -C "<โฟลเดอร์ repo>" push            # branch air ผูก�
 - agent ทุกตัว frontmatter ผ่าน (color เป็น hex)
 - `planningAgents` ครอบโหมดจริง: `buddha`, `arena`, `snack`, `poteto-mode` (บวก `plan` ของตัว OpenCode)
 - mirror โหมด `BAZERs-EXTENSION-*` ตรงกับต้นทางทุกตัว
-- BAZER FLOW v2: marker ตรงกันระหว่าง bundle กับไฟล์ที่ติดตั้ง + kernel (`bazer-flow`) ลงทะเบียน + `builder` mode all + AGENTS gate marker (`node flow-check.mjs` ตรวจ logic ของ gate)
+- BAZER FLOW v2: marker ตรงกันระหว่าง bundle กับไฟล์ที่ติดตั้ง + kernel (`bazer-flow`) ลงทะเบียน + `builder` mode subagent + AGENTS gate marker (`node flow-check.mjs` ตรวจ logic ของ gate)
+- ปุ่มอนุมัติของ Plannotator ชี้ `builder`: `node patch-plannotator.mjs --dry-run` ต้องขึ้น `apply`/`ok` ครบ 4 จุด และไม่มีการเขียนไฟล์ — **Console รันให้อัตโนมัติ** ในปุ่ม ติดตั้ง/ซ่อม BAZER FLOW v2 · อัพเดตทั้งหมด · ซิงค์ทั้งหมด · ติดตั้งเสร็จสรรพ (ขั้น `plannotator-patch`) และมีปุ่มสั่งเองใน flowCard — ตัวเฝ้าอยู่ใน `flow-check.mjs` (Plannotator อัปเดตแล้ว patch หลุด → WARN พร้อมคำสั่งแก้)
 - ไฟล์ launch ครบ (serve + lock scripts) — ข้อความต้องบอก **โฟลเดอร์ที่ตรวจ** (ค่าเริ่มต้น `%USERPROFILE%\opencode-launch` เมื่อ `launchDir` ว่าง) เพื่อให้รู้ว่าต้องกดปุ่มไหนต่อ
 - template ส่วนตัว (`AGENTS.md` · `pstack-models.md`): ต้องเป็น `ok` (ตรงกับ bundle) หรือ `info` (ถูกแก้เอง — ระบบไม่ทับให้เอง ตั้งใจ) ห้ามเป็น `warn` ว่า "ยังไม่มี"
 - หมายเหตุ: "มีไฟล์" ไม่เท่ากับ "ตรงกับ bundle" — สองไฟล์นี้ถูกสร้างครั้งเดียว การอัพเดต `bundle/config/*.template` จึงไม่ถึงไฟล์ในเครื่องจนกว่าจะกด "รีเซ็ตจาก template" ตัวตรวจนี้คือที่เดียวที่ทำให้เรื่องนี้มองเห็นได้

@@ -29,7 +29,7 @@
 | **Server & Cline** | ตรวจสุขภาพ/รีสตาร์ท server 4096, เปิด-ปิด autostart ตอนเปิดเครื่อง, ค่าที่ใส่ใน Cline, แก้ `cli.json` |
 | **pStack** | Apply ชุด build, **🧩 ชุดโมเดล (sets) → เลือก function ที่ชุดดูแล + Quick Select**, จัดการ skills/agents/commands (แก้ prompt ในตัวได้), อัปเดตผ่าน npx skills |
 | **โหมดผู้ช่วย (กลุ่ม)** | หนึ่งแท็บต่อโหมด — สถานะติดตั้ง, "ของที่โหมดนี้ต้องมี", แก้ prompt, สวิตช์เปิด/ปิด: **Bazer** (ลงมือทำแบบจำกัดไฟล์) · **Buddha** (BAZER FLOW v2 — ทุกเฟสในเซสชันเดียว ไม่สลับ agent, การ์ด Arena session, ป้าย **BAZER FLOW v2** ที่เทียบ marker กับ bundle, การ์ด **BAZER FLOW v2 · Plan gate + builder**, และปุ่ม "อัพเดต mirror ทั้งหมด") · **Builder** (subagent ตัวเดียวสำหรับ Plan Mode) · **Arena** (มี Arena session config) · **Snack** · **Poteto** · **Advisor** |
-| **Subagent (กลุ่ม)** | **Comment Sicko** (ตัวตรวจคอมเมนต์) · **Poteto Agent** (ลูกมือของ poteto-mode) — สถานะ วิธีถูกเรียก เปิด/ปิด และแก้ prompt |
+| **Subagent (กลุ่ม)** | **Builder** (subagent ตัวเดียวของ Plan Mode — ปุ่มอนุมัติของ Plannotator ชี้ตัวนี้ label "Builder" ไม่โชว์ใน Main Agents) · **Comment Sicko** (ตัวตรวจคอมเมนต์) · **Poteto Agent** (ลูกมือของ poteto-mode) — สถานะ วิธีถูกเรียก เปิด/ปิด และแก้ prompt |
 | **โปรเจกต์** | สแกนว่าเครื่องเคยใช้ OpenCode ที่โฟลเดอร์ไหน + จัดการ agent รายโปรเจกต์ |
 | **Plannotator** | เปิด-ปิดปลั๊กอิน, แก้ `config.json`, จัดการคำสั่ง, เปิดคลังแผน |
 | **ประวัติ & สำรอง** | ทุกการแก้ถูกเก็บเป็นประวัติ + สำรองไฟล์เดิม กู้คืนได้รายชุด (เก็บ 30 ชุดล่าสุด) |
@@ -42,7 +42,7 @@
 
 **ห้ามแก้ไฟล์ mirror ด้วยมือ** — ไฟล์ `BAZERs-EXTENSION-*\SKILL.md` ถูก generate จาก agent ตัวจริงในเครื่อง (ถ้ายังไม่ติดตั้ง ใช้จาก bundle) และจะถูกทับทุกครั้งที่อัพเดต
 
-**BAZER FLOW v2 (โฟลว์บังคับของ Buddha Mode + Plan Mode):** Buddha เดินทุกเฟสในเซสชันและ agent เดียว — B1 GATE 1 (แผน Arena) → B2 Arena inside → B3 GATE 2 (แผนสร้าง) → B4 Built inside — ไม่มีการสลับ agent · Plan Mode ใช้ `builder` subagent ตัวเดียวหลังอนุมัติ (Plan ไม่เขียนไฟล์เอง) · กติกาถูกบังคับจริงด้วยปลั๊กอิน `bazer-flow` (ก่อนอนุมัติเขียนไฟล์นอก `%TEMP%\bazer\` ไม่ได้, `task(builder)` ไม่ได้) — ติดตั้ง/ซ่อม/ปิดได้จากปุ่มในการ์ด BAZER FLOW v2 (แท็บ Buddha หรือ Plannotator) · สเปคทั้งหมดอยู่ที่ `../FLOW.md` §3 · marker `<!-- BAZER-FLOW: v2 -->` ใน `bundle/agents/buddha.md` ถูกเทียบกับไฟล์ที่ติดตั้ง · ตรวจ logic ของ gate ด้วย `node flow-check.mjs`
+**BAZER FLOW v2 (โฟลว์บังคับของ Buddha Mode + Plan Mode):** Buddha เดินทุกเฟสในเซสชันและ agent เดียว — B1 GATE 1 (แผน Arena) → B2 Arena inside → B3 GATE 2 (แผนสร้าง) → B4 Built inside — ไม่มีการสลับ agent · Plan Mode ใช้ `builder` subagent ตัวเดียวหลังอนุมัติ (Plan ไม่เขียนไฟล์เอง) · **ปุ่มอนุมัติของ Plannotator ชี้ subagent `builder` (label "Builder")** — console แพตช์ให้อัตโนมัติทุกครั้งที่กด ติดตั้ง/ซ่อม BAZER FLOW v2 · อัพเดตทั้งหมด · ซิงค์ทั้งหมด · ติดตั้งเสร็จสรรพ และมีปุ่ม "แพตช์ปุ่มอนุมัติ → builder" ในการ์ด BAZER FLOW v2 สั่งเองได้ · กติกาถูกบังคับจริงด้วยปลั๊กอิน `bazer-flow` (ก่อนอนุมัติเขียนไฟล์นอก `%TEMP%\bazer\` ไม่ได้, `task(builder)` ไม่ได้) — ติดตั้ง/ซ่อม/ปิดได้จากปุ่มในการ์ด BAZER FLOW v2 (แท็บ Buddha หรือ Plannotator) · สเปคทั้งหมดอยู่ที่ `../FLOW.md` §3 · marker `<!-- BAZER-FLOW: v2 -->` ใน `bundle/agents/buddha.md` ถูกเทียบกับไฟล์ที่ติดตั้ง · ตรวจ logic ของ gate ด้วย `node flow-check.mjs`
 
 **ค่าเริ่มต้นหลังติดตั้ง:** `tui.json` ได้ `keybinds.messages_copy = ["ctrl+alt+m","ctrl+alt+o"]` (เฉพาะเมื่อยังไม่มีค่า — ค่าที่ผู้ใช้แก้เองไม่ถูกทับ) และมี shortcut **BAZER CONSOLE - WINDOW** ที่ `SETUP/OPENCODE` — ตั้งชื่อตาม OS ของตัวเอง: `BAZER CONSOLE - WINDOW (Windows).lnk` (ชี้ portable launcher `BAZER CONSOLE - WINDOW (Windows).vbs` · `.lnk` ถูกสร้างใหม่ต่อเครื่องและไม่ขึ้น git) · `BAZER CONSOLE - WINDOW (macOS).command` · `BAZER CONSOLE - WINDOW (Linux).desktop`
 
@@ -62,6 +62,7 @@
 | `backups/` | ชุดสำรองอัตโนมัติ (เก็บ 30 ชุดล่าสุด) |
 | `launch-template/` | ไฟล์ต้นแบบสำหรับติดตั้ง: ตัวเปิด server 4096 + สคริปต์สลับโหมดล็อก |
 | `bundle/` | ชุดติดตั้ง: skills + agents + commands + config template + ปลั๊กอิน bazer-fire + คู่มือใน `bundle/docs/guide/` |
+| `patch-plannotator.mjs` | patch ปุ่มอนุมัติของ Plannotator ให้ชี้ subagent `builder` (label "Builder") — idempotent · `--dry-run` · `--list`; รันอัตโนมัติจากปุ่ม ติดตั้ง/ซ่อม BAZER FLOW v2 · อัพเดตทั้งหมด · ซิงค์ทั้งหมด · ติดตั้งเสร็จสรรพ (และมีปุ่มสั่งเองหลังปุ่ม flow-apply) · ตัวเฝ้าอยู่ใน `flow-check.mjs` |
 | `CHECKS.md` | บันทึกผลตรวจของตัวแอปเอง (static / เครื่องใหม่ / เครื่องเก่า) + บั๊กที่เจอและแก้แล้ว + เรื่องที่ยังค้าง |
 | `console.config.json` → `modelSets` | ชุดโมเดล (sets) ที่ตั้งไว้ในแท็บ pStack — เก็บในไฟล์ config ไม่ใช่ในโค้ด |
 
