@@ -21,7 +21,7 @@ const bad = (summary, extra = {}) => ({ ok: false, summary, ...extra });
 const warn = (summary, extra = {}) => ({ ok: true, warn: true, level: 'warn', summary, ...extra });
 
 /* probe ที่ "ตก" ได้ตามปกติก่อนติดตั้ง — ใช้แยก "ยังไม่ติดตั้ง" ออกจาก "พังจริง" */
-const PREINSTALL_PROBES = new Set(['builtin-hidden', 'permission-level', 'modes-present']);
+const PREINSTALL_PROBES = new Set(['builtin-hidden', 'permission-level', 'permission-arena-runner', 'permission-arena-judge', 'modes-present']);
 
 function probeVerdict(pr, plan) {
   const pending = plan.summary.missing + plan.summary.stale;
@@ -92,12 +92,12 @@ const HANDLERS = {
     if (!params?.level) return bad('ต้องระบุระดับ');
     const r = setPolicy(ctx.home, 'buddha-ladder', params.level);
     const lv = policies['buddha-ladder'].levels.find((l) => String(l.id) === String(params.level));
-    return ok(`BUDDHA = ${lv.id} ${lv.name} (มีผลกับ session ใหม่)`, { policy: r, level: lv });
+    return ok(`BUDDHA = ${lv.id} ${lv.name} · เขียน ${r.targets} agent (BUDDHA + ARENA) · มีผลกับ session ใหม่`, { policy: r, level: lv });
   },
 
   'policy-undo': (ctx) => {
     const r = undoPolicy(ctx.home);
-    return ok(`ย้อนเป็นระดับ ${r.level} ${r.name}`, { policy: r });
+    return ok(`ย้อนเป็นระดับ ${r.level} ${r.name} · เขียน ${r.targets} agent`, { policy: r });
   },
 
   'builtin-toggle': (ctx, params) => {

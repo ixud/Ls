@@ -5,14 +5,35 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { BACKUP_DIR, HISTORY_FILE, STATE_FILE, VAR_DIR, ensureVarDir, makeResolver } from './env.mjs';
+import { BACKUP_DIR, HISTORY_FILE, STATE_FILE, VAR_DIR, makeResolver } from './env.mjs';
 import { manifest, settings, policies, sha256File, sha256, srcPath, treeFiles } from './manifest.mjs';
-import { stateOf, policyLevel as policyLevelOf } from './plan.mjs';
+import { stateOf, policyLevel as policyLevelOf, policyPermission } from './plan.mjs';
 import { setAtPath, removeArrayItem, getAtPath } from './jsonc.mjs';
 
 const now = () => new Date().toISOString();
 const readText = (p) => fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
 const exists = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+
+/**
+ * ที่เก็บ state / backup / history — ปกติคือ var/ ของ Console
+ * ตอนทดสอบใน temp home ให้ส่งที่เก็บชั่วคราวมาแทน (ไม่แตะ state จริง)
+ */
+export function makeStore(dir) {
+  const abs = path.resolve(dir);
+  return {
+    dir: abs,
+    stateFile: path.join(abs, 'state.json'),
+    backupDir: path.join(abs, 'backups'),
+    historyFile: path.join(abs, 'history.tsv'),
+  };
+}
+
+const defaultStore = () => ({ dir: VAR_DIR, stateFile: STATE_FILE, backupDir: BACKUP_DIR, historyFile: HISTORY_FILE });
+
+function ensureStore(store) {
+  fs.mkdirSync(store.dir, { recursive: true });
+  fs.mkdirSync(store.backupDir, { recursive: true });
+}
 
 export function stamp() {
   const d = new Date();
@@ -20,12 +41,12 @@ export function stamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${String(d.getMilliseconds()).padStart(3, '0')}`;
 }
 
-export function readState() {
-  try { return JSON.parse(readText(STATE_FILE)); } catch { return { entries: {}, policy: null, locks: {} }; }
+export function readState(store = defaultStore()) {
+  try { return JSON.parse(readText(store.stateFile)); } catch { return { entries: {}, policy: null, locks: {} }; }
 }
-export function writeState(s) {
-  ensureVarDir();
-  fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2), 'utf8');
+export function writeState(s, store = defaultStore()) {
+  ensureStore(store);
+  fs.writeFileSync(store.stateFile, JSON.stringify(s, null, 2), 'utf8');
 }
 
 function safeRel(target) {
@@ -36,20 +57,22 @@ function safeRel(target) {
 
 const looksBinary = (buf) => buf.includes(0);
 
-export function backupFile(st, target) {
+export function backupFile(st, target, store = defaultStore()) {
   const existed = exists(target);
-  const hashBefore = existed ? sha256File(target) : null;
-  if (existed) {
-    const dst = path.join(BACKUP_DIR, st, 'files', safeRel(target));
+  const dst = path.join(store.backupDir, st, 'files', safeRel(target));
+  // รอบเดียวอาจเขียนไฟล์เดิมหลายครั้ง (เช่น policy เขียน 3 agent) — ต้องเก็บต้นฉบับไว้ครั้งเดียว
+  const had = fs.existsSync(dst);
+  const hashBefore = existed ? (had ? sha256File(dst) : sha256File(target)) : null;
+  if (existed && !had) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(target, dst);
   }
   return { target, existed, hashBefore };
 }
 
-export function record(st, items) {
-  ensureVarDir();
-  const dir = path.join(BACKUP_DIR, st);
+export function record(st, items, store = defaultStore()) {
+  ensureStore(store);
+  const dir = path.join(store.backupDir, st);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'manifest.json');
   let doc = { stamp: st, at: now(), items: [] };
@@ -59,10 +82,10 @@ export function record(st, items) {
   fs.writeFileSync(file, JSON.stringify(doc, null, 2), 'utf8');
 }
 
-export function history(row) {
-  ensureVarDir();
+export function history(row, store = defaultStore()) {
+  ensureStore(store);
   const line = [row.at || now(), row.stamp, row.entry || '-', row.action || 'write', row.target, row.hashBefore || '-', row.hashAfter || '-', row.result || 'ok'].join('\t');
-  fs.appendFileSync(HISTORY_FILE, line + '\n', 'utf8');
+  fs.appendFileSync(store.historyFile, line + '\n', 'utf8');
 }
 
 export function writeTextAtomic(target, text) {
@@ -74,25 +97,25 @@ export function writeTextAtomic(target, text) {
 }
 
 /** เขียนหนึ่ง entry — เรียกหลัง stateOf บอกว่า writable (export เพื่อใช้ทดสอบ) */
-export function writeEntry(entry, home, st) {
+export function writeEntry(entry, home, st, store = defaultStore()) {
   const { resolve } = makeResolver(home);
   const target = resolve(entry.target);
   const written = [];
   const push = (t, text) => {
-    const b = backupFile(st, t);
+    const b = backupFile(st, t, store);
     const h = writeTextAtomic(t, text);
-    record(st, [{ ...b, hashAfter: h }]);
+    record(st, [{ ...b, hashAfter: h }], store);
     written.push({ ...b, hashAfter: h });
-    history({ stamp: st, entry: entry.id, action: 'write', target: t, hashBefore: b.hashBefore, hashAfter: h });
+    history({ stamp: st, entry: entry.id, action: 'write', target: t, hashBefore: b.hashBefore, hashAfter: h }, store);
   };
   const pushFile = (t, srcAbs) => {
-    const b = backupFile(st, t);
+    const b = backupFile(st, t, store);
     fs.mkdirSync(path.dirname(t), { recursive: true });
     fs.copyFileSync(srcAbs, t);
     const h = sha256File(t);
-    record(st, [{ ...b, hashAfter: h }]);
+    record(st, [{ ...b, hashAfter: h }], store);
     written.push({ ...b, hashAfter: h });
-    history({ stamp: st, entry: entry.id, action: 'copy', target: t, hashBefore: b.hashBefore, hashAfter: h });
+    history({ stamp: st, entry: entry.id, action: 'copy', target: t, hashBefore: b.hashBefore, hashAfter: h }, store);
   };
 
   switch (entry.strategy) {
@@ -105,7 +128,7 @@ export function writeEntry(entry, home, st) {
     }
     case 'jsonc-merge': {
       const cur = exists(target) ? readText(target) : '{\n}\n';
-      const desired = entry.fromPolicy ? policyLevelOf(entry.fromPolicy).permission : entry.value;
+      const desired = entry.fromPolicy ? policyPermission(entry, policyLevelOf(entry.fromPolicy)) : entry.value;
       const next = setAtPath(cur, entry.valuePath.split('.'), desired, { merge: true });
       if (next !== cur) push(target, next);
       break;
@@ -154,10 +177,10 @@ export function setLineText(text, prefix, value) {
   return out.join('\n');
 }
 
-export function applyEntries(home, ids) {
-  ensureVarDir();
+export function applyEntries(home, ids, store = defaultStore()) {
+  ensureStore(store);
   const st = stamp();
-  const state = readState();
+  const state = readState(store);
   const applied = [], skipped = [], errors = [];
   const targets = ids && ids.length ? manifest.entries.filter((e) => ids.includes(e.id)) : manifest.entries;
 
@@ -172,7 +195,7 @@ export function applyEntries(home, ids) {
     try { stt = stateOf(entry, home); } catch (e) { errors.push({ id: entry.id, why: e.message }); continue; }
     if (!stt.writable) { skipped.push({ id: entry.id, why: stt.note || stt.state }); continue; }
     try {
-      const r = writeEntry(entry, home, st);
+      const r = writeEntry(entry, home, st, store);
       applied.push({ id: entry.id, files: r.written?.length || 0 });
       state.entries[entry.id] = { at: now(), hash: r.written?.[0]?.hashAfter || null };
     } catch (e) {
@@ -181,63 +204,78 @@ export function applyEntries(home, ids) {
     }
   }
   state.lastApply = { at: now(), stamp: st, applied: applied.length, skipped: skipped.length, errors: errors.length, rolledBack: null };
-  writeState(state);
+  writeState(state, store);
 
   // ล้มกลางทาง = หยุดทั้งชุด + คืนไฟล์จาก backup ของรอบนี้ (สัญญาใน README §4)
   let rolledBack = null;
   if (errors.length) {
     try {
-      rolledBack = rollback(home, st);
+      rolledBack = rollback(home, st, store);
       state.lastApply.rolledBack = rolledBack;
       state.lastApply.errorsDetail = errors;
-      writeState(state);
+      writeState(state, store);
     } catch (e) {
       rolledBack = { error: e.message };
       state.lastApply.rolledBack = rolledBack;
-      writeState(state);
+      writeState(state, store);
     }
   }
   return { stamp: st, applied, skipped, errors, rolledBack, ok: errors.length === 0 };
 }
 
 /** เขียนค่า config เดียว (ใช้โดย settings-save / policy-set / toggle) */
-export function writeJsonc(home, targetTemplate, keys, value, { merge = false, entry = 'settings', st = stamp() } = {}) {
+export function writeJsonc(home, targetTemplate, keys, value, { merge = false, entry = 'settings', st = stamp(), store = defaultStore() } = {}) {
   const { resolve } = makeResolver(home);
   const target = resolve(targetTemplate);
   const cur = exists(target) ? readText(target) : '{\n}\n';
   const next = setAtPath(cur, keys, value, { merge });
   if (next === cur) return { changed: false, target, stamp: st };
-  const b = backupFile(st, target);
+  const b = backupFile(st, target, store);
   const h = writeTextAtomic(target, next);
-  record(st, [{ ...b, hashAfter: h }]);
-  history({ stamp: st, entry, action: 'write', target, hashBefore: b.hashBefore, hashAfter: h });
+  record(st, [{ ...b, hashAfter: h }], store);
+  history({ stamp: st, entry, action: 'write', target, hashBefore: b.hashBefore, hashAfter: h }, store);
   return { changed: true, target, stamp: st, hashAfter: h };
 }
 
-export function setPolicy(home, policyId, levelId) {
+/** entry ที่ผูกกับ policy นี้ — บันไดหนึ่งครอบได้หลาย agent */
+export function policyEntries(policyId) {
+  return manifest.entries.filter((e) => e.fromPolicy === policyId);
+}
+
+/** เขียนระดับของบันไดลงทุก entry ที่ผูกไว้ (BUDDHA + ARENA-RUNNER + ARENA-JUDGE) */
+export function setPolicy(home, policyId, levelId, store = defaultStore()) {
   const level = policyLevelOf(policyId, levelId);
-  const entry = manifest.entries.find((e) => e.fromPolicy === policyId);
-  if (!entry) throw new Error(`ไม่มี entry ที่ผูกกับ policy ${policyId}`);
-  const state = readState();
+  const entries = policyEntries(policyId);
+  if (!entries.length) throw new Error(`ไม่มี entry ที่ผูกกับ policy ${policyId}`);
+  const state = readState(store);
   const prev = state.policy && state.policy.policyId === policyId
     ? state.policy.level
     : String(policies[policyId]?.defaultLevel ?? policyLevelOf(policyId).id);
-  const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), level.permission, { entry: `policy.${policyId}` });
+  const written = [];
+  for (const entry of entries) {
+    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), policyPermission(entry, level), { entry: `policy.${policyId}`, store });
+    written.push({ id: entry.id, valuePath: entry.valuePath, changed: r.changed, target: r.target });
+  }
   state.policy = { policyId, level: String(level.id), at: now(), prev };
-  writeState(state);
-  return { ...r, level: level.id, name: level.name, prev };
+  writeState(state, store);
+  return { ...written[0], changed: written.some((w) => w.changed), level: level.id, name: level.name, prev, written, targets: written.length };
 }
 
-export function undoPolicy(home) {
-  const state = readState();
+export function undoPolicy(home, store = defaultStore()) {
+  const state = readState(store);
   if (!state.policy || !state.policy.prev) throw new Error('ยังไม่มีการเปลี่ยนระดับให้ย้อน');
   const p = state.policy;
   const level = policyLevelOf(p.policyId, p.prev);
-  const entry = manifest.entries.find((e) => e.fromPolicy === p.policyId);
-  const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), level.permission, { entry: `policy.${p.policyId}` });
+  const entries = policyEntries(p.policyId);
+  if (!entries.length) throw new Error(`ไม่มี entry ที่ผูกกับ policy ${p.policyId}`);
+  const written = [];
+  for (const entry of entries) {
+    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), policyPermission(entry, level), { entry: `policy.${p.policyId}`, store });
+    written.push({ id: entry.id, valuePath: entry.valuePath, changed: r.changed, target: r.target });
+  }
   state.policy = { policyId: p.policyId, level: String(level.id), at: now(), prev: p.level };
-  writeState(state);
-  return { ...r, level: level.id, name: level.name };
+  writeState(state, store);
+  return { ...written[0], changed: written.some((w) => w.changed), level: level.id, name: level.name, written, targets: written.length };
 }
 
 export function setBuiltin(home, mode) {
@@ -263,8 +301,8 @@ export function retireOldFlow(home) {
   return { changed: true, target, stamp: st };
 }
 
-export function rollback(home, st) {
-  const dir = path.join(BACKUP_DIR, st);
+export function rollback(home, st, store = defaultStore()) {
+  const dir = path.join(store.backupDir, st);
   const file = path.join(dir, 'manifest.json');
   if (!fs.existsSync(file)) throw new Error(`ไม่พบ backup รอบ ${st}`);
   const doc = JSON.parse(readText(file));
@@ -280,14 +318,14 @@ export function rollback(home, st) {
       fs.rmSync(item.target, { force: true });
       out.deleted++;
     }
-    history({ stamp: st, entry: 'rollback', action: 'restore', target: item.target, result: item.existed ? 'restored' : 'deleted' });
+    history({ stamp: st, entry: 'rollback', action: 'restore', target: item.target, result: item.existed ? 'restored' : 'deleted' }, store);
   }
   return out;
 }
 
-export function readHistory(limit = 80) {
-  if (!fs.existsSync(HISTORY_FILE)) return [];
-  const lines = readText(HISTORY_FILE).split(/\r?\n/).filter(Boolean).slice(-limit);
+export function readHistory(limit = 80, store = defaultStore()) {
+  if (!fs.existsSync(store.historyFile)) return [];
+  const lines = readText(store.historyFile).split(/\r?\n/).filter(Boolean).slice(-limit);
   return lines.map((l) => {
     const [at, st, entry, action, target, hashBefore, hashAfter, result] = l.split('\t');
     return { at, stamp: st, entry, action, target, hashBefore, hashAfter, result };

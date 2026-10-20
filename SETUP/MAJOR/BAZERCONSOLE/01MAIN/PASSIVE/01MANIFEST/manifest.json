@@ -33,6 +33,42 @@
       "why": "ถ้าผู้ใช้เคยกดบันไดไว้แล้ว ห้ามทับด้วยค่า default ตอนอัพเดต"
     },
     {
+      "id": "cfg.arena-runner-permission",
+      "kind": "config",
+      "title": "permission ของ ARENA-RUNNER (ตามบันได + ห้าม spawn)",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-merge",
+      "valuePath": "agent.arena-runner.permission",
+      "fromPolicy": "buddha-ladder",
+      "policyOverrides": {
+        "subagent": "deny",
+        "external_directory": "allow"
+      },
+      "onlyIfMissing": true,
+      "status": "ready",
+      "auto": true,
+      "why": "runner เขียน candidate ลง %TEMP% ของตัวเอง (ต้องมี external_directory) และห้ามเรียก subagent เพื่อไม่ให้แอบเรียกผู้แข่งคนอื่น"
+    },
+    {
+      "id": "cfg.arena-judge-permission",
+      "kind": "config",
+      "title": "permission ของ ARENA-JUDGE (อ่านอย่างเดียว)",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-merge",
+      "valuePath": "agent.arena-judge.permission",
+      "fromPolicy": "buddha-ladder",
+      "policyOverrides": {
+        "edit": "deny",
+        "shell": "deny",
+        "subagent": "deny",
+        "external_directory": "allow"
+      },
+      "onlyIfMissing": true,
+      "status": "ready",
+      "auto": true,
+      "why": "กรรมการต้องอ่าน candidate ใน %TEMP% ได้ (external_directory) แต่ห้ามแก้ไฟล์ ห้ามรันคำสั่ง และห้ามเรียก subagent"
+    },
+    {
       "id": "cfg.keybinds",
       "kind": "config",
       "title": "คีย์ลัดเริ่มต้น (copy ข้อความล่าสุด)",

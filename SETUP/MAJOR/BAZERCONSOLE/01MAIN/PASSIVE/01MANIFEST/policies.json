@@ -1,9 +1,13 @@
 {
-  "note": "บันไดความแรงของ BUDDHA — เขียนลง agent.buddha.permission ใน opencode.jsonc (config ต่อท้ายและชนะกฎในไฟล์ · พิสูจน์แล้ว v2.0.32)",
+  "note": "บันไดความแรง — เขียนลง agent.buddha.permission + agent.arena-runner.permission + agent.arena-judge.permission ใน opencode.jsonc (config ต่อท้ายและชนะกฎในไฟล์ · พิสูจน์แล้ว v2.0.32)",
   "buddha-ladder": {
     "title": "บันไดเหมาเข่ง",
     "mode": "buddha",
-    "target": "agent.buddha.permission",
+    "target": [
+      "agent.buddha.permission",
+      "agent.arena-runner.permission",
+      "agent.arena-judge.permission"
+    ],
     "defaultLevel": "1",
     "levels": [
       {
@@ -81,9 +85,9 @@
       {
         "id": "5",
         "name": "เหมาเข่ง",
-        "tagline": "ทุกอย่างจริง ๆ",
+        "tagline": "ทุกอย่างจริง ๆ ยกเว้น browser",
         "risk": 3,
-        "why": "เปิดทุก action ที่ OpenCode มี รวม browser — ไม่มีอะไรกันไว้เลย เขียนทับไฟล์ระบบได้ ใช้เมื่อรู้ตัวว่ากำลังทำอะไร และมี backup แล้วเท่านั้น",
+        "why": "เปิดทุก action ที่ OpenCode รุ่นนี้รองรับ — browser ยังไม่รองรับ (ใส่ใน config แล้วก็ถูกบังคับเป็น deny อยู่ดี) นอกจากนี้ไม่มีอะไรกันไว้เลย เขียนทับไฟล์ระบบได้ ใช้เมื่อรู้ตัวว่ากำลังทำอะไร และมี backup แล้วเท่านั้น",
         "permission": {
           "read": "allow",
           "edit": "allow",
@@ -96,8 +100,7 @@
           "websearch": "allow",
           "external_directory": "allow",
           "question": "allow",
-          "doom_loop": "allow",
-          "browser": "allow"
+          "doom_loop": "allow"
         }
       }
     ]

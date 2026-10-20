@@ -40,6 +40,22 @@
       "why": "ค่าใน config อาจถูกกฎในไฟล์ชนะ — ตรวจจากผลลัพธ์จริง ไม่ใช่จากไฟล์ที่เขียน"
     },
     {
+      "id": "permission-arena-runner",
+      "title": "ARENA-RUNNER ได้ระดับตามบันได (ห้าม spawn · เขียน %TEMP% ได้)",
+      "kind": "permission-level",
+      "params": { "agent": "arena-runner", "policy": "buddha-ladder", "expect": { "subagent": "deny", "external_directory": "allow" } },
+      "severity": "fail",
+      "why": "runner ต้องได้ระดับเดียวกับบันได แต่ห้ามเรียก subagent (ไม่ให้แอบเรียกผู้แข่งคนอื่น) และต้องเขียน candidate ลง %TEMP% ได้"
+    },
+    {
+      "id": "permission-arena-judge",
+      "title": "ARENA-JUDGE อ่านอย่างเดียว (แก้ไฟล์/รันคำสั่ง/เรียก subagent ไม่ได้)",
+      "kind": "permission-level",
+      "params": { "agent": "arena-judge", "policy": "buddha-ladder", "expect": { "edit": "deny", "shell": "deny", "subagent": "deny", "external_directory": "allow" } },
+      "severity": "fail",
+      "why": "กรรมการต้องอ่าน candidate ใน %TEMP% ได้ แต่ห้ามแก้ไฟล์ ห้ามรันคำสั่ง และห้ามเรียก subagent"
+    },
+    {
       "id": "tui",
       "title": "tui.json อ่านได้",
       "kind": "json-file",

@@ -50,6 +50,32 @@ const cmpVersion = (a, b) => {
   return 0;
 };
 
+/**
+ * permission จาก frontmatter ของไฟล์ agent
+ * OpenCode ต่อกฎในไฟล์ agent ไว้ท้ายกฎใน config → ค่าในไฟล์ชนะ (พิสูจน์แล้ว v2.0.32)
+ */
+export function agentFilePermission(home, agentId) {
+  const { resolve } = makeResolver(home);
+  const file = resolve('${CONFIG}/agents/' + agentId + '.md');
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return {}; }
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (!m) return {};
+  const out = {};
+  let inPerm = false;
+  for (const raw of m[1].split(/\r?\n/)) {
+    if (!raw.trim() || raw.trim().startsWith('#')) continue;
+    const indented = /^\s+/.test(raw);
+    const mm = /^\s*([A-Za-z0-9_-]+):\s*(.*)$/.exec(raw);
+    if (!mm) continue;
+    const [, k, vRaw] = mm;
+    const v = vRaw.trim().replace(/^["']|["']$/g, '');
+    if (!indented) inPerm = k === 'permission';
+    else if (inPerm) out[k] = v;
+  }
+  return out;
+}
+
 export function plannotatorLocate(home) {
   const { resolve } = makeResolver(home);
   const roots = [resolve('${HOME}/.cache/opencode/npm'), resolve('${HOME}/.plannotator'), resolve('${HOME}/.local/share/opencode')].filter((p) => fs.existsSync(p));
@@ -124,6 +150,8 @@ const impl = {
     const state = readState();
     const levelId = state.policy?.policyId === p.policy ? state.policy.level : undefined;
     const level = policyLevel(p.policy, levelId);
+    // params.expect = ค่าที่บังคับเพิ่มเติมของ agent นั้น (เช่น ARENA-RUNNER ห้าม spawn) — ทับค่าในระดับ
+    const expected = { ...level.permission, ...(p.expect || {}) };
     // ต้องมีค่าอยู่ใน config จริงด้วย ไม่งั้น permission ที่เห็นอาจมาจากไฟล์โหมดเอง (false positive)
     const { resolve } = makeResolver(home);
     const cfgFile = resolve('${CONFIG}/opencode.jsonc');
@@ -138,18 +166,39 @@ const impl = {
     for (const r of agent.permissions || []) {
       if (r.resource !== '*') continue;
       if (r.action === '*') continue;
-      resolved[r.action] = r.effect; // กฎที่อยู่ท้ายสุดชนะ (config ต่อท้ายไฟล์)
+      resolved[r.action] = r.effect; // กฎที่อยู่ท้ายสุดชนะ
     }
+    // config ต้องมีค่าของบันไดจริง ไม่ใช่แค่มี key (พิสูจน์ว่าบันไดครอบ agent ตัวนี้)
+    const cfgWrong = [];
+    for (const [action, effect] of Object.entries(expected)) {
+      const got = cfgValue && typeof cfgValue === 'object' ? cfgValue[action] : undefined;
+      if (got !== effect) cfgWrong.push(`${action}: config มี ${got ?? '(ไม่มี)'} แต่คาด ${effect}`);
+    }
+    // ไฟล์ agent เอง (frontmatter) มาต่อท้าย config → ค่าในไฟล์ชนะ → ต้องนับมันตอนเทียบผลจริง
+    const filePerm = agentFilePermission(home, p.agent);
+    const effective = { ...expected, ...filePerm };
+    const shadowed = Object.entries(filePerm).filter(([a, v]) => expected[a] !== undefined && expected[a] !== v);
     const wrong = [];
-    for (const [action, effect] of Object.entries(level.permission)) {
+    for (const [action, effect] of Object.entries(effective)) {
       if (resolved[action] !== effect) wrong.push(`${action}: คาด ${effect} แต่ได้ ${resolved[action] ?? '(ไม่มี)'}`);
     }
+    let detail;
+    if (cfgValue === undefined) {
+      detail = 'ยังไม่ได้เขียนระดับนี้ลง config — ค่าที่เห็นอาจมาจากไฟล์โหมดเอง';
+    } else if (cfgWrong.length) {
+      detail = `config ไม่ตรงกับระดับ ${level.id} — ${cfgWrong.join(' · ')}`;
+    } else if (wrong.length) {
+      detail = wrong.join(' · ');
+    } else {
+      detail = `ระดับ ${level.id} ${level.name} มีผลจริง`;
+    }
+    if (shadowed.length) {
+      detail += ` · ไฟล์ agent บังคับ ${shadowed.map(([a, v]) => `${a}=${v}`).join(', ')} (บันไดยกไม่ได้)`;
+    }
     return {
-      ok: wrong.length === 0 && cfgValue !== undefined,
-      detail: cfgValue === undefined
-        ? 'ยังไม่ได้เขียนระดับนี้ลง config — ค่าที่เห็นอาจมาจากไฟล์โหมดเอง'
-        : wrong.length ? wrong.join(' · ') : `ระดับ ${level.id} ${level.name} มีผลจริง`,
-      extra: { level: level.id, resolved, inConfig: cfgValue !== undefined },
+      ok: cfgValue !== undefined && cfgWrong.length === 0 && wrong.length === 0,
+      detail,
+      extra: { level: level.id, resolved, inConfig: cfgValue !== undefined, expected, filePerm, cfgWrong, shadowed },
     };
   },
   'json-file': (p, home) => {

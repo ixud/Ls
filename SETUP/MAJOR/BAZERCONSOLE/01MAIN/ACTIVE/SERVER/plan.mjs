@@ -45,10 +45,18 @@ export function policyLevel(policyId, levelId) {
   return lv;
 }
 
+/**
+ * permission ที่ต้องเขียนลง config = ค่าของระดับ + override ของ entry
+ * (บันไดเดียวครอบได้หลาย agent — เช่น ARENA-RUNNER/JUDGE ที่บังคับห้าม spawn)
+ */
+export function policyPermission(entry, level) {
+  const lv = level || policyLevel(entry.fromPolicy);
+  return { ...lv.permission, ...(entry.policyOverrides || {}) };
+}
+
 function desiredConfigValue(entry, home) {
   if (entry.fromPolicy) {
-    const lv = policyLevel(entry.fromPolicy);
-    return lv.permission;
+    return policyPermission(entry, policyLevel(entry.fromPolicy));
   }
   return entry.value;
 }

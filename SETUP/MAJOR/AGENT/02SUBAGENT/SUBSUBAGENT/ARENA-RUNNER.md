@@ -5,7 +5,6 @@ color: "#7ad7a1"
 permission:
   read: allow
   edit: allow
-  shell: ask
   subagent: deny
 ---
 

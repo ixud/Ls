@@ -7,12 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { parseJsonc, setAtPath, getAtPath, removeArrayItem } from '../jsonc.mjs';
-import { computePlan, stateOf } from '../plan.mjs';
+import { computePlan, stateOf, policyLevel, policyPermission } from '../plan.mjs';
 import { checkLaw } from '../law.mjs';
 import { actionIds } from '../actions.mjs';
 import { manifest, srcPath, probes, policies, settings } from '../manifest.mjs';
-import { makeResolver, ROOT } from '../env.mjs';
-import { PROBE_KINDS } from '../probe.mjs';
+import { makeResolver, ROOT, STATE_FILE } from '../env.mjs';
+import { PROBE_KINDS, agentFilePermission } from '../probe.mjs';
+import { setPolicy, undoPolicy, makeStore } from '../apply.mjs';
 import { plannotatorPlan, plannotatorPatch } from '../plannotator.mjs';
 import { parseModelsOutput } from '../models.mjs';
 
@@ -377,6 +378,134 @@ t('UI อ้างเฉพาะ action ที่ประกาศไว้จ
   for (const m of src.matchAll(/data-act="([a-z0-9-]+)"/g)) found.add(m[1]);
   const unknown = [...found].filter((id) => !declared.has(id));
   assert.equal(unknown.length, 0, unknown.join(', '));
+});
+
+fs.rmSync(home, { recursive: true, force: true });
+console.log(`\n${pass} passed`);
+
+console.log('ladder (บันไดเหมาเข่ง)');
+
+const LADDER_PATHS = ['agent.arena-judge.permission', 'agent.arena-runner.permission', 'agent.buddha.permission'];
+
+t('บันไดครอบ 3 agent (buddha + arena-runner + arena-judge)', () => {
+  const entries = manifest.entries.filter((e) => e.fromPolicy === 'buddha-ladder');
+  assert.equal(entries.length, 3, entries.map((e) => e.id).join(', '));
+  assert.deepEqual(entries.map((e) => e.valuePath).sort(), LADDER_PATHS);
+  for (const e of entries) {
+    assert.equal(e.strategy, 'jsonc-merge', e.id);
+    assert.equal(e.status, 'ready', e.id);
+    assert.equal(e.target, '${CONFIG}/opencode.jsonc', e.id);
+  }
+});
+
+t('runner: บังคับ subagent deny + external_directory allow (ที่เหลือตามระดับ)', () => {
+  const e = manifest.entries.find((x) => x.id === 'cfg.arena-runner-permission');
+  assert.ok(e, 'ไม่มี entry cfg.arena-runner-permission');
+  assert.deepEqual(e.policyOverrides, { subagent: 'deny', external_directory: 'allow' });
+  const lv = policyLevel('buddha-ladder', '1');
+  const perm = policyPermission(e, lv);
+  assert.equal(perm.subagent, 'deny');
+  assert.equal(perm.external_directory, 'allow');
+  assert.equal(perm.shell, lv.permission.shell);
+  assert.equal(perm.read, lv.permission.read);
+});
+
+t('judge: บังคับ edit/shell/subagent deny + external_directory allow', () => {
+  const e = manifest.entries.find((x) => x.id === 'cfg.arena-judge-permission');
+  assert.ok(e, 'ไม่มี entry cfg.arena-judge-permission');
+  assert.deepEqual(e.policyOverrides, { edit: 'deny', shell: 'deny', subagent: 'deny', external_directory: 'allow' });
+  const lv = policyLevel('buddha-ladder', '5');
+  const perm = policyPermission(e, lv);
+  assert.equal(perm.edit, 'deny');
+  assert.equal(perm.shell, 'deny');
+  assert.equal(perm.subagent, 'deny');
+  assert.equal(perm.external_directory, 'allow');
+  assert.equal(perm.webfetch, lv.permission.webfetch);
+});
+
+t('ไม่มีระดับไหนใช้ browser (OpenCode รุ่นนี้ไม่รองรับ)', () => {
+  for (const lv of policies['buddha-ladder'].levels) {
+    assert.equal(lv.permission.browser, undefined, `ระดับ ${lv.id} ยังมี browser`);
+  }
+  const five = policies['buddha-ladder'].levels.find((l) => String(l.id) === '5');
+  assert.match(five.tagline, /browser/);
+  assert.match(five.why, /browser/);
+  assert.match(five.why, /ไม่รองรับ/);
+});
+
+t('probe ครบ: permission-level + arena-runner + arena-judge', () => {
+  const ids = probes.probes.map((p) => p.id);
+  for (const id of ['permission-level', 'permission-arena-runner', 'permission-arena-judge']) {
+    assert.ok(ids.includes(id), `ไม่มี probe ${id}`);
+  }
+  const runner = probes.probes.find((p) => p.id === 'permission-arena-runner');
+  assert.equal(runner.kind, 'permission-level');
+  assert.equal(runner.params.agent, 'arena-runner');
+  assert.equal(runner.params.policy, 'buddha-ladder');
+  assert.deepEqual(runner.params.expect, { subagent: 'deny', external_directory: 'allow' });
+  const judge = probes.probes.find((p) => p.id === 'permission-arena-judge');
+  assert.equal(judge.kind, 'permission-level');
+  assert.equal(judge.params.agent, 'arena-judge');
+  assert.deepEqual(judge.params.expect, { edit: 'deny', shell: 'deny', subagent: 'deny', external_directory: 'allow' });
+});
+
+t('อ่าน permission จาก frontmatter ของไฟล์ agent ได้ (OpenCode ให้ไฟล์ชนะ config)', () => {
+  const h = path.join(os.tmpdir(), 'bazer', 'frontmatter-home');
+  fs.rmSync(h, { recursive: true, force: true });
+  const dir = path.join(h, '.config', 'opencode', 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'arena-runner.md'), '---\ndescription: "x: y"\nmode: subagent\npermission:\n  read: allow\n  shell: ask\n  subagent: deny\n---\n\nเนื้อหา\n', 'utf8');
+  assert.deepEqual(agentFilePermission(h, 'arena-runner'), { read: 'allow', shell: 'ask', subagent: 'deny' });
+  assert.deepEqual(agentFilePermission(h, 'ไม่มีตัวนี้'), {});
+  fs.rmSync(h, { recursive: true, force: true });
+});
+
+t('ไฟล์ role ของ Arena ตรงกับที่บันไดบังคับ', () => {
+  const runner = parseFrontmatter(fs.readFileSync(path.join(ROOT, 'AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-RUNNER.md'), 'utf8'));
+  assert.equal(runner.permission.subagent, 'deny', 'runner ต้องห้ามเรียก subagent');
+  assert.equal(runner.permission.shell, undefined, 'runner ต้องไม่ปัก shell ในไฟล์ — ไม่งั้นทับค่าบันได (เช่น ask ทับ allow)');
+  const judge = parseFrontmatter(fs.readFileSync(path.join(ROOT, 'AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-JUDGE.md'), 'utf8'));
+  assert.equal(judge.permission.edit, 'deny', 'judge ต้องอ่านอย่างเดียว');
+  assert.equal(judge.permission.shell, 'deny', 'judge ต้องอ่านอย่างเดียว');
+  assert.equal(judge.permission.subagent, 'deny', 'judge ต้องห้ามเรียก subagent');
+});
+
+t('setPolicy เขียนครบ 3 target และ undoPolicy ย้อนครบ (temp home · ไม่แตะ state จริง)', () => {
+  const h = path.join(os.tmpdir(), 'bazer', 'ladder-home');
+  const storeDir = path.join(os.tmpdir(), 'bazer', 'ladder-store');
+  fs.rmSync(h, { recursive: true, force: true });
+  fs.rmSync(storeDir, { recursive: true, force: true });
+  const cfgDir = path.join(h, '.config', 'opencode');
+  fs.mkdirSync(cfgDir, { recursive: true });
+  fs.writeFileSync(path.join(cfgDir, 'opencode.jsonc'), '{\n  "agent": {}\n}\n', 'utf8');
+  const store = makeStore(storeDir);
+  const realState = fs.existsSync(STATE_FILE) ? fs.readFileSync(STATE_FILE) : null;
+
+  const r = setPolicy(h, 'buddha-ladder', '3', store);
+  assert.equal(r.targets, 3, `เขียนแค่ ${r.targets} target`);
+  assert.equal(r.written.length, 3);
+  const cfg = parseJsonc(fs.readFileSync(path.join(cfgDir, 'opencode.jsonc'), 'utf8'));
+  const lv3 = policies['buddha-ladder'].levels.find((l) => String(l.id) === '3');
+  assert.deepEqual(cfg.agent.buddha.permission, lv3.permission);
+  assert.deepEqual(cfg.agent['arena-runner'].permission, { ...lv3.permission, subagent: 'deny', external_directory: 'allow' });
+  assert.deepEqual(cfg.agent['arena-judge'].permission, { ...lv3.permission, edit: 'deny', shell: 'deny', subagent: 'deny', external_directory: 'allow' });
+  assert.equal(cfg.agent['arena-judge'].permission.shell, 'deny');
+  assert.equal(cfg.agent['arena-runner'].permission.external_directory, 'allow');
+
+  const u = undoPolicy(h, store);
+  assert.equal(u.targets, 3, `ย้อนแค่ ${u.targets} target`);
+  const cfg2 = parseJsonc(fs.readFileSync(path.join(cfgDir, 'opencode.jsonc'), 'utf8'));
+  const lv1 = policies['buddha-ladder'].levels.find((l) => String(l.id) === '1');
+  assert.deepEqual(cfg2.agent.buddha.permission, lv1.permission);
+  assert.equal(cfg2.agent['arena-runner'].permission.subagent, 'deny');
+  assert.equal(cfg2.agent['arena-runner'].permission.external_directory, 'allow');
+  assert.equal(cfg2.agent['arena-judge'].permission.edit, 'deny');
+  assert.equal(cfg2.agent['arena-judge'].permission.shell, 'deny');
+
+  const realAfter = fs.existsSync(STATE_FILE) ? fs.readFileSync(STATE_FILE) : null;
+  assert.deepEqual(realAfter, realState, 'state จริงถูกแก้ — ห้าม');
+  fs.rmSync(h, { recursive: true, force: true });
+  fs.rmSync(storeDir, { recursive: true, force: true });
 });
 
 fs.rmSync(home, { recursive: true, force: true });
