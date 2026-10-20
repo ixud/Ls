@@ -4,7 +4,7 @@
 
 ## เปิดยังไง
 
-1. ไปที่ `SETUP\MAJOR\BAZERCONSOLE\03WINDOWS\`
+1. ไปที่ `SETUP\OPENCODE\BAZERCONSOLE\03WINDOWS\`
 2. ดับเบิลคลิก **`BAZER CONSOLE.vbs`**
 3. เบราว์เซอร์จะเปิดเอง (ถ้าไม่เปิด ให้คัดลอกลิงก์ในหน้าต่างดำมาเปิด)
 
@@ -119,7 +119,7 @@
 
 ```powershell
 # 1) ตรวจเครื่อง (ไม่แตะ config จริง)
-node "SETUP\MAJOR\BAZERCONSOLE\01MAIN\ACTIVE\SERVER\tools\selftest.mjs"
+node "SETUP\OPENCODE\BAZERCONSOLE\01MAIN\ACTIVE\SERVER\tools\selftest.mjs"
 
 # 2) ดูว่า Console คิดว่าอะไรต้องทำ
 #    เปิด Console → ภาพรวม → ตรวจว่ามีอะไรใหม่

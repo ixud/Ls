@@ -11,7 +11,7 @@ server = major & "\BAZERCONSOLE\01MAIN\ACTIVE\SERVER\index.mjs"
 
 If Not fso.FileExists(server) Then
   MsgBox "Server not found:" & vbCrLf & server & vbCrLf & vbCrLf & _
-         "Expected layout: MAJOR\BAZERCONSOLE\01MAIN\ACTIVE\SERVER\index.mjs", 16, "BAZER CONSOLE"
+         "Expected layout: <repo dir>\BAZERCONSOLE\01MAIN\ACTIVE\SERVER\index.mjs", 16, "BAZER CONSOLE"
   WScript.Quit 1
 End If
 
