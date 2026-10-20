@@ -4,15 +4,21 @@
  * ล้มกลางทาง = หยุด + rollback รอบนั้น
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { BACKUP_DIR, HISTORY_FILE, STATE_FILE, VAR_DIR, makeResolver } from './env.mjs';
-import { manifest, settings, policies, sha256File, sha256, srcPath, treeFiles } from './manifest.mjs';
-import { stateOf, policyLevel as policyLevelOf, policyPermission } from './plan.mjs';
+import { manifest, settings, policies, sha256File, sha256, srcPath, treeFiles, walk } from './manifest.mjs';
+import { stateOf, policyLevel as policyLevelOf, policyPermission, ladderPermission } from './plan.mjs';
 import { setAtPath, removeArrayItem, getAtPath } from './jsonc.mjs';
+import { setFrontmatterPermission } from './frontmatter.mjs';
 
 const now = () => new Date().toISOString();
-const readText = (p) => fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+/** อ่านแบบดิบ — ไม่ตัด BOM (ใช้กับ path ที่จะเขียนกลับ เพื่อคง BOM เดิม) */
+const readTextRaw = (p) => fs.readFileSync(p, 'utf8');
+const readText = (p) => readTextRaw(p).replace(/^\uFEFF/, '');
 const exists = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+const walkTree = (dir) => walk(dir);
 
 /**
  * ที่เก็บ state / backup / history — ปกติคือ var/ ของ Console
@@ -123,25 +129,38 @@ export function writeEntry(entry, home, st, store = defaultStore()) {
     case 'create-only':
     case 'template-once': {
       if (entry.strategy !== 'overwrite' && exists(target)) return { skipped: 'มีอยู่แล้ว (ไม่ทับ)' };
-      push(target, readText(srcPath(entry)));
+      let text = readText(srcPath(entry));
+      // agent ที่ผูกกับบันได: ต้องแนบ permission ของ "ขั้นที่ตั้งอยู่จริง" ลง frontmatter
+      // (ถ้าใช้ defaultLevel ตรง ๆ กด apply ทีเดียวขั้นที่ผู้ใช้ตั้งไว้จะหาย)
+      if (entry.ladderPolicy && entry.ladderAgent) {
+        const st = readState(store);
+        const cur = (st.policies || {})[entry.ladderPolicy]?.level
+          || (st.policy?.policyId === entry.ladderPolicy ? st.policy.level : null)
+          || policies[entry.ladderPolicy]?.defaultLevel;
+        text = setFrontmatterPermission(text, ladderPermission(entry.ladderAgent, entry.ladderPolicy, cur));
+      }
+      push(target, text);
       break;
     }
     case 'jsonc-merge': {
-      const cur = exists(target) ? readText(target) : '{\n}\n';
+      // readTextRaw: คง BOM เดิมไว้ (setAtPath จัดการ BOM เอง)
+      const cur = exists(target) ? readTextRaw(target) : '{\n}\n';
       const desired = entry.fromPolicy ? policyPermission(entry, policyLevelOf(entry.fromPolicy)) : entry.value;
       const next = setAtPath(cur, entry.valuePath.split('.'), desired, { merge: true });
       if (next !== cur) push(target, next);
       break;
     }
     case 'jsonc-remove-array-item': {
-      const cur = readText(target);
+      const cur = readTextRaw(target);
       const next = removeArrayItem(cur, entry.valuePath.split('.'), entry.remove);
       if (next !== cur) push(target, next);
       break;
     }
     case 'copy-tree': {
+      const wanted = new Set();
       for (const f of treeFiles(entry)) {
         const dst = path.join(target, f.rel);
+        wanted.add(path.normalize(dst).toLowerCase());
         const srcHash = sha256File(f.abs);
         if (exists(dst) && sha256File(dst) === srcHash) continue;
         const buf = fs.readFileSync(f.abs);
@@ -149,6 +168,19 @@ export function writeEntry(entry, home, st, store = defaultStore()) {
         if (looksBinary(buf)) pushFile(dst, f.abs);
         else push(dst, buf.toString('utf8'));
       }
+      // prune: ไฟล์ในปลายทางที่ไม่มีในต้นทาง = ซากของรุ่นเก่า → ย้ายเข้า backup (ไม่ลบทิ้ง)
+      const pruned = [];
+      if (entry.prune && isDir(target)) {
+        for (const abs of walkTree(target)) {
+          if (wanted.has(path.normalize(abs).toLowerCase())) continue;
+          const holder = path.join(store.backupDir, st, 'pruned', safeRel(abs));
+          fs.mkdirSync(path.dirname(holder), { recursive: true });
+          fs.renameSync(abs, holder);
+          pruned.push({ from: abs, to: holder });
+          history({ stamp: st, entry: `${entry.id}.prune`, action: 'prune', target: abs, result: 'moved' }, store);
+        }
+      }
+      written.pruned = pruned;
       break;
     }
     case 'line': {
@@ -227,11 +259,24 @@ export function applyEntries(home, ids, store = defaultStore()) {
 export function writeJsonc(home, targetTemplate, keys, value, { merge = false, entry = 'settings', st = stamp(), store = defaultStore() } = {}) {
   const { resolve } = makeResolver(home);
   const target = resolve(targetTemplate);
-  const cur = exists(target) ? readText(target) : '{\n}\n';
+  const cur = exists(target) ? readTextRaw(target) : '{\n}\n';
   const next = setAtPath(cur, keys, value, { merge });
   if (next === cur) return { changed: false, target, stamp: st };
   const b = backupFile(st, target, store);
   const h = writeTextAtomic(target, next);
+  record(st, [{ ...b, hashAfter: h }], store);
+  history({ stamp: st, entry, action: 'write', target, hashBefore: b.hashBefore, hashAfter: h }, store);
+  return { changed: true, target, stamp: st, hashAfter: h };
+}
+
+/** เขียนข้อความที่เตรียมมาแล้ว (คงรูปเดิมทั้งไฟล์) — backup → atomic → history */
+export function writeTextWithBackup(home, targetTemplate, text, { entry = 'raw', st = stamp(), store = defaultStore() } = {}) {
+  const { resolve } = makeResolver(home);
+  const target = resolve(targetTemplate);
+  const cur = exists(target) ? readTextRaw(target) : null;
+  if (cur === text) return { changed: false, target, stamp: st };
+  const b = backupFile(st, target, store);
+  const h = writeTextAtomic(target, text);
   record(st, [{ ...b, hashAfter: h }], store);
   history({ stamp: st, entry, action: 'write', target, hashBefore: b.hashBefore, hashAfter: h }, store);
   return { changed: true, target, stamp: st, hashAfter: h };
@@ -242,40 +287,96 @@ export function policyEntries(policyId) {
   return manifest.entries.filter((e) => e.fromPolicy === policyId);
 }
 
-/** เขียนระดับของบันไดลงทุก entry ที่ผูกไว้ (BUDDHA + ARENA-RUNNER + ARENA-JUDGE) */
+/** เขียน permission ลง frontmatter ของไฟล์ agent ที่ติดตั้งแล้ว (ถ้ามีไฟล์) */
+export function writeAgentPermission(home, agentId, permission, { st = stamp(), store = defaultStore() } = {}) {
+  const { resolve } = makeResolver(home);
+  const file = resolve(`\${CONFIG}/agents/${agentId}.md`);
+  if (!exists(file)) return { changed: false, id: agentId, note: 'ยังไม่มีไฟล์ agent (ติดตั้งก่อน)' };
+  const cur = readTextRaw(file);
+  let next;
+  try { next = setFrontmatterPermission(cur, permission); }
+  catch (e) { return { changed: false, id: agentId, note: e.message }; }
+  if (next === cur) return { changed: false, id: agentId };
+  const b = backupFile(st, file, store);
+  const h = writeTextAtomic(file, next);
+  record(st, [{ ...b, hashAfter: h }], store);
+  history({ stamp: st, entry: `policy.file.${agentId}`, action: 'write', target: file, hashBefore: b.hashBefore, hashAfter: h }, store);
+  return { changed: true, id: agentId, target: file };
+}
+
+/** agentId จาก valuePath ของ entry ที่ผูกบันได (agent.buddha.permission → buddha) */
+const agentIdOf = (entry) => String(entry.valuePath || '').split('.')[1] || null;
+
+/** เขียนระดับของบันไดลงทุก entry ที่ผูกไว้ — config + frontmatter ของ agent file */
 export function setPolicy(home, policyId, levelId, store = defaultStore()) {
   const level = policyLevelOf(policyId, levelId);
   const entries = policyEntries(policyId);
   if (!entries.length) throw new Error(`ไม่มี entry ที่ผูกกับ policy ${policyId}`);
   const state = readState(store);
-  const prev = state.policy && state.policy.policyId === policyId
-    ? state.policy.level
+  const cur = (state.policies || {})[policyId];
+  const prev = cur && cur.level
+    ? cur.level
     : String(policies[policyId]?.defaultLevel ?? policyLevelOf(policyId).id);
+  const st = stamp();
   const written = [];
+  const files = [];
   for (const entry of entries) {
-    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), policyPermission(entry, level), { entry: `policy.${policyId}`, store });
+    const permission = policyPermission(entry, level);
+    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), permission, { entry: `policy.${policyId}`, st, store });
     written.push({ id: entry.id, valuePath: entry.valuePath, changed: r.changed, target: r.target });
+    // ไฟล์ agent ชนะ config → ต้องเขียนสองที่ด้วยชุดค่าเดียวกัน
+    const aid = agentIdOf(entry);
+    if (aid) files.push(writeAgentPermission(home, aid, permission, { st, store }));
   }
-  state.policy = { policyId, level: String(level.id), at: now(), prev };
+  state.policies = state.policies || {};
+  state.policies[policyId] = { level: String(level.id), at: now(), prev };
+  // compat: ให้โค้ดรุ่นเก่า/หน้าเว็บที่อ่าน state.policy ยังเห็นบันได BUDDHA
+  if (policyId === 'buddha-ladder') state.policy = { policyId, level: String(level.id), at: now(), prev };
   writeState(state, store);
-  return { ...written[0], changed: written.some((w) => w.changed), level: level.id, name: level.name, prev, written, targets: written.length };
+  return {
+    ...written[0],
+    changed: written.some((w) => w.changed) || files.some((f) => f.changed),
+    level: level.id,
+    name: level.name,
+    prev,
+    written,
+    files,
+    targets: written.length + files.filter((f) => f.changed).length,
+  };
 }
 
-export function undoPolicy(home, store = defaultStore()) {
+export function undoPolicy(home, policyId = 'buddha-ladder', store = defaultStore()) {
   const state = readState(store);
-  if (!state.policy || !state.policy.prev) throw new Error('ยังไม่มีการเปลี่ยนระดับให้ย้อน');
-  const p = state.policy;
+  const cur = (state.policies || {})[policyId];
+  const fallback = policyId === 'buddha-ladder' && state.policy && state.policy.policyId === policyId ? state.policy : null;
+  const p = cur && cur.prev ? { policyId, ...cur } : fallback && fallback.prev ? { policyId, ...fallback } : null;
+  if (!p) throw new Error('ยังไม่มีการเปลี่ยนระดับให้ย้อน');
   const level = policyLevelOf(p.policyId, p.prev);
   const entries = policyEntries(p.policyId);
   if (!entries.length) throw new Error(`ไม่มี entry ที่ผูกกับ policy ${p.policyId}`);
+  const st = stamp();
   const written = [];
+  const files = [];
   for (const entry of entries) {
-    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), policyPermission(entry, level), { entry: `policy.${p.policyId}`, store });
+    const permission = policyPermission(entry, level);
+    const r = writeJsonc(home, entry.target, entry.valuePath.split('.'), permission, { entry: `policy.${p.policyId}`, st, store });
     written.push({ id: entry.id, valuePath: entry.valuePath, changed: r.changed, target: r.target });
+    const aid = agentIdOf(entry);
+    if (aid) files.push(writeAgentPermission(home, aid, permission, { st, store }));
   }
-  state.policy = { policyId: p.policyId, level: String(level.id), at: now(), prev: p.level };
+  state.policies = state.policies || {};
+  state.policies[p.policyId] = { level: String(level.id), at: now(), prev: p.level };
+  if (p.policyId === 'buddha-ladder') state.policy = { policyId: p.policyId, level: String(level.id), at: now(), prev: p.level };
   writeState(state, store);
-  return { ...written[0], changed: written.some((w) => w.changed), level: level.id, name: level.name, written, targets: written.length };
+  return {
+    ...written[0],
+    changed: written.some((w) => w.changed) || files.some((f) => f.changed),
+    level: level.id,
+    name: level.name,
+    written,
+    files,
+    targets: written.length + files.filter((f) => f.changed).length,
+  };
 }
 
 export function setBuiltin(home, mode) {
@@ -285,20 +386,22 @@ export function setBuiltin(home, mode) {
   return writeJsonc(home, '${CONFIG}/opencode.jsonc', ['agent'], state, { merge: true, entry: 'builtin-toggle' });
 }
 
-export function retireOldFlow(home) {
-  const entry = manifest.entries.find((e) => e.id === 'cfg.retire-old-flow');
+export function retireOldFlow(home, name = 'bazer-flow', store = defaultStore()) {
+  // ไม่ผูกกับ manifest entry แล้ว: การมี entry ที่ "ตั้งใจถอด" ปนกับ entry ที่ "ตั้งใจติดตั้ง"
+  // ทำให้ plan รายงาน stale ตลอด (เจตนาตรงข้ามกัน) — ที่นี่สร้างค่าจากชื่อปลั๊กอินตรง ๆ
   const { resolve } = makeResolver(home);
-  const target = resolve(entry.target);
+  const target = resolve('${CONFIG}/opencode.jsonc');
+  const value = `./plugins/${String(name || 'bazer-flow').replace(/[\\/]+/g, '')}`;
   if (!exists(target)) return { changed: false, note: 'ไม่มี opencode.jsonc' };
-  const cur = readText(target);
-  const next = removeArrayItem(cur, entry.valuePath.split('.'), entry.remove);
-  if (next === cur) return { changed: false, note: 'ไม่มีของค้างอยู่แล้ว' };
+  const cur = readTextRaw(target);
+  const next = removeArrayItem(cur, ['plugins'], value);
+  if (next === cur) return { changed: false, note: `ไม่มี ${value} ค้างอยู่แล้ว` };
   const st = stamp();
-  const b = backupFile(st, target);
+  const b = backupFile(st, target, store);
   const h = writeTextAtomic(target, next);
-  record(st, [{ ...b, hashAfter: h }]);
-  history({ stamp: st, entry: 'retire-old-flow', action: 'write', target, hashBefore: b.hashBefore, hashAfter: h });
-  return { changed: true, target, stamp: st };
+  record(st, [{ ...b, hashAfter: h }], store);
+  history({ stamp: st, entry: 'retire-old-flow', action: 'write', target, hashBefore: b.hashBefore, hashAfter: h }, store);
+  return { changed: true, target, stamp: st, removed: value };
 }
 
 export function rollback(home, st, store = defaultStore()) {
@@ -438,6 +541,54 @@ export function cleanupOld(home, { apply = false, groups = ['agents', 'mirrors',
   return { apply: true, stamp: st, quarantine: qdir, count: items.length, moved };
 }
 
+/* -------------------- backup: ดูรายการ + คืนไฟล์เดียว -------------------- */
+
+/** รายการ backup ล่าสุด (อ่าน manifest ของแต่ละรอบ) */
+export function listBackups(store = defaultStore(), limit = 40) {
+  const root = store.backupDir;
+  if (!isDir(root)) return [];
+  const out = [];
+  const names = fs.readdirSync(root).filter((n) => isDir(path.join(root, n))).sort().reverse();
+  for (const st of names) {
+    const dir = path.join(root, st);
+    const mf = path.join(dir, 'manifest.json');
+    let doc = { at: null, items: [] };
+    if (fs.existsSync(mf)) { try { doc = JSON.parse(readText(mf)); } catch { /* รอบที่ manifest พัง = แสดงเท่าที่อ่านได้ */ } }
+    out.push({
+      stamp: st,
+      at: doc.at || null,
+      count: (doc.items || []).length,
+      pruned: isDir(path.join(dir, 'pruned')),
+      items: (doc.items || []).map((i) => ({ target: i.target, existed: !!i.existed, name: path.basename(String(i.target)) })),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** คืนไฟล์เดียวจาก backup ของรอบที่ระบุ (สำรองของปัจจุบันก่อนเขียนทับ) */
+export function restoreBackupFile(stampId, target, store = defaultStore()) {
+  const dir = path.join(store.backupDir, stampId);
+  const mf = path.join(dir, 'manifest.json');
+  if (!fs.existsSync(mf)) throw new Error(`ไม่พบ backup รอบ ${stampId}`);
+  const doc = JSON.parse(readText(mf));
+  const item = (doc.items || []).find((i) => path.resolve(String(i.target)) === path.resolve(String(target)));
+  if (!item) throw new Error(`รอบ ${stampId} ไม่มีไฟล์นี้ในรายการ`);
+  const bak = path.join(dir, 'files', safeRel(item.target));
+  const st = stamp();
+  const guard = backupFile(st, item.target, store);   // กันพลาด: สำรองของปัจจุบันก่อน
+  if (item.existed) {
+    if (!fs.existsSync(bak)) throw new Error(`ไฟล์สำรองหาย: ${bak}`);
+    fs.mkdirSync(path.dirname(item.target), { recursive: true });
+    fs.copyFileSync(bak, item.target);
+  } else if (fs.existsSync(item.target)) {
+    fs.rmSync(item.target, { force: true });
+  }
+  record(st, [{ ...guard, hashAfter: exists(item.target) ? sha256File(item.target) : null }], store);
+  history({ stamp: st, entry: 'backup.restore', action: 'restore', target: item.target, result: item.existed ? 'restored' : 'deleted' }, store);
+  return { stamp: st, from: stampId, target: item.target, restored: !!item.existed };
+}
+
 /* -------------------- full settings (overwrite ทั้งไฟล์) -------------------- */
 
 export function writeFullSettings(home, fileId, content) {
@@ -453,8 +604,9 @@ export function writeFullSettings(home, fileId, content) {
   const { resolve } = makeResolver(home);
   const target = resolve(spec.target);
   const st = stamp();
+  const hadBom = exists(target) && fs.readFileSync(target, 'utf8').charCodeAt(0) === 0xfeff;
   const b = backupFile(st, target);
-  const out = text.endsWith('\n') ? text : `${text}\n`;
+  const out = `${hadBom ? '\uFEFF' : ''}${text.endsWith('\n') ? text : `${text}\n`}`;
   const h = writeTextAtomic(target, out);
   record(st, [{ ...b, hashAfter: h }]);
   history({ stamp: st, entry: `full.${fileId}`, action: 'overwrite', target, hashBefore: b.hashBefore, hashAfter: h });
@@ -469,6 +621,19 @@ export function writeFullSettings(home, fileId, content) {
 }
 
 /* -------------------- settings -------------------- */
+
+/** บรรทัดรุ่นเก่าที่ต้องลบทิ้งเมื่อบันทึก Arena แบบใหม่ (model#effort) */
+const LEGACY_LINES = {
+  'arena.runners': ['arena runner efforts:'],
+  'arena.judge': ['arena judge efforts:'],
+};
+
+function stripLines(text, prefixes) {
+  return text
+    .split(/\r?\n/)
+    .filter((l) => !prefixes.some((p) => l.trim().startsWith(p)))
+    .join('\n');
+}
 
 export function allControls() {
   const out = [];
@@ -495,7 +660,9 @@ export function saveSettings(home, patches) {
         const target = resolve(c.target);
         if (!exists(target)) throw new Error('ยังไม่มีไฟล์ — ติดตั้ง template ก่อน');
         const cur = readText(target);
-        const next = setLineText(cur, c.line, patch.value);
+        let next = setLineText(cur, c.line, patch.value);
+        // Arena แบบใหม่เก็บ effort inline (model#effort) → ลบบรรทัด efforts รุ่นเก่า ไม่ให้ขัดกัน
+        if (LEGACY_LINES[c.id]) next = stripLines(next, LEGACY_LINES[c.id]);
         if (next !== cur) {
           const b = backupFile(st, target);
           const h = writeTextAtomic(target, next);
@@ -517,15 +684,25 @@ export function saveSettings(home, patches) {
     }
   }
   const out = readState();
-  if (out.locks?.models) snapshotModels(home);
+  // snapshot เฉพาะตอน "เพิ่งเปิด lock" (หรือยังไม่มีเลย) — ถ้าถ่ายทุกครั้งที่บันทึก
+  // ค่าที่เพิ่งเปลี่ยนจะกลายเป็น snapshot แล้ว drift จะไม่มีวันตรวจเจอ (lock ตายทั้งฟีเจอร์)
+  const turningOn = (patches || []).some((p) => p.id === 'lock.models' && p.value === true);
+  const noSnap = !out.modelsSnapshot || Object.keys(out.modelsSnapshot).length === 0;
+  if (out.locks?.models && (turningOn || noSnap)) snapshotModels(home);
   return { stamp: st, results, ok: results.every((r) => r.ok) };
 }
 
-/** บันทึกค่าปัจจุบันของโมเดล/effort ไว้เทียบ (ใช้ตอนเปิด lock) */
-export function snapshotModels(home) {
-  const paths = ['buddha', 'bazer', 'snack', 'advisor'];
+/** โหมดที่ snapshot/lock ดูแล (เรียงตามแท็บใน Quick Access) */
+export const LOCK_MODES = ['buddha', 'bazer', 'snack', 'advisor'];
+
+/**
+ * บันทึกค่าปัจจุบันของโมเดล/effort ไว้เทียบ — แยกต่อโหมด
+ * @param {string[]} modes ถ้าไม่ส่ง = ทุกโหมด (คงค่า snapshot ของโหมดอื่นไว้ ไม่ล้างทั้งก้อน)
+ */
+export function snapshotModels(home, modes = LOCK_MODES) {
+  const paths = (Array.isArray(modes) ? modes : [modes]).filter((m) => LOCK_MODES.includes(m));
   const state = readState();
-  state.modelsSnapshot = {};
+  state.modelsSnapshot = state.modelsSnapshot || {};
   const { resolve } = makeResolver(home);
   const file = resolve('${CONFIG}/opencode.jsonc');
   if (!exists(file)) return [];
@@ -534,28 +711,44 @@ export function snapshotModels(home) {
     state.modelsSnapshot[m] = {
       model: getAtPath(text, ['agent', m, 'model']) ?? null,
       variant: getAtPath(text, ['agent', m, 'variant']) ?? null,
+      at: new Date().toISOString(),
     };
   }
+  // ผูก snapshot กับ home — กัน Console อีกตัว (หรือ --home sandbox) เอาค่าไปใช้ข้ามเครื่อง
+  state.snapshotHome = homeKey(home);
   writeState(state);
   return paths;
 }
 
-/** คืนค่า model/effort จาก snapshot ที่บันทึกไว้ (ใช้เมื่อเปิด lock) */
-export function restoreLockedModels(home) {
+/** home จริงของ snapshot (Console ที่ไม่ส่ง --home = home ของเครื่อง ไม่ใช่ cwd) */
+const homeKey = (h) => path.resolve(h || os.homedir());
+
+/**
+ * คืนค่า model/effort จาก snapshot — ระบุ mode = คืนเฉพาะโหมดนั้น
+ */
+export function restoreLockedModels(home, mode) {
   const state = readState();
   const snap = state.modelsSnapshot;
-  if (!snap || !Object.keys(snap).length) throw new Error('ยังไม่มี snapshot — เปิด lock.models แล้วกดบันทึกค่าก่อน');
+  if (!snap || !Object.keys(snap).length) throw new Error('ยังไม่มี snapshot — กด “ถ่าย snapshot” ของโหมดนั้นก่อน');
+  if (state.snapshotHome && homeKey(home) !== state.snapshotHome) {
+    throw new Error(`snapshot นี้มาจาก home อื่น (${state.snapshotHome}) — กด “ถ่าย snapshot” ใหม่บนเครื่องนี้`);
+  }
+  if (mode && !LOCK_MODES.includes(mode)) throw new Error(`ไม่รู้จักโหมด: ${mode}`);
+  if (mode && !snap[mode]) throw new Error(`โหมด ${mode} ยังไม่มี snapshot — กด “ถ่าย snapshot” ของโหมดนี้ก่อน`);
+  const wanted = mode ? [mode] : LOCK_MODES.filter((m) => snap[m]);
   const st = stamp();
   const changed = [];
   const skipped = [];
-  for (const [mode, v] of Object.entries(snap)) {
+  for (const m of wanted) {
+    const v = snap[m];
+    if (!v) continue;
     for (const key of ['model', 'variant']) {
-      if (v[key] == null || v[key] === '') { skipped.push(`${mode}.${key}`); continue; }
-      const r = writeJsonc(home, '${CONFIG}/opencode.jsonc', ['agent', mode, key], v[key], { entry: `lock.${mode}.${key}`, st });
-      if (r.changed) changed.push(`${mode}.${key}`);
+      if (v[key] == null || v[key] === '') { skipped.push(`${m}.${key}`); continue; }
+      const r = writeJsonc(home, '${CONFIG}/opencode.jsonc', ['agent', m, key], v[key], { entry: `lock.${m}.${key}`, st });
+      if (r.changed) changed.push(`${m}.${key}`);
     }
   }
-  return { stamp: st, changed, skipped };
+  return { stamp: st, mode: mode || 'all', changed, skipped };
 }
 
 export function pstackPreset(home, mode, modelA, modelB) {

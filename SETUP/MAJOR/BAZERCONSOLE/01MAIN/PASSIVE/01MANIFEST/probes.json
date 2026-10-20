@@ -37,7 +37,7 @@
       "kind": "permission-level",
       "params": { "agent": "buddha", "policy": "buddha-ladder" },
       "severity": "fail",
-      "why": "ค่าใน config อาจถูกกฎในไฟล์ชนะ — ตรวจจากผลลัพธ์จริง ไม่ใช่จากไฟล์ที่เขียน"
+      "why": "ค่าใน config อาจถูกกฎในไฟล์ชนะ — ตรวจจากผลลัพธ์จริง ไม่ใช่จากไฟล์ที่เขียน (params.expect ใช้ทับค่าในระดับก่อนตรวจ)"
     },
     {
       "id": "permission-arena-runner",
@@ -70,12 +70,36 @@
       "severity": "warn"
     },
     {
+      "id": "plannotator-version",
+      "title": "Plannotator CLI (เวอร์ชัน)",
+      "kind": "exe-version",
+      "params": { "target": "${LOCALAPP}/plannotator/plannotator.exe" },
+      "severity": "warn",
+      "why": "รู้ว่ามี CLI และเวอร์ชันอะไร — UI ของ CLI ฝังใน exe จึงไม่มีไฟล์ให้แพตช์; 'กลับโหมดไหน' เลือกในหน้า review UI"
+    },
+    {
+      "id": "plugin-registered",
+      "title": "ปลั๊กอิน bazer-flow ถูกลงทะเบียนใน config",
+      "kind": "jsonc-array-contains",
+      "params": { "target": "${CONFIG}/opencode.jsonc", "path": "plugins", "value": "./plugins/bazer-flow" },
+      "severity": "warn",
+      "why": "มีไฟล์ในเครื่องแต่ไม่ได้ลงทะเบียน = ปลั๊กอินไม่ทำงาน; ลงทะเบียนแต่ไม่มีไฟล์ = OpenCode หาปลั๊กอินไม่เจอ"
+    },
+    {
       "id": "plannotator-locate",
-      "title": "หาไฟล์ Plannotator เจอ",
+      "title": "ตรวจ Plannotator (CLI/ไฟล์)",
       "kind": "plannotator-locate",
       "params": {},
       "severity": "warn",
-      "why": "ถ้าไม่เจอ = ยังแพตช์ปุ่มอนุมัติไม่ได้ (ต้องให้ผู้ใช้เปิด OpenCode อย่างน้อยหนึ่งครั้ง)"
+      "why": "เจอ CLI = ใช้ gate ผ่าน PLANNOTATOR ได้; ไฟล์ปลั๊กอินมีไว้แพตช์ปุ่ม (ถ้ามี)"
+    },
+    {
+      "id": "plannotator-plugin",
+      "title": "ปลั๊กอิน Plannotator สำหรับ OpenCode (submit_plan)",
+      "kind": "cmd-contains",
+      "params": { "cmd": "opencode", "args": ["plugin", "list"], "text": "@plannotator/opencode" },
+      "severity": "warn",
+      "why": "bazer-flow ต้องมี submit_plan จากปลั๊กอินนี้; มีแค่ CLI ไม่พอ — ติดตั้งด้วย opencode plugin add @plannotator/opencode"
     }
   ]
 }

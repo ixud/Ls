@@ -1,6 +1,6 @@
 /**
  * models.mjs — รายชื่อโมเดลจริงจาก `opencode models`
- * อ่านผ่าน CLI (ไม่เดาจาก config) แล้วจัดกลุ่มตาม provider ให้ UI ทำ datalist
+ * อ่านผ่าน CLI (ไม่เดาจาก config) แล้วจัดกลุ่มตาม provider ให้ UI ทำ dropdown
  * CLI ใช้ไม่ได้ = คืน ok:false พร้อม error — ห้าม throw ใส่หน้าเว็บ
  */
 import { spawnSync } from 'node:child_process';
@@ -10,14 +10,17 @@ const PROVIDER_LABEL = {
   'opencode-go': 'OpenCode Go Harness',
 };
 const PROVIDER_ORDER = ['opencode', 'opencode-go'];
+// ผู้ใช้เลือกใช้เฉพาะสองค่ายนี้ — ที่เหลือตัดออกจากรายการ (ไม่ต้องเสียที่ใน dropdown)
+const ALLOWED_PROVIDERS = new Set(PROVIDER_ORDER);
 const CACHE_MS = 60_000;
 
 let cache = { at: 0, data: null };
 
-/** แปลงข้อความจาก `opencode models` → { models, providers } */
-export function parseModelsOutput(text) {
+/** แปลงข้อความจาก `opencode models` → { models, providers, excluded } */
+export function parseModelsOutput(text, { allowAll = false } = {}) {
   const seen = new Set();
   const models = [];
+  let excluded = 0;
   for (const raw of String(text ?? '').replace(/^\uFEFF/, '').split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
@@ -29,6 +32,7 @@ export function parseModelsOutput(text) {
     const id = `${provider}/${name}`;
     if (seen.has(id)) continue;
     seen.add(id);
+    if (!allowAll && !ALLOWED_PROVIDERS.has(provider)) { excluded++; continue; }
     models.push({ id, provider, name, label: `${PROVIDER_LABEL[provider] || provider} · ${name}` });
   }
 
@@ -61,6 +65,7 @@ export function listModels({ fresh = false, timeout = 60_000 } = {}) {
     maxBuffer: 64 * 1024 * 1024,
   });
   const { models, providers } = parseModelsOutput(r.stdout || '');
+  const all = parseModelsOutput(r.stdout || '', { allowAll: true });
   const stderr = (r.stderr || '').trim();
   const failed = !!r.error || r.status !== 0;
   const data = {
@@ -72,6 +77,8 @@ export function listModels({ fresh = false, timeout = 60_000 } = {}) {
       : models.length ? '' : 'opencode models ไม่คืนรายชื่อโมเดล',
     models,
     providers,
+    excluded: Math.max(0, all.models.length - models.length),
+    excludedLabel: 'ซ่อนโมเดลที่ไม่ใช่ OpenCode Harness / OpenCode Go Harness',
   };
   cache = { at: started, data };
   return data;

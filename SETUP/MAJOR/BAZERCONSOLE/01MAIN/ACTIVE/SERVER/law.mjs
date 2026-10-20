@@ -10,9 +10,20 @@ import { law } from './manifest.mjs';
 const norm = (p) => p.replace(/\\/g, '/');
 
 function globToRe(glob) {
-  let g = norm(glob).replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  g = g.replace(/\/\*\*/g, '(?:/.*)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
-  return new RegExp(`^${g}$`, 'i');
+  const g = norm(glob);
+  let out = '';
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === '*' && g[i + 1] === '*') {
+      i++;
+      // "dir/**" = dir เอง + ลูกทั้งหมด / "**" เดี่ยว ๆ = ทุกอย่าง
+      if (out.endsWith('/')) { out = out.slice(0, -1); out += '(?:/.*)?'; }
+      else out += '.*';
+    } else if (c === '*') out += '[^/]*';
+    else if (c === '?') out += '[^/]';
+    else out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}$`, 'i');
 }
 
 function walkAll(dir, out = [], depth = 0) {

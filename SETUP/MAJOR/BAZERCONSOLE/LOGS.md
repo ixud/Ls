@@ -1,3 +1,426 @@
+# 00.00.10 - Tuesday 20th October 2026 - บันได BAZER แยกจาก BUDDHA + ตรวจขั้นจาก config จริง
+
+> คำขอ: "บันไดเหมาเข่ง ฝากทำให้ BAZER MODE ด้วย กดแยกกับ BUDDHA · เช็คว่าระบบตรวจว่าอยู่ขั้นไหนใช้ได้จริงไหม"
+> และ: "ปุ่มเหมาเข่ง นอกจาก apply ที่ไฟล์ opencode ฝากทำให้มัน apply ที่ buddha.md กับ bazer.md ด้วย"
+
+## 1) บันได BAZER (แยกอิสระจาก BUDDHA)
+
+| ชิ้น | รายละเอียด |
+|---|---|
+| `policies.json` | เพิ่ม `bazer-ladder` (`mode: bazer`) ใช้ระดับชุดเดียวกับ BUDDHA ผ่าน `inherit` — `manifest.mjs` ขยาย levels ให้อัตโนมัติ (ไม่ก๊อปข้อมูลซ้ำ 5 ระดับ) |
+| `manifest.json` | เพิ่ม entry `cfg.bazer-default` (`agent.bazer.permission`, `onlyIfMissing`) + `agent.bazer` มี `ladderPolicy: bazer-ladder` / `ladderAgent: bazer` |
+| `apply.mjs` | `setPolicy(home, policyId, level)` · `undoPolicy(home, policyId)` · เก็บสถานะแยกใน `state.policies[id]` (และ mirror `state.policy` เฉพาะ buddha-ladder เพื่อความเข้ากันได้) |
+| `actions.mjs` | `policy-set` / `policy-undo` รับ `params.policy` (`buddha-ladder` / `bazer-ladder`) |
+| UI | แท็บ โหมด & สิทธิ์ แสดง **2 บันได** (BUDDHA / BAZER) คนละการ์ด คนละปุ่มย้อน · ขั้นที่ active มาจากค่าที่ตรวจได้ |
+
+## 2) "อยู่ขั้นไหน" — เดิมเชื่อ state, ตอนนี้เชื่อ config จริง
+
+**ปัญหา:** `curOf()` อ่านจาก `state.policies` (ค่าที่ Console เคยเขียน) — ถ้าผู้ใช้แก้ `opencode.jsonc` เอง (เช่นตั้งเหมาเข่งด้วยมือ) Console จะโชว์ผิด
+
+**แก้:** `detectPolicyLevel(home, policyId)` เทียบ `agent.<buddha|bazer>.permission` ใน config กับ permission ของแต่ละขั้น (subset match)
+- เจอตรงขั้นไหน → คืนขั้นนั้น + `source: 'config'`
+- ไม่ตรงขั้นไหนเลย → `custom` (UI บอก "กำหนดเอง")
+- ยังไม่มีค่าใน config → `null` (UI บอก "ยังไม่มีค่า — ใช้ขั้นเริ่มต้น" ไม่เดาว่าเป็น 1)
+- `/api/state` ส่ง `policyDetected` ให้ UI ใช้ · probe `permission-level` อ่าน `state.policies[policy]` (ไม่ใช่ `state.policy` ก้อนเดียว)
+
+## 3) apply ต้องเขียน `buddha.md` / `bazer.md` ตามขั้นที่ตั้งอยู่
+
+**บั๊กที่เจอระหว่างทำ:** `writeEntry` ฉีด permission ด้วย `defaultLevel` (ขั้น 1) เสมอ → กด "ติดตั้ง/อัปเดตทั้งหมด" ทีเดียว **ขั้นเหมาเข่งที่ตั้งไว้จะหาย**
+แก้: อ่าน `state.policies[policy].level` (fallback `state.policy` → defaultLevel) แล้วฉีดค่านั้น · `diffFor` ใช้ `detectPolicyLevel` เพื่อโชว์หลังเขียนให้ตรงความจริง
+
+## 4) หลักฐาน
+
+```
+selftest → 74 passed  (+2: apply ใช้ขั้นที่ตั้งอยู่ · detectPolicyLevel อ่านจาก config)
+apitest  → 80 passed  (+2: บันได BAZER เขียน agent.bazer · policyStateAll ตรง)
+uc.mjs   → 100 passed · 0 failed
+ghost audit → 28 actions / 28 handlers / ไม่มีปุ่มที่กดไม่ได้
+```
+
+## 5) ยังค้าง / ยังพิสูจน์ไม่ได้
+
+- **เปลี่ยนชื่อโฟลเดอร์** (`OPENCODE`→`OUTDATED`, `MAJOR`→`OPENCODE`) — ถูกปฏิเสธ `Access denied` เพราะมีโปรเซสถือโฟลเดอร์ (console เก่า PID 11092 รันอยู่) → รอปิดโปรเซสก่อน
+- **commit / push** — เครื่องนี้ไม่มี git repo และไม่มี remote
+- probe `permission-level` ต้องรันบน OpenCode จริง (sandbox เห็นค่าของเครื่องจริง)
+
+## ไฟล์ที่แตะ
+
+`PASSIVE/01MANIFEST/{policies,manifest}.json` · `SERVER/{manifest,plan,apply,probe,actions,index}.mjs` · `UI/app.js` · `SERVER/tools/{selftest,apitest}.mjs` · `LOGS.md`
+
+---
+
+# 00.00.09 - Tuesday 20th October 2026 - "ต้องอัปเดต 4 แต่ apply เขียน 0" (แก้ความเข้าใจผิดของตัวเลข)
+
+> อาการ: `plan` → ต้องติดตั้ง 0 · ต้องอัปเดต 4 · ปกติ 16 แล้ว `apply` → เขียน 0 · ข้าม 22
+
+## ต้นเหตุ (ตรวจจาก plan ของ home จริง)
+
+| entry | ทำไมไม่ถูกเขียน |
+|---|---|
+| `plugin.bazer-flow` | stale + writable **แต่ auto=false** → "ติดตั้งทั้งหมด" ข้าม (เจตนา: เปิด gate ต้องสั่งเอง) |
+| `cfg.retire-old-flow` | entry นี้ตั้งใจ **ถอด** bazer-flow แต่ผู้ใช้ลงทะเบียนกลับ → stale ตลอด (เจตนาตรงข้ามกัน) |
+| `tpl.agents-md` · `tpl.pstack-models` | stale แต่ **LOCKED** (owner=user) — ระบบไม่ทับไฟล์ผู้ใช้ (ถูกแล้ว) แต่ถูกนับรวมในคำว่า "ต้องอัปเดต" |
+
+`ข้าม 22` = ok 16 + design 2 + auto=false 2 + owner=user 2
+
+## แก้
+
+1. **ถอด manifest entry `cfg.retire-old-flow`** — `retireOldFlow(home, name)` สร้างค่าเอง (`./plugins/<name>` + `${CONFIG}/opencode.jsonc`) → ไม่มี entry ที่ "อยากถอด" ไปปนกับ entry ที่ "อยากติดตั้ง" อีก
+2. **`computePlan` แยก 3 ตัวเลข**: `actionable` (กดติดตั้งได้) · `manualOnly` (auto=false ต้องสั่งรายตัว) · `locked` (ของผู้ใช้) — summary ของ `plan` เปลี่ยนข้อความเป็น "ติดตั้งได้เลย N · ต้องสั่งเอง N · รอคุณตัดสินใจ N"
+3. **UI ภาพรวม**: pill "ติดตั้งได้ N" + "ต้องสั่งเอง N" · การ์ดใหม่ **"ต้องสั่งเอง N รายการ"** พร้อมปุ่ม `ติดตั้งรายตัว` ต่อ entry · hint ว่าไฟล์ locked กด "รีเซ็ต" เองได้
+
+## ผลหลังแก้ (home จริง)
+
+```
+summary: ok 16 · stale 3 · design 2 · actionable 0 · manualOnly 1 · locked 2
+[stale] tpl.agents-md      LOCKED (ของคุณเอง)
+[stale] tpl.pstack-models  LOCKED (ของคุณเอง)
+[stale] plugin.bazer-flow  manualOnly → มีปุ่มติดตั้งรายตัว
+```
+
+## หลักฐาน
+
+```
+selftest → 71 passed   apitest → 75 passed   uc.mjs → 100 passed · 0 failed
+```
+
+## หมายเหตุถึงผู้ใช้
+
+- ปลั๊กอิน **ยังไม่ถูกติดตั้ง** (ตั้งใจ) — `plugin.bazer-flow` เป็น auto=false เพราะการเปิด gate เปลี่ยนพฤติกรรมทั้งระบบ
+- ลำดับที่แนะนำ: ทำงานที่ค้างให้จบก่อน → ค่อยติดตั้งปลั๊กอิน → ปิด-เปิด OpenCode (หลังเปิด gate แล้ว SNACK ยังแก้ไฟล์ได้ · BAZER ต้อง 1 approval · BUDDHA 2)
+
+## ไฟล์ที่แตะ
+
+`PASSIVE/01MANIFEST/manifest.json` · `SERVER/plan.mjs` · `SERVER/apply.mjs` · `SERVER/actions.mjs` · `UI/app.js` · `LOGS.md`
+
+---
+
+# 00.00.08 - Tuesday 20th October 2026 - ถอดปุ่มผีของ Plannotator (ตัดของ ไม่ใช่เพิ่ม)
+
+> หลักการ: ปุ่มที่กดแล้วไม่มีผลจริง = ลบ ไม่ใช่ disable ค้างไว้
+
+## ตัดออก
+
+| ของที่ถอด | เหตุผล |
+|---|---|
+| action `plannotator-patch` (ทั้ง handler + `data-patch` ใน UI) | ไม่มีไฟล์ให้แพตช์ (UI ฝังใน exe) และตัวเลือกกลับโหมดเป็นค่าของหน้า review UI — เก็บไว้ = ปุ่มผีถาวร |
+| `SERVER/plannotator.mjs` (ทั้งไฟล์) | dead code หลังถอด action (ไม่มีใคร import แล้ว — มีเทสต์กันกลับไว้) |
+| manifest entry `patch.plannotator` | `design` ค้าง ถูกแทนที่ด้วย `plannotator-config` |
+| ปุ่ม `แพตช์ปุ่ม → BUDDHA/BAZER` (2 ปุ่ม) | ตามข้างบน |
+
+## เปลี่ยนชื่อให้ตรงความจริง
+
+- `"ตั้ง Plannotator ให้ส่งกลับโหมดที่เลือก"` → **"ตั้งค่า options ของปลั๊กอิน Plannotator"** (`cta: บันทึก options`)
+  เพราะมันเขียน `workflow`/`runtime`/`planningAgents` ไม่ได้สั่ง "กลับโหมด"
+
+## เพิ่มเฉพาะที่ทำงานได้จริง
+
+| ของใหม่ | ทำอะไร |
+|---|---|
+| probe `plannotator-version` (kind `exe-version`) | เรียก `${LOCALAPP}/plannotator/plannotator.exe --version` → รู้ว่ามี CLI + เวอร์ชัน (เดิมเดาไม่ได้) |
+| `open-target which=plannotator` + ปุ่ม `เปิดโฟลเดอร์ข้อมูล (plans/config)` | เปิด `${PLANNOTATOR}` ดู plans/drafts/feedback/config.json ได้จริง |
+
+## หลังตัด: Console แตะ Plannotator เหลือ 4 อย่าง
+
+`ตรวจ` (locate) · `ตั้ง options` (config) · `เปิดโฟลเดอร์ข้อมูล` · `ติดตั้ง/อัพเดตปลั๊กอิน` (+ `ดูรายการ`) — ทุกตัวมีผลจริง ไม่มีตัวไหน disabled ค้าง
+
+## หลักฐาน
+
+```
+selftest → 71 passed   (มีเคส: action patch ต้องไม่อยู่ + โมดูลต้องไม่อยู่ + UI ต้องไม่มี data-patch)
+apitest  → 75 passed   (เคสใหม่: plannotator-patch → "ไม่รู้จัก action")
+uc.mjs   → 100 passed · 0 failed
+```
+
+## ไฟล์ที่แตะ
+
+`PASSIVE/01MANIFEST/{actions,manifest,probes}.json` · `SERVER/actions.mjs` · `SERVER/probe.mjs` · `SERVER/plannotator.mjs` (ลบ) · `SERVER/tools/{selftest,apitest}.mjs` · `UI/app.js` · `LOGS.md`
+
+---
+
+# 00.00.07 - Tuesday 20th October 2026 - แก้ข้อสรุปผิดเรื่อง "กลับโหมด" ของ Plannotator
+
+> ผู้ใช้แย้งว่า "เคยตั้ง approve → buddha ได้ทั้งแบบมีตัวเลือกและแบบบังคับ" → ตรวจ README ปลั๊กอิน `@plannotator/opencode` แล้ว **ผู้ใช้ถูก ผมสรุปผิด**
+
+## ความจริง (จาก README ปลั๊กอิน 0.27.x)
+
+| เรื่อง | ข้อเท็จจริง |
+|---|---|
+| "อนุมัติแล้วกลับโหมดไหน" | เป็น **ค่าที่เลือกในหน้า review UI** → ปลั๊กอินเรียก `ctx.session.switchAgent` ให้ · host ที่ไม่รองรับ = แผนยังอนุมัติ แต่มี warning ใน log |
+| ตั้งจาก config | ได้แค่ `options.workflow` (`plan-agent` / `user-managed` / `all-agents` / `manual`) · `options.planningAgents[]` · `options.runtime` (`cli`) |
+| `~/.plannotator/config.json` | มีแค่ `reviewAnalysis` — **ไม่มีเรื่อง approve target** |
+| ไฟล์ให้แพตช์ | ไม่มี: UI ฝังใน `plannotator.exe` (สแกนแล้ว `switchTo` ที่เจอเป็นของ parse5) |
+
+→ ข้อสรุปเดิม "CLI-only จึงแพตช์ไม่ได้" ถูกแค่ครึ่งเดียว: **ไม่มีไฟล์ให้แพตช์จริง** แต่ **ไม่ได้แปลว่าตั้งไม่ได้** — ตั้งใน UI
+
+## แก้อะไร
+
+1. **`plannotator-config`** รับ `workflow` 4 ค่า + `runtime` (`cli`) + `planningAgents` และรองรับ package ที่มี `@version` ต่อท้าย (`startsWith`)
+2. **ข้อความ CLI-only** ทั้งใน action และ module: เปลี่ยนจาก "ใช้ CLI gate แทน" → "เลือกโหมดในหน้า review UI; Console ตั้งได้แค่ options; CLI gate ใช้ `--result-file`"
+3. **UI (แท็บ ระบบ)**: การ์ด Plannotator มี select `workflow` / `runtime` / `planningAgents` + ปุ่มเดียว `บันทึก options` · ปุ่มแพตช์ disabled พร้อมเหตุผลที่ถูกต้อง · เพิ่มคำอธิบายว่า `user-managed` เหมาะกับเรา (gate เป็นหน้าที่ `bazer-flow`)
+4. **`PLANNOTATOR.md`**: ระบุว่า switch เกิดที่ UI และ `bazer-flow` ล็อกเซสชันไว้แล้ว จึงไม่พังถ้า host ไม่รองรับ · ห้ามแพตช์ exe
+5. **เทสต์**: เพิ่มเคสสัญญา `plannotator-config` (4 workflow + runtime + `startsWith('@plannotator/opencode')`)
+
+## หลักฐาน
+
+```
+selftest → 71 passed
+apitest  → 76 passed
+uc.mjs   → 100 passed · 0 failed
+```
+
+## ยังพิสูจน์ไม่ได้
+
+- host ของ OpenCode 2 บนเครื่องนี้ expose `ctx.session.switchAgent` หรือไม่ (ต้องกดอนุมัติจริง 1 ครั้งแล้วดู Session เปลี่ยนโหมดหรือไม่ / ดู log warning)
+
+## ไฟล์ที่แตะ
+
+`SERVER/actions.mjs` · `SERVER/plannotator.mjs` · `UI/app.js` · `AGENT/02SUBAGENT/PLANNOTATOR.md` · `SERVER/tools/selftest.mjs` · `LOGS.md`
+
+---
+
+# 00.00.06 - Tuesday 20th October 2026 - Plannotator CLI-only: ปิดช่อง "ปุ่มกลับโหมด"
+
+> คำถามผู้ใช้: "ปุ่มแพตช์ใช้ไม่ได้ — เราใส่ format ผิดป่าว?" → ตรวจของจริงแล้วพบว่า **ไม่ใช่เรื่อง format**
+
+## ข้อเท็จจริงที่พิสูจน์
+
+| ตรวจ | ผล |
+|---|---|
+| สแกนไบนารี `plannotator.exe` (180,794,880 bytes) | `switchTo` 5 จุด — **ทั้งหมดเป็น parse5** (`_switchToTextParsing`, `switchToPlaintextParsing`) ไม่ใช่ปุ่มอนุมัติ |
+| `plannotator.html` / `approve-target` ในไบนารี | ไม่พบ |
+| `plannotator --help` | ไม่มี flag ให้ตั้ง "กลับโหมดไหน" · มี `--browser` · `annotate … [--gate] [--json] [--require-approval] [--result-file]` |
+| ไฟล์ใน `%LOCALAPPDATA%\plannotator` | มีไฟล์เดียว = exe → **ไม่มีไฟล์เว็บให้แพตช์** |
+
+**สรุป:** message "CLI-only" ที่ Console แสดงคือข้อเท็จจริง ไม่ใช่บั๊ก · การแพตช์ exe ไม่ควรทำ (ไม่มี token, 180 MB, อัปเดตทับ)
+
+## ทางแก้ที่ใช้ (ทำแล้ว)
+
+1. **`PLANNOTATOR.md`**: ยกระดับ `--result-file` เป็นสัญญาหลัก — ตารางสถานะ 4 ค่า (`approved` / `feedback` / `pending` / `error`) อ่านจากไฟล์ผล **ไม่ใช่จากปุ่ม** · ระบุ "ผู้เรียกเป็นเจ้าของการตัดสินใจว่ากลับโหมดไหน" · ห้ามแพตช์ exe
+2. **ข้อความใน Console**: `plannotator-patch` (CLI-only) และ `plannotatorPatch` note ชี้ `--require-approval --result-file <ไฟล์>` แทนข้อความลอย ๆ
+3. **UI (แท็บ ระบบ)**: เพิ่มบรรทัดอธิบายว่า "ไม่ต้องพึ่งปุ่ม — ผลกลับมาที่ผู้เรียก"
+4. **เทสต์กันถอย**: selftest 2 เคส — `PLANNOTATOR.md` ต้องมี `--require-approval` `--result-file` `--json` `pending` + บอกตรง ๆ ว่า CLI-only แพตช์ไม่ได้ · ข้อความ CLI-only ใน server ต้องชี้ `--result-file`
+
+## หลักฐาน
+
+```
+selftest → 70 passed   (68 → 70)
+apitest  → 76 passed
+uc.mjs   → 100 passed · 0 failed
+```
+
+## ยังพิสูจน์ไม่ได้
+
+- ผลจริงของ `--result-file` กับ Plannotator เวอร์ชันบนเครื่องนี้ (ต้องยื่นแผนจริง 1 ครั้ง — ต้องมีคนกดอนุมัติ)
+- `options.planningAgents` มีผลกับปลั๊กอิน OpenCode จริงหรือไม่ (ต้องเปิด OpenCode ใหม่แล้วอนุมัติ 1 ครั้ง)
+
+## ไฟล์ที่แตะ
+
+`AGENT/02SUBAGENT/PLANNOTATOR.md` · `SERVER/actions.mjs` · `SERVER/plannotator.mjs` · `UI/app.js` · `SERVER/tools/selftest.mjs` · `LOGS.md`
+
+---
+
+# 00.00.05 - Tuesday 20th October 2026 - Wave A/B · ปลั๊กอินติดตั้งได้ · Arena ยืดหยุ่น · บันไดลง agent file
+
+> คำขอของผู้ใช้ 6 ข้อ (ปลั๊กอินผ่าน Console · Arena multi-select+effort · รวม DEMAND→LOGS · ขุด Console เก่า · ซ่อมปุ่มแพตช์ · บันไดลง `agents/`)
+> **บริบทสำคัญ:** ผู้ใช้กด `retire old flow` → ปลั๊กอิน gate ถูกถอดจาก config และ `submit_plan` หายจาก toolset → งานนี้จึงยึดแผนที่เขียนในแชตเป็นสัญญา + สำรองไฟล์ก่อนแก้ที่ `%TEMP%\bazer\ultra\snapshot2\`
+
+## 1) ปลั๊กอิน gate: Console ติดตั้ง/อัปเดตได้เอง (ข้อ 1)
+
+| ชิ้น | รายละเอียด |
+|---|---|
+| ต้นทางใหม่ | `AGENT/04PLUGIN/bazer-flow/` (index.ts · logic.mjs · tui.tsx · package.json v2.1.0) |
+| `law.json` R1 | เพิ่ม except `AGENT/04PLUGIN/**` — เดิมกฎห้ามโค้ดใน `AGENT/**` ขัดกับ GUIDELINE ของโฟลเดอร์นั้นเอง |
+| `manifest: plugin.bazer-flow` | `status: ready` · `copy-tree` · `prune: true` · `auto: false` · `proof: plugin-registered` |
+| `apply.mjs` copy-tree | **prune**: ไฟล์ในปลายทางที่ไม่มีในต้นทาง → ย้ายเข้า `var/backups/<stamp>/pruned/` (ไม่ลบทิ้ง) + ลง history |
+| `jsonc.mjs` | `appendArrayItem()` คู่กับ `removeArrayItem()` (คงคอมเมนต์/BOM) |
+| probe ใหม่ | `plugin-registered` (kind `jsonc-array-contains`) — ตรวจ `plugins[]` ใน `opencode.jsonc` |
+| action ใหม่ | `plugin-register` (risk 3) |
+| `plan.mjs` copy-tree | นับไฟล์ "เกิน" ด้วย → entry ที่มีซากจะเป็น `stale` ไม่ใช่ `ok` |
+
+**detect 2 ชั้นตามที่ขอ:** (ก) config → `plugin-registered` (ข) ไฟล์จริง → `stateOf copy-tree` (missing/stale/ok + จำนวนไฟล์ตรง/ต่าง/เกิน)
+
+## 2) Arena: runner/judge กี่ตัวก็ได้ + ซ้ำได้ + effort รายตัว (ข้อ 2)
+
+- `settings.json` เพิ่ม/แก้ control `arena.runners` · `arena.judge` — เก็บ **`model#effort` ต่อที่นั่ง** (แหล่งความจริงเดียว)
+- รูปแบบไฟล์ `pstack-models.md`:
+  ```
+  arena runners: opencode-go/beam-free#low, opencode-go/deepseek-v4.1-flash#max
+  arena cross-judge pool: opencode-go/glm-5#high
+  ```
+  ลำดับ = ที่นั่ง · ซ้ำได้ · `ARENA.md` ส่งค่าลง `model` ของ subagent ตรง ๆ (`…#low`) → variant ติดตั้งแต่ตอนเรียก ไม่ต้องเดา
+- **migration:** ไฟล์ที่ยังมี `arena runner efforts:` / `arena judge efforts:` แยก → อ่านเป็น fallback และ **ถูกลบทิ้งเมื่อบันทึกครั้งถัดไป** (กันข้อมูลขัดกัน)
+- UI ใหม่: ชิป + panel ค้นหา (ไม่ใช้ `<select multiple>`) · `＋` เพิ่มตัวซ้ำ · กล่อง effort 7 กล่อง (default…max) เลือกที่นั่งเข้าแต่ละกล่อง
+- **2.1** `models.mjs` กรองเหลือ `opencode` + `opencode-go` และคืน `excluded` (Console บอกว่าซ่อนกี่ตัว)
+- **2.2** ช่องโมเดลอื่นเป็น dropdown เดี่ยว + ทางออก “กำหนดเอง…”
+
+## 3) บันไดเหมาเข่งเขียนลง `agents/*.md` ด้วย (ข้อ 6)
+
+- `SERVER/frontmatter.mjs` (ใหม่): `setFrontmatterPermission` · `getFrontmatterPermission` · `stripFrontmatterPermission` (YAML-lite · คง key อื่น/BOM/CRLF)
+- `setPolicy`/`undoPolicy` เขียน **2 ที่**: config `agent.<id>.permission` + frontmatter ของ `${CONFIG}/agents/<id>.md`
+- กัน churn: `stateOf` ของ 3 agent นี้เทียบเนื้อหา **โดยไม่นับบล็อก permission** · `apply` ฉีด permission ปัจจุบันตอนเขียน · `diff` แสดง after ที่ฉีดแล้ว
+- manifest เพิ่ม `ladderPolicy` + `ladderAgent` ใน `agent.buddha` · `subsub.arena-runner` · `subsub.arena-judge`
+- **ทำไมต้องทำ:** probe พิสูจน์แล้วว่า "ไฟล์ agent ชนะ config" → บันไดที่เขียนแต่ config ถูกไฟล์ทับในคีย์ที่ไฟล์ประกาศ
+
+## 4) แพตช์ปุ่ม Plannotator (ข้อ 5) — ต้นเหตุจริง
+
+**ตรวจแล้ว:** `%LOCALAPPDATA%\plannotator` มีไฟล์เดียว = `plannotator.exe` (180 MB) → **เครื่องนี้เป็น CLI-only ไม่มีไฟล์เว็บให้แพตช์**
+และ format ที่เราใช้เดิมแพตช์แค่ `switchTo` — ตัวเก่าแพตช์ **3 token**:
+
+| token | จาก | ไป |
+|---|---|---|
+| switchTo | `{switchTo:"build"\|"builder"}` | `switchTo:"<buddha\|bazer>"` |
+| label | `)?.name??e.switchTo}` | `)?.name??e.switchTo)}` |
+| localStorage key | `"plannotator-agent-switch"` ฯลฯ | `"plannotator-approve-target-v2"` |
+
+- ค้นเพิ่ม: `${CACHE}/npm/@plannotator` · `${CACHE}/packages/@plannotator` · `${LOCALAPP}/plannotator` (เพิ่ม env var `LOCALAPP` kind `env`)
+- `plannotatorLocate` คืน `kind: files | cli-only | none` และรายงานจำนวนไฟล์ที่สแกน
+- UI: ปุ่มแพตช์ **disabled + เหตุผลบนจอ** เมื่อไม่มีไฟล์ (ไม่ใช่กดแล้วเด้ง warn)
+- action ใหม่ `plannotator-config` (risk 2): เขียน `options.planningAgents=[target]` + `workflow` — **กลไกเดียวที่เหลือสำหรับ CLI-only**
+
+## 5) ฟีเจอร์จาก Console เก่า (ข้อ 4) — คัดแบบ "ไม่ผี"
+
+| ของเก่า | ของใหม่ | action | risk |
+|---|---|---|---|
+| `npx-list` / `update-check` | ดูปลั๊กอินที่ OpenCode เห็น | `plugin-list` | 1 |
+| `update-run` | อัพเดตแพ็กเกจผ่าน `opencode plugin add` | `plugin-update` | 3 |
+| `bk-restore` | คืน **ไฟล์เดียว** จาก backup (เดิมย้อนได้แต่ทั้งรอบ) | `backup-list` · `backup-restore` | 1 · 3 |
+| `pl-version` / `pl-toggle` | version + ตั้ง planningAgents | probe + `plannotator-config` | 2 |
+| `srv-health` | พอร์ต/PID/uptime/path | แสดงจาก `state` (ไม่มีปุ่มผี) | — |
+
+**ทิ้ง:** `mirror-run` (ห้าม mirror) · `bl-*` (ไม่มีของให้จัดการ) · `role-add/del` (PSTACK มาจาก settings.json) · `agent-save/del/install-agent` (manifest เป็นเจ้าของ) · `autostart/service` (ยังไม่มี probe พิสูจน์)
+
+**IA ใหม่ (ข้อ 4 + ปรัชญา progressive disclosure):** เพิ่มแท็บ **ระบบ** สำหรับของดูแลระบบ → ภาพรวมกลับมาโล่ง (งานประจำวัน 4-5 ปุ่ม) · ของขั้นสูงอยู่ใน `<details>` · multi-select ใช้ชิป + panel ค้นหา (NN/g: dropdown เหมาะ单选, listbox+checkbox เหมาะ multi)
+
+## 6) ปลั๊กอินรุ่นใหม่ (ซ่อม 6 จุด)
+
+| # | เดิม | ใหม่ |
+|---|---|---|
+| 1 | `snack` อยู่ใน PLANNING_AGENTS → SNACK เขียนไฟล์ไม่ได้เลย | ถอดออก — SNACK ไม่ถูก gate |
+| 2 | BUDDHA เขียนได้หลังอนุมัติ 1 ครั้ง | ต้อง 2 ครั้ง (GATE 1 = ARENA · GATE 2 = BUILD) |
+| 3 | BAZER ไม่ถูก gate | gate 1 ครั้ง |
+| 4 | ข้อความ `# Plan Feedback` รีเซ็ต approval | `isHandoffText` รู้จัก feedback → approval ไม่หาย |
+| 5 | Plan แก้ `*.md` ได้ก่อนอนุมัติ | ไม่มีข้อยกเว้น |
+| 6 | reminder อ้าง `BAZERs-EXTENSION-Poteto` (mirror ที่ถูกลบ) | อ้าง subagent `poteto` |
+| + | `event.agent` ว่าง = ผ่านหมด (fail-open) | fallback ไปอ่าน phase file · ARENA/POTETO เขียนได้แต่ `%TEMP%` |
+
+## 7) เอกสาร
+
+- `DOCS/REQUIREMENTS.md` (ใหม่): DEMAND ⊕ LOGS — ข้อขัดแย้ง 8 ข้อ (LOGS ชนะ) · DEMAND-only 13 ข้อ (สถานะ) · ข้อกำหนดใหม่ 6 ข้อ (N1–N6) · ยังไม่ทำ 4 ข้อ
+- `DOCS/DEMAND.md`: ชี้มาที่ REQUIREMENTS (ไม่ลบประวัติ)
+- `DOCS/GUIDE.md`: แท็บ ระบบ + Arena แบบยืดหยุ่น
+- `AGENT/04PLUGIN/GUIDELINE.md`: เขียนใหม่ (กติกาที่ห้ามถอยกลับ +วิธีติดตั้งผ่าน Console)
+- `schema.json`: เพิ่ม `ladderPolicy` · `ladderAgent` · `policyOverrides` · `prune`
+
+## 8) หลักฐาน
+
+```
+node SERVER\tools\selftest.mjs → 68 passed
+node SERVER\tools\apitest.mjs  → 73 passed
+node %TEMP%\bazer\ultra\uc.mjs → 100 passed · 0 failed
+```
+เทสต์ใหม่: appendArrayItem · frontmatter (แทน/คง key/BOM/CRLF) · strip permission · stateOf ไม่ขึ้น stale จากบันได · **gate logic 9 ข้อ** (SNACK/BAZER/BUDDHA 2 ใบ/ARENA temp-only/plan ห้าม md/feedback ไม่รีเซ็ต) · law R1 ผ่าน · apitest: plugin-register(ซ้ำ) · ติดตั้งปลั๊กอิน · prune · backup-list/restore · plannotator-config · บันไดลง frontmatter
+
+## 9) ยังพิสูจน์ไม่ได้
+
+| เรื่อง | เหตุผล |
+|---|---|
+| ปลั๊กอินรุ่นใหม่ทำงานจริงใน OpenCode | ต้องติดตั้ง + เปิด OpenCode ใหม่ (ผมไม่แตะ `~/.config` ของคุณ) |
+| `planningAgents` มีผลจริง | ขึ้นกับเวอร์ชันปลั๊กอิน Plannotator — UI บอกให้กดอนุมัติ 1 ครั้งเพื่อยืนยัน |
+| UI ในเบราว์เซอร์จริง | ตรวจด้วย syntax + API + โครง DOM เท่านั้น |
+| `plugin-update` | ไม่รัน `opencode plugin add` บนเครื่องคุณ (ต้องมีเน็ต/สิทธิ์) |
+| Arena effort มีผลกับผลรันจริง | เก็บและอ่านครบแล้ว (`ARENA.md` เฟส B/C อ่าน 4 บรรทัดจาก `pstack-models.md` + จำนวนที่นั่ง) — แต่ยังไม่ได้รัน Arena จริงหนึ่งรอบเพื่อยืนยันว่า runner ได้ variant ตามที่ตั้ง |
+
+## 10) ไฟล์ที่แตะ
+
+**ใหม่:** `SERVER/frontmatter.mjs` · `AGENT/04PLUGIN/bazer-flow/{index.ts,logic.mjs,tui.tsx,package.json}` · `DOCS/REQUIREMENTS.md`
+**แก้:** `SERVER/{jsonc,models,env,apply,plan,probe,plannotator,actions,index}.mjs` · `UI/{app.js,index.html,style.css}` · `MANIFEST/{manifest,actions,settings,probes,law,env,schema}.json` · `SERVER/tools/{selftest,apitest}.mjs` · `DOCS/{GUIDE,DEMAND}.md` · `AGENT/04PLUGIN/GUIDELINE.md` · `CHANGELOG.md` · `LOGS.md`
+
+---
+
+# 00.00.04 - Tuesday 20th October 2026 - ULTRA 3 LOOPS · UC Registry · 14 บั๊กจริง
+
+> คำสั่งของผู้ใช้: "WHOLE ULTRA BUDDHA — LOOP 1 ลิสต์ UC ให้มากที่สุด · LOOP 2 เช็คว่าอันไหนพัง · LOOP 3 ซ่อมจริง" ทำยาวจบในทีเดียว
+> **หมายเหตุกระบวนการ (ซื่อตรง):** LOOP 1 กับ LOOP 2 ใช้ phase P0–P3 ร่วมกัน (ไม่มีการเขียนไฟล์ในสองรอบนั้น) — LOOP 3 เดิน P4→P6 เต็มรอบ การยื่นแผนใหม่ทุกครั้งถูกจำกัดโดยปลั๊กอิน `bazer-flow` ที่นับ approval "หลังข้อความผู้ใช้ล่าสุด" (ถ้าใส่ note มาด้วย ตัวนับรีเซ็ต)
+
+## ผลรวม
+
+| LOOP | ได้อะไร | หลักฐาน |
+|---|---|---|
+| 1 | ทะเบียน **120 UC** (12 กลุ่ม) จาก Arena 3 candidate — base = contract-first + graft journey/failure → `DOCS/USECASES.md` | Arena จริง (subagent `arena`) · ไม่มี cross-judge เพราะ subagent depth limit 1 (บันทึกไว้) |
+| 2 | ตรวจทุกข้อด้วย harness ภายนอก → **75 ผ่าน · 22 ตก** → คัด noise = **14 บั๊กจริง** → `DOCS/USECASE-STATUS.md` | `%TEMP%\bazer\ultra\uc.mjs` (97 ข้อ ยิงเซิร์ฟเวอร์จริง + sandbox home) |
+| 3 | ซ่อม 14 บั๊ก + เพิ่มเทสต์กันกลับ → **uc 100/100 · selftest 62 · apitest 62** | คำสั่งด้านล่าง |
+
+## ตัวเลขจริงของสัญญา (แก้ตัวเลขรุ่นก่อน)
+
+| ของ | ค่า |
+|---|---|
+| actions | **22** |
+| manifest entries | **23** |
+| probes | **11** |
+| settings controls | **16** (+15 PSTACK role + budget) |
+| law rules | 4 |
+
+> `00.00.03` เขียนว่า entries 24 / probes 13 — ของจริงคือ 23 / 11 (LOGS §22 เขียน 21 entries / 19 actions / 8 probes ตั้งแต่ `00.00.01`)
+
+## 14 บั๊กที่เจอและซ่อมแล้ว
+
+| # | อาการ (สิ่งที่ผู้ใช้เจอ) | ต้นเหตุ | ไฟล์ |
+|---|---|---|---|
+| B1 | กด **"คืน Plan & Build"** แล้วไม่มีอะไรเกิดขึ้น แต่รายงานว่าสำเร็จ | `mergeInto()` เรียกตัวเองแล้วทิ้งค่าที่คืน → merge ลึกชั้น 2 หายเงียบ | `SERVER/jsonc.mjs` |
+| B2 | เปิด Console ตัวที่สองตอนพอร์ตชน → พิมพ์ URL 2 บรรทัด + เบราว์เซอร์ไปที่ **instance อีกตัว (token/home ผิด)** | ผูก `listening` ใหม่ทุก retry + `link` ใช้พอร์ตที่ขอ | `SERVER/index.mjs` |
+| B3 | เปิด lock โมเดลแล้วมีคนเปลี่ยนค่า → **ไม่มีแบนเนอร์ drift** · `lock-restore` ตอบ "ตรงอยู่แล้ว" | `saveSettings()` ถ่าย snapshot ทุกครั้งที่บันทึก → snapshot = ค่าใหม่ | `SERVER/apply.mjs` |
+| B4 | config ที่มี **BOM** ถูกเขียนกลับแบบไม่มี BOM | `readText()` ตัด BOM ก่อนเขียน | `SERVER/apply.mjs` |
+| B5 | `ตรวจทุกอย่าง` เรียก probe ทั้งชุดซ้ำ 2 รอบ | `verifyProofs()` เรียก `runProbes()` ใหม่ทุก entry | `SERVER/probe.mjs`, `actions.mjs` |
+| B6 | ติดตั้งเครื่องมือ: **Node 14 ก็ผ่าน** (ไม่ตรวจ `min`) และ optional ถูกนับเป็น "ยังขาด" | ใช้แค่ exit code · ไม่แยก required/optional | `SERVER/actions.mjs`, `install.json` |
+| B7 | `เปิดโฟลเดอร์ปลายทาง` รายงานสำเร็จทั้งที่โฟลเดอร์ไม่มี | ไม่เช็ค existence | `SERVER/actions.mjs` |
+| B8 | ปุ่มที่ประกาศไว้ **กดไม่ได้บนจอ**: `history-list` · `open-target` · `plannotator-patch` | ไม่มี element ที่เรียก | `UI/app.js` |
+| B9 | แถว `auto:false` มีปุ่ม **"ติดตั้ง"** → กดแล้วถอดปลั๊กอินเก่าออกจาก config โดยไม่มีการเตือนระดับ 3 | `entryRow` ไม่ดู `auto` | `UI/app.js` |
+| B10 | พิมพ์ค่าค้างในช่อง แล้วมี action อื่นทำงาน → **ค่าที่พิมพ์หายทั้งหน้า** | `load()` ล้าง `DRAFTS = {}` | `UI/app.js` |
+| B11 | **ADVISOR บอกให้สลับไป BUDDHA**, บอก "สลับไป Advisor" (ตัวเอง), และสั่ง "ไม่ต้องแนะนำให้สลับ" | เนื้อหาไฟล์โหมด | `AGENT/01PRIMARY/ADVISOR.md` |
+| B12 | Console รายงาน **manifest มีปัญหา** (validate แดง) | `plugin.bazer-fire` status=design ไม่มี `why` | `MANIFEST/manifest.json` |
+| B13 | `lock-restore` รับ snapshot ของ home/instance อื่น | state ไม่ผูกกับ home | `SERVER/apply.mjs` |
+| B14 | ตัวเลขสัญญาในเอกสารไม่ตรงของจริง | ประวัติรุ่นก่อน | LOGS/CHANGELOG (รอบนี้) |
+
+## สิ่งที่เปลี่ยนใน UI (ผู้ใช้เห็นได้)
+
+- **แถบปุ่มหลัก** เพิ่ม `ติดตั้งเครื่องมือที่ขาด` (ข้อกำหนด 4.3 — เดิมเข้าถึงได้ทาง Ctrl+K เท่านั้น)
+- **แท็บไฟล์ & สกิล** เพิ่ม 4 ปุ่ม `เปิดโฟลเดอร์` (ตั้งค่า OpenCode / สกิล / MAJOR / backups)
+- **แท็บประวัติ** เพิ่ม `อ่านประวัติล่าสุด (200)`
+- **การ์ด Plannotator** เพิ่มปุ่มแพตช์ → BUDDHA / BAZER (risk 3 · ถ้าไม่พบไฟล์จะเตือนและไม่เขียนอะไร)
+- **หัวข้อกฎ 4 ข้อ** เพิ่มปุ่ม `ตรวจกฎ 4 ข้ออีกครั้ง`
+- แถว entry ที่ `auto:false` แสดง "สั่งเอง" แทนปุ่มติดตั้ง
+- ค่าที่พิมพ์ค้างไม่หายเมื่อมี action อื่นทำงาน (รวม textarea ของ "การตั้งค่าฉบับเต็ม")
+
+## หลักฐาน
+
+```
+node BAZERCONSOLE\01MAIN\ACTIVE\SERVER\tools\selftest.mjs  → 62 passed
+node BAZERCONSOLE\01MAIN\ACTIVE\SERVER\tools\apitest.mjs   → 62 passed
+node %TEMP%\bazer\ultra\uc.mjs                             → 100 passed · 0 failed
+```
+รายละเอียดเคสใหม่:
+- selftest +11: merge ลึก 2 ชั้น (2) · BOM คงอยู่/ไม่เติมเอง (2) · verifyProofs ใช้ผลที่ส่งมา (1) · install min ผ่าน probe (1) · validate สะอาด (1) · ADVISOR ชี้ SNACK (1) · UI ปุ่มครบ/auto guard (1) · drafts (1) · listening ครั้งเดียว (1)
+- apitest +10: builtin-toggle off/on (2) · lock→drift→restore (2) · snapshot ข้าม home (1) · need/advisory (1) · install min (1) · open-target ok/warn (2) · พอร์ตชน (1)
+
+## ยังพิสูจน์ไม่ได้ (บันทึกตรง)
+
+| เรื่อง | เหตุผล |
+|---|---|
+| `probe` 4 ตัว (`agents-present` `agents-hidden` `permission-level` ×2) | อ่านสถานะจาก OpenCode จริง ไม่ผูก `--home` → sandbox เห็นค่าของเครื่องจริง (Console ตั้งใจเป็นตัวเดียวต่อเครื่อง) |
+| `install-tools` โหมดติดตั้งจริง | ไม่รัน (กลัวแตะเครื่องผู้ใช้) — ตรวจได้แค่ dry-run + โครง `need`/`advisory` |
+| UI ในเบราว์เซอร์จริง | ตรวจด้วยการอ่าน DOM/สตริง + API เท่านั้น ยังไม่ได้กดด้วยตา |
+| cross-judge ของ Arena | `experimental.subagent_depth` = 1 → `arena-judge` spawn จากใน Arena ไม่ได้ (ผู้ให้คะแนน = ผู้เขียน; บันทึก bias ไว้) |
+| `var/` ไม่แยกตาม home | token/backups/history/quarantine ยังเป็นของ Console ตัวเดียว (ข้อจำกัดที่ยอมรับ) |
+
+## ไฟล์ที่แก้ในรอบนี้
+
+`SERVER/jsonc.mjs` · `SERVER/index.mjs` · `SERVER/apply.mjs` · `SERVER/probe.mjs` · `SERVER/actions.mjs` · `SERVER/tools/selftest.mjs` · `SERVER/tools/apitest.mjs` · `UI/app.js` · `PASSIVE/02INSTALLER/install.json` · `PASSIVE/01MANIFEST/manifest.json` · `PASSIVE/01MANIFEST/CHANGELOG.md` · `AGENT/01PRIMARY/ADVISOR.md` · `DOCS/USECASES.md` (ใหม่) · `DOCS/USECASE-STATUS.md` (ใหม่) · `BAZERCONSOLE/LOGS.md`
+
+> สำเนาก่อนแก้: `%TEMP%\bazer\ultra\snapshot\` (ชื่อไฟล์ใช้ `__` แทน `\`)
+
+---
+
 # 00.00.03 - Tuesday 20th October 2026 - Missing Features · 5-Round Bug Scan
 
 > ต่อจาก `00.00.02` — ทบทวนแชทว่ามีอะไร "ตัดสินใจแล้วแต่ยังไม่มี" → เติมให้ครบ แล้วสแกน 5 รอบ

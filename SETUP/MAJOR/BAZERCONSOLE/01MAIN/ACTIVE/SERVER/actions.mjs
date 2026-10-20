@@ -14,8 +14,9 @@ import {
   applyEntries, setPolicy, undoPolicy, setBuiltin, retireOldFlow,
   saveSettings, pstackPreset, readHistory, rollback, readState,
   cleanupPlan, cleanupOld, resetTemplate, writeFullSettings, restoreLockedModels,
+  listBackups, restoreBackupFile, writeTextWithBackup, snapshotModels,
 } from './apply.mjs';
-import { plannotatorPatch } from './plannotator.mjs';
+import { appendArrayItem, getAtPath, setAtPath, parseJsonc } from './jsonc.mjs';
 const ok = (summary, extra = {}) => ({ ok: true, summary, ...extra });
 const bad = (summary, extra = {}) => ({ ok: false, summary, ...extra });
 const warn = (summary, extra = {}) => ({ ok: true, warn: true, level: 'warn', summary, ...extra });
@@ -43,14 +44,17 @@ const HANDLERS = {
   'plan': (ctx) => {
     const lawR = checkLaw({ handlerIds: Object.keys(HANDLERS) });
     const p = computePlan(ctx.home, { lawResult: lawR });
-    return ok(`ต้องติดตั้ง ${p.summary.missing} · ต้องอัพเดต ${p.summary.stale} · ปกติ ${p.summary.ok}`, { plan: p });
+    return ok(
+      `ติดตั้งได้เลย ${p.summary.actionable} · ต้องสั่งเอง ${p.summary.manualOnly} · รอคุณตัดสินใจ ${p.summary.locked} · ปกติ ${p.summary.ok}`,
+      { plan: p },
+    );
   },
 
   'self-check': (ctx) => {
     const lawR = checkLaw({ handlerIds: Object.keys(HANDLERS) });
     const p = computePlan(ctx.home, { lawResult: lawR });
     const pr = runProbes(ctx.home);
-    const proofs = verifyProofs(ctx.home);
+    const proofs = verifyProofs(ctx.home, pr);
     const pending = p.summary.missing + p.summary.stale;
     const failIds = pr.results.filter((r) => !r.ok && r.severity === 'fail').map((r) => r.id);
     const onlyPre = failIds.length > 0 && failIds.every((id) => PREINSTALL_PROBES.has(id));
@@ -90,14 +94,18 @@ const HANDLERS = {
 
   'policy-set': (ctx, params) => {
     if (!params?.level) return bad('ต้องระบุระดับ');
-    const r = setPolicy(ctx.home, 'buddha-ladder', params.level);
-    const lv = policies['buddha-ladder'].levels.find((l) => String(l.id) === String(params.level));
-    return ok(`BUDDHA = ${lv.id} ${lv.name} · เขียน ${r.targets} agent (BUDDHA + ARENA) · มีผลกับ session ใหม่`, { policy: r, level: lv });
+    const policyId = params?.policy === 'bazer-ladder' ? 'bazer-ladder' : 'buddha-ladder';
+    const r = setPolicy(ctx.home, policyId, params.level);
+    const lv = policies[policyId].levels.find((l) => String(l.id) === String(params.level));
+    const who = policyId === 'bazer-ladder' ? 'BAZER' : 'BUDDHA';
+    return ok(`${who} = ${lv.id} ${lv.name} · เขียน ${r.targets} ที่ (config + agent file) · มีผลกับ session ใหม่`, { policy: r, level: lv, policyId });
   },
 
-  'policy-undo': (ctx) => {
-    const r = undoPolicy(ctx.home);
-    return ok(`ย้อนเป็นระดับ ${r.level} ${r.name} · เขียน ${r.targets} agent`, { policy: r });
+  'policy-undo': (ctx, params) => {
+    const policyId = params?.policy === 'bazer-ladder' ? 'bazer-ladder' : 'buddha-ladder';
+    const r = undoPolicy(ctx.home, policyId);
+    const who = policyId === 'bazer-ladder' ? 'BAZER' : 'BUDDHA';
+    return ok(`${who} ย้อนเป็นระดับ ${r.level} ${r.name} · เขียน ${r.targets} ที่`, { policy: r, policyId });
   },
 
   'builtin-toggle': (ctx, params) => {
@@ -143,20 +151,20 @@ const HANDLERS = {
     return pr?.ok ? ok(pr.detail, { locate: pr.extra }) : warn(pr?.detail || 'ไม่พบไฟล์ Plannotator', { locate: pr?.extra });
   },
 
-  'plannotator-patch': (ctx, params) => {
-    const target = params?.target === 'bazer' ? 'bazer' : 'buddha';
-    const r = plannotatorPatch(ctx.home, target, { apply: !!params?.apply });
-    if (!r.apply) {
-      return ok(r.files.length ? `dry-run: ${r.todo} ไฟล์ต้องแพตช์ (พบ ${r.files.length} ไฟล์)` : 'ไม่พบไฟล์ Plannotator ที่มี switchTo', { patch: r });
-    }
-    if (r.errors?.length) return bad(`แพตช์ไม่สำเร็จ ${r.errors.length} ไฟล์`, { patch: r });
-    if (!r.changed.length) return warn(r.note || 'ไม่มีไฟล์ที่ต้องแพตช์', { patch: r });
-    return ok(`แพตช์ ${r.changed.length} ไฟล์ → ${target} (เหลือ ${r.remaining})`, { patch: r });
+  'lock-snapshot': (ctx, params) => {
+    const mode = String(params?.mode || '');
+    const done = snapshotModels(ctx.home, mode ? [mode] : undefined);
+    if (!done.length) return warn('ยังไม่มีไฟล์ config ให้ถ่าย snapshot — ติดตั้งชุด MAJOR ก่อน');
+    return ok(`ถ่าย snapshot ${done.length} โหมด: ${done.join(', ')}`, { modes: done });
   },
 
-  'lock-restore': (ctx) => {
-    const r = restoreLockedModels(ctx.home);
-    return r.changed.length ? ok(`คืนค่า ${r.changed.length} ช่องจาก snapshot`, { run: r }) : ok('ค่าตรงกับ snapshot อยู่แล้ว', { run: r });
+  'lock-restore': (ctx, params) => {
+    const mode = params?.mode ? String(params.mode) : undefined;
+    const r = restoreLockedModels(ctx.home, mode);
+    const label = mode ? `โหมด ${mode}` : 'ทุกโหมด';
+    return r.changed.length
+      ? ok(`คืนค่า ${label}: ${r.changed.length} ช่อง (${r.changed.join(', ')})`, { run: r })
+      : ok(`${label} ตรงกับ snapshot อยู่แล้ว`, { run: r });
   },
 
   'cleanup-plan': (ctx) => {
@@ -180,37 +188,144 @@ const HANDLERS = {
 
   'install-tools': (ctx, params) => {
     const steps = JSON.parse(fs.readFileSync(path.join(PASSIVE_DIR, '02INSTALLER', 'install.json'), 'utf8')).steps;
-    const need = [];
+    // รัน probe ครั้งเดียวแล้วใช้ซ้ำ (ไม่ spawn opencode ต่อ step และตรวจ version จริงผ่าน probe)
+    const pr = runProbes(ctx.home);
+    const missing = [];
     for (const s of steps) {
-      if (s.check?.cmd) {
+      const probeId = s.check?.probe || s.check?.kind;
+      let absent = false;
+      if (probeId) {
+        const r = pr.results.find((x) => x.id === probeId);
+        absent = !r?.ok;
+      } else if (s.check?.cmd) {
         const r = spawnSync(s.check.cmd, { shell: true, encoding: 'utf8', windowsHide: true });
-        if (r.status !== 0) need.push({ id: s.id, label: s.label, cmd: s.install, why: s.why });
-      } else if (s.check?.kind) {
-        const probe = runProbes(ctx.home).results.find((x) => x.id === s.check.kind);
-        if (!probe?.ok) need.push({ id: s.id, label: s.label, cmd: s.install, why: s.why });
+        absent = r.status !== 0;
+      } else {
+        absent = true;
       }
+      if (absent) missing.push({ id: s.id, label: s.label, cmd: s.install, why: s.why, required: s.required !== false });
     }
-    if (!need.length) return ok('เครื่องมือครบแล้ว');
+    const need = missing.filter((m) => m.required);
+    const advisory = missing.filter((m) => !m.required);
+    if (!need.length) {
+      return ok(advisory.length
+        ? `เครื่องมือหลักครบแล้ว (ยังไม่มี: ${advisory.map((a) => a.label).join(', ')} — ไม่บังคับ)`
+        : 'เครื่องมือครบแล้ว', { need, advisory, applied: false });
+    }
     const withCmd = need.filter((n) => n.cmd);
-    if (!params?.apply) return ok('ยังขาด: ' + need.map((n) => n.label).join(', '), { need, applied: false });
-    if (!withCmd.length) return bad('ไม่มีคำสั่งติดตั้งที่ยืนยันได้สำหรับ: ' + need.map((n) => n.label).join(', '), { need });
+    if (!params?.apply) return ok('ยังขาด: ' + need.map((n) => n.label).join(', '), { need, advisory, applied: false });
+    if (!withCmd.length) return bad('ไม่มีคำสั่งติดตั้งที่ยืนยันได้สำหรับ: ' + need.map((n) => n.label).join(', '), { need, advisory });
     const out = [];
     for (const n of withCmd) {
       const r = spawnSync(n.cmd, { shell: true, encoding: 'utf8', timeout: 600000, windowsHide: true });
       out.push({ tool: n.id, code: r.status, out: (r.stdout || '').slice(-800), err: (r.stderr || '').slice(-800) });
     }
-    return ok('สั่งติดตั้งแล้ว (ตรวจซ้ำด้วยปุ่ม ตรวจของจริง)', { results: out, need });
+    return ok('สั่งติดตั้งแล้ว (ตรวจซ้ำด้วยปุ่ม ตรวจของจริง)', { results: out, need, advisory });
   },
 
   'open-target': (ctx, params) => {
     const { resolve } = makeResolver(ctx.home);
     const map = {
       config: '${CONFIG}', skills: '${SKILLS}', major: '${MAJOR}', backups: '${VAR}/backups',
+      plugins: '${CONFIG}/plugins', plannotator: '${PLANNOTATOR}',
     };
     const target = resolve(map[params?.which] || '${CONFIG}');
+    if (!fs.existsSync(target)) {
+      return warn(`ยังไม่มีโฟลเดอร์นี้: ${target}`, { target, opened: false });
+    }
     const cmd = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-    spawn(cmd, [target], { detached: true, stdio: 'ignore' }).unref();
-    return ok(`เปิด ${target}`);
+    try { spawn(cmd, [target], { detached: true, stdio: 'ignore' }).unref(); }
+    catch (e) { return bad(`เปิดโฟลเดอร์ไม่ได้: ${e.message}`, { target, opened: false }); }
+    return ok(`เปิด ${target}`, { target, opened: true });
+  },
+
+  /* ---------- ปลั๊กอิน gate: ติดตั้ง/อัปเดต/ลงทะเบียน ---------- */
+
+  'plugin-register': (ctx, params) => {
+    // เพิ่ม "./plugins/<name>" ใน plugins[] ของ opencode.jsonc (ไม่แตะรายการอื่น/คอมเมนต์)
+    const name = params?.name ? String(params.name) : 'bazer-flow';
+    const value = `./plugins/${name.replace(/[\\/]+/g, '')}`;
+    const { resolve } = makeResolver(ctx.home);
+    const target = resolve('${CONFIG}/opencode.jsonc');
+    if (!fs.existsSync(target)) return bad('ยังไม่มี opencode.jsonc — ติดตั้งชุด MAJOR ก่อน');
+    const cur = fs.readFileSync(target, 'utf8');
+    const arr = getAtPath(cur, ['plugins']) || [];
+    if (arr.some((v) => (typeof v === 'object' ? String(v?.package || '') === value : v === value))) {
+      return ok(`${value} ลงทะเบียนอยู่แล้ว`, { changed: false, value });
+    }
+    const next = appendArrayItem(cur, ['plugins'], value);
+    const r = writeTextWithBackup(ctx.home, '${CONFIG}/opencode.jsonc', next, { entry: 'plugin.register' });
+    return r.changed
+      ? ok(`ลงทะเบียน ${value} แล้ว — เปิด OpenCode ใหม่ให้มีผล`, { value })
+      : warn(`ไม่ได้เขียนอะไร (ตรวจไฟล์เอง): ${value}`, { value });
+  },
+
+  'plugin-list': (ctx) => {
+    const r = spawnSync('opencode plugin list', { shell: true, encoding: 'utf8', timeout: 60000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    const text = `${r.stdout || ''}\n${r.stderr || ''}`.trim();
+    if (r.status !== 0 && !text) return bad(`เรียก opencode plugin list ไม่ได้ (exit ${r.status})`);
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^[-=]+$/.test(l));
+    return ok(`ปลั๊กอินที่ OpenCode เห็น: ${lines.length} บรรทัด`, { list: lines, raw: text.slice(0, 4000) });
+  },
+
+  'plugin-update': (ctx, params) => {
+    const pkg = params?.package ? String(params.package) : '@plannotator/opencode';
+    if (!/^[@a-z0-9/._-]+$/i.test(pkg)) return bad('ชื่อแพ็กเกจไม่ถูกต้อง');
+    if (!params?.apply) return ok(`dry-run: จะรัน opencode plugin add ${pkg}`, { package: pkg, applied: false });
+    const r = spawnSync(`opencode plugin add ${pkg}`, { shell: true, encoding: 'utf8', timeout: 600000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    const out = ((r.stdout || '') + (r.stderr || '')).slice(-1200);
+    return r.status === 0
+      ? ok(`อัพเดต ${pkg} แล้ว`, { package: pkg, out })
+      : bad(`อัพเดต ${pkg} ไม่สำเร็จ (exit ${r.status})`, { package: pkg, out });
+  },
+
+  /* ---------- Plannotator: ตั้งค่ากลไกที่ใช้ได้จริงกับรุ่น CLI ---------- */
+
+  'plannotator-config': (ctx, params) => {
+    const target = params?.target === 'bazer' ? 'bazer' : 'buddha';
+    const WF = ['plan-agent', 'user-managed', 'all-agents', 'manual'];
+    const workflow = WF.includes(params?.workflow) ? params.workflow : 'plan-agent';
+    const runtime = params?.runtime === 'cli' ? 'cli' : null;
+    const { resolve } = makeResolver(ctx.home);
+    const file = resolve('${CONFIG}/opencode.jsonc');
+    if (!fs.existsSync(file)) return bad('ยังไม่มี opencode.jsonc — ติดตั้งชุด MAJOR ก่อน');
+    const cur = fs.readFileSync(file, 'utf8');
+    const arr = getAtPath(cur, ['plugins']) || [];
+    const idx = arr.findIndex((v) => typeof v === 'object' && String(v?.package || '').startsWith('@plannotator/opencode'));
+    if (idx < 0) return bad('ยังไม่มีปลั๊กอิน @plannotator/opencode ใน config — กด "ติดตั้งเครื่องมือที่ขาด" ก่อน');
+    const next = arr.map((v, i) => (i === idx
+      ? (() => {
+        const options = { ...(v.options || {}), workflow, planningAgents: [target] };
+        if (runtime) options.runtime = runtime; else delete options.runtime;
+        return { ...v, options };
+      })()
+      : v));
+    if (JSON.stringify(next) === JSON.stringify(arr)) return ok('ค่าตรงกับที่ตั้งไว้แล้ว', { target, workflow, runtime });
+    const text = setAtPath(cur, ['plugins'], next);
+    writeTextWithBackup(ctx.home, '${CONFIG}/opencode.jsonc', text, { entry: 'plannotator.config' });
+    return ok(
+      `ตั้ง Plannotator: workflow=${workflow} · planningAgents=[${target}]${runtime ? ` · runtime=${runtime}` : ''} — เปิด OpenCode ใหม่`,
+      {
+        target,
+        workflow,
+        runtime,
+        note: 'การเลือก "อนุมัติแล้วกลับโหมดไหน" เป็นค่าที่เลือกในหน้า review UI (ปลั๊กอินเรียก session.switchAgent ให้) — ไม่ใช่ไฟล์ที่ Console แพตช์ได้',
+      },
+    );
+  },
+
+  /* ---------- backup: ดูรายการ + คืนไฟล์เดียว ---------- */
+
+  'backup-list': (ctx, params) => {
+    const rows = listBackups(undefined, Number(params?.limit) || 30);
+    const total = rows.reduce((a, r) => a + r.count, 0);
+    return ok(rows.length ? `${rows.length} รอบ · ${total} ไฟล์` : 'ยังไม่มี backup', { backups: rows });
+  },
+
+  'backup-restore': (ctx, params) => {
+    if (!params?.stamp || !params?.target) return bad('ต้องระบุ stamp และ target');
+    const r = restoreBackupFile(String(params.stamp), String(params.target));
+    return ok(`${r.restored ? 'คืน' : 'ลบ'} ${path.basename(r.target)} จากรอบ ${r.from}`, { run: r });
   },
 };
 

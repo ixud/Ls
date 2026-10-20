@@ -277,3 +277,26 @@ textarea.code {
 }
 textarea.code:focus { border-color: rgba(235,137,91,0.6); box-shadow: 0 0 0 3px rgba(235,137,91,0.12); }
 a { color: var(--info); }
+
+/* ---------- arena editor + system tab (ULTRA wave A/B) ---------- */
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--line, rgba(255,255,255,.14)); background:rgba(255,255,255,.04); font-size:12.5px; max-width:100%; }
+.chip b { font-size:10px; letter-spacing:.04em; text-transform:uppercase; opacity:.75; }
+.chip-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+.chip-eff { font-size:10.5px; padding:1px 6px; border-radius:999px; background:rgba(235,137,91,.18); }
+.chip i { font-style:normal; opacity:.6; font-size:11px; }
+.chip-x { background:none; border:0; color:inherit; opacity:.55; cursor:pointer; font-size:13px; line-height:1; padding:0 2px; }
+.chip-x:hover { opacity:1; }
+.arena-row { padding:10px 0; border-bottom:1px dashed rgba(255,255,255,.08); }
+.arena-row-head { display:flex; gap:8px; align-items:baseline; }
+.eff-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:10px; }
+.eff-box { border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:10px; }
+.eff-head { display:flex; justify-content:space-between; align-items:baseline; }
+.adv { margin-top:12px; border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:10px 12px; }
+.adv summary { cursor:pointer; font-weight:600; }
+.pick-list { max-height:46vh; overflow:auto; margin-top:8px; display:flex; flex-direction:column; gap:2px; }
+.pick-row { display:flex; gap:8px; align-items:center; padding:5px 6px; border-radius:8px; cursor:pointer; }
+.pick-row:hover { background:rgba(255,255,255,.05); }
+.pick-row input { width:auto; }
+.pick-row code { margin-left:auto; opacity:.55; }
+

@@ -13,7 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(__dirname, '..', 'index.mjs');
 const PORT = 4477;
 const HOME = path.join(os.tmpdir(), 'bazer', 'api test home');
-const TOKEN_FILE = path.join(__dirname, '..', '..', 'var', 'token');
+const TOKEN_FILE = path.join(__dirname, '..', '..', 'var', `token-${PORT}`);
 
 let pass = 0;
 const fails = [];
@@ -172,17 +172,11 @@ try {
   const iconBuf = Buffer.from(await icon.arrayBuffer());
   check('favicon/logo เสิร์ฟ .ico จริง', icon.status === 200 && (icon.headers.get('content-type') || '').includes('image/x-icon') && iconBuf[0] === 0 && iconBuf[1] === 0 && iconBuf[2] === 1 && iconBuf[3] === 0);
 
-  // --- Plannotator: แพตช์ token switchTo ---
-  const plDir = path.join(HOME, '.cache', 'opencode', 'npm', 'plannotator');
-  fs.mkdirSync(plDir, { recursive: true });
-  const plFile = path.join(plDir, 'app.html');
-  fs.writeFileSync(plFile, 'const a={switchTo:"build"};', 'utf8');
-  const plDry = await post({ id: 'plannotator-patch', params: { target: 'buddha' } });
-  check('plannotator-patch dry-run เห็นไฟล์', plDry.json?.ok === true && (plDry.json.patch?.todo ?? 0) === 1, JSON.stringify(plDry.json?.patch || {}).slice(0, 160));
-  const plGo = await post({ id: 'plannotator-patch', params: { confirmed: true, target: 'buddha', apply: true } });
-  check('plannotator-patch เขียน token เป็น buddha', plGo.json?.ok === true && fs.readFileSync(plFile, 'utf8').includes('switchTo:"buddha"'), JSON.stringify(plGo.json).slice(0, 200));
-  const plAgain = await post({ id: 'plannotator-patch', params: { confirmed: true, target: 'buddha', apply: true } });
-  check('plannotator-patch รันซ้ำไม่เปลี่ยนอะไร', plAgain.json?.ok === true && (plAgain.json.patch?.changed?.length ?? -1) === 0);
+  // --- Plannotator: ไม่มี action แพตช์แล้ว (ถอดปุ่มผี) + config options ต้องทำงาน ---
+  const plGone = await post({ id: 'plannotator-patch', params: { confirmed: true, target: 'buddha', apply: true } });
+  check('plannotator-patch ถูกถอดออกจากสัญญา', plGone.json?.ok === false && /ไม่รู้จัก/.test(plGone.json?.summary || ''), plGone.json?.summary);
+  const plLocate = await post({ id: 'plannotator-locate' });
+  check('plannotator-locate ยังทำงาน (ไม่เจอ = warn)', plLocate.json?.ok === true, plLocate.json?.summary);
 
   const role = await post({ id: 'settings-save', params: { confirmed: true, patches: [{ id: 'pstack.judgment', value: 'x/y-z' }] } });
   const models = fs.readFileSync(path.join(HOME, '.agents', 'pstack-models.md'), 'utf8');
@@ -191,6 +185,17 @@ try {
   const policy = await post({ id: 'policy-set', params: { level: '3', confirmed: true } });
   const cfgText = fs.readFileSync(path.join(HOME, '.config', 'opencode', 'opencode.jsonc'), 'utf8');
   check('policy-set เขียน permission ระดับ 3 ลง config', policy.json?.ok === true && /webfetch/.test(cfgText) && /external_directory/.test(cfgText));
+
+  // --- บันได BAZER แยกจาก BUDDHA ---
+  const bazerLv = await post({ id: 'policy-set', params: { confirmed: true, policy: 'bazer-ladder', level: '1' } });
+  const cfgBz = fs.readFileSync(path.join(HOME, '.config', 'opencode', 'opencode.jsonc'), 'utf8');
+  check('บันได BAZER เขียน agent.bazer.permission (แยกจาก BUDDHA)',
+    bazerLv.json?.ok === true && /"bazer":\s*\{\s*"permission"/.test(cfgBz) && /"shell": "ask"/.test(cfgBz),
+    bazerLv.json?.summary);
+  const stPol = await get('/api/state');
+  check('ระบบรู้ว่าอยู่ขั้นไหน (per-policy)',
+    stPol.json?.policyStateAll?.['bazer-ladder']?.level === '1' && stPol.json?.policyStateAll?.['buddha-ladder']?.level === '3',
+    JSON.stringify(stPol.json?.policyStateAll));
 
   // --- reset template: ไฟล์ระบบรุ่นเก่าค้าง (เช่น AGENTS.md) ---
   const agentsMd = path.join(HOME, '.config', 'opencode', 'AGENTS.md');
@@ -206,7 +211,7 @@ try {
   const oldAgent = path.join(HOME, '.config', 'opencode', 'agents', 'old-thing.md');
   const oldDisabled = path.join(HOME, '.config', 'opencode', 'agents', 'old-thing.md.disabled');
   const oldMirror = path.join(HOME, '.agents', 'skills', 'BAZERs-EXTENSION-Old', 'SKILL.md');
-  const oldPluginDir = path.join(HOME, '.config', 'opencode', 'plugins', 'bazer-flow');
+  const oldPluginDir = path.join(HOME, '.config', 'opencode', 'plugins', 'legacy-plugin');
   fs.writeFileSync(oldAgent, '# old', 'utf8');
   fs.writeFileSync(oldDisabled, '# old disabled', 'utf8');
   fs.mkdirSync(path.dirname(oldMirror), { recursive: true });
@@ -214,7 +219,7 @@ try {
   fs.mkdirSync(oldPluginDir, { recursive: true });
   fs.writeFileSync(path.join(oldPluginDir, 'index.ts'), '// old plugin', 'utf8');
   const { setAtPath } = await import('../jsonc.mjs');
-  fs.writeFileSync(cfgPath, setAtPath(fs.readFileSync(cfgPath, 'utf8'), ['plugins'], ['./plugins/bazer-flow']), 'utf8');
+  fs.writeFileSync(cfgPath, setAtPath(fs.readFileSync(cfgPath, 'utf8'), ['plugins'], ['./plugins/legacy-plugin']), 'utf8');
 
   const st1 = await get('/api/state');
   const g = (id) => st1.json.cleanup.groups.find((x) => x.id === id)?.count ?? 0;
@@ -228,7 +233,7 @@ try {
   const q = done.json?.cleanup?.quarantine;
   check('cleanup ย้ายของเก่าแล้ว', done.json?.ok === true && (done.json.cleanup.moved?.length ?? 0) >= 3, JSON.stringify(done.json?.cleanup?.moved || []).slice(0, 200));
   check('ของเก่าหายจากที่เดิม', !fs.existsSync(oldAgent) && !fs.existsSync(oldDisabled) && !fs.existsSync(path.dirname(oldMirror)) && !fs.existsSync(oldPluginDir));
-  check('ปลั๊กอินเก่าถูกถอดจาก config', !fs.readFileSync(cfgPath, 'utf8').includes('bazer-flow'));
+  check('ปลั๊กอินเก่าถูกถอดจาก config', !fs.readFileSync(cfgPath, 'utf8').includes('legacy-plugin'));
   check('quarantine มี manifest', !!(q && fs.existsSync(path.join(q, 'quarantine.json'))));
 
   const st2 = await get('/api/state');
@@ -247,6 +252,163 @@ try {
   const finalState = await get('/api/state');
   check('หลัง apply: doctors/blockers สะอาด', (finalState.json?.plan?.blockers?.length ?? 1) === 0, JSON.stringify(finalState.json?.plan?.blockers || []).slice(0, 200));
   check('หลัง apply: ไม่มี stale ที่ auto=true', (finalState.json?.plan?.entries || []).filter((e) => e.auto && e.writable).length === 0);
+
+  // --- [ULTRA LOOP 3] builtin-toggle: "คืน Plan & Build" ต้องเปลี่ยนค่าจริง (merge ลึก 2 ชั้น) ---
+  const bOff = await post({ id: 'builtin-toggle', params: { mode: 'off', confirmed: true } });
+  const bOffText = fs.readFileSync(cfgPath, 'utf8');
+  const bOn = await post({ id: 'builtin-toggle', params: { mode: 'on', confirmed: true } });
+  const bOnText = fs.readFileSync(cfgPath, 'utf8');
+  check('builtin-toggle off → plan/build เป็น subagent + hidden',
+    bOff.json?.ok === true && /"mode": "subagent"/.test(bOffText), bOffText.match(/"plan"[\s\S]{0,60}/)?.[0] || '');
+  check('builtin-toggle on → คืน plan/build เป็น primary (ไม่ใช่ no-op)',
+    bOn.json?.ok === true && /"plan":\s*\{\s*"mode": "primary"/.test(bOnText) && /"hidden": false/.test(bOnText),
+    bOnText.match(/"plan"[\s\S]{0,60}/)?.[0] || '');
+
+  // --- [ULTRA LOOP 3] lock → drift → lock-restore ต้องทำงานครบวง ---
+  const { writeState: writeStateT, readState: readStateT } = await import('../apply.mjs');
+  const stClean = readStateT();
+  delete stClean.modelsSnapshot;
+  delete stClean.snapshotHome;
+  stClean.locks = { ...(stClean.locks || {}), models: true };
+  writeStateT(stClean);
+  await post({ id: 'settings-save', params: { confirmed: true, patches: [
+    { id: 'model.buddha', value: 'p/one' }, { id: 'model.bazer', value: 'p/two' },
+    { id: 'model.snack', value: 'p/three' }, { id: 'model.advisor', value: 'p/four' },
+  ] } });
+  await post({ id: 'settings-save', params: { confirmed: true, patches: [{ id: 'lock.models', value: true }] } });
+  await post({ id: 'settings-save', params: { confirmed: true, patches: [{ id: 'model.buddha', value: 'p/CHANGED' }] } });
+  const drift = await get('/api/state');
+  check('lock: เปลี่ยนโมเดลหลังล็อก → เห็น drift',
+    (drift.json?.drift || []).some((d) => d.mode === 'buddha' && d.now.model === 'p/CHANGED'),
+    JSON.stringify(drift.json?.drift || []).slice(0, 200));
+  const restore = await post({ id: 'lock-restore', params: { confirmed: true } });
+  const restoredText = fs.readFileSync(cfgPath, 'utf8');
+  check('lock-restore: คืนโมเดลจาก snapshot จริง',
+    restore.json?.ok === true && /"model": "p\/one"/.test(restoredText) && !/p\/CHANGED/.test(restoredText),
+    restore.json?.summary);
+  const stHijack = readStateT();
+  writeStateT({ ...stHijack, snapshotHome: path.join(os.tmpdir(), 'bazer', 'other-home') });
+  const hijack = await post({ id: 'lock-restore', params: { confirmed: true } });
+  check('lock-restore: snapshot ของ home อื่น → ปฏิเสธ', hijack.json?.ok === false && /home อื่น/.test(hijack.json?.summary || ''), hijack.json?.summary);
+
+  // per-mode: snapshot แยกโหมด + คืนเฉพาะโหมด
+  const snapB = await post({ id: 'lock-snapshot', params: { mode: 'buddha' } });
+  check('lock-snapshot: ถ่ายเฉพาะโหมด buddha', snapB.json?.ok === true && (snapB.json?.modes || []).join() === 'buddha', JSON.stringify(snapB.json?.modes));
+  const snapS = await post({ id: 'lock-restore', params: { confirmed: true, mode: 'snack' } });
+  check('lock-restore: ระบุโหมด = คืนเฉพาะโหมดนั้น', snapS.json?.ok === true && snapS.json?.run?.mode === 'snack', snapS.json?.summary);
+  const kbFix = await post({ id: 'settings-save', params: { confirmed: true, patches: [{ id: 'keybind.copy', value: ['ctrl+alt+m', 'ctrl+alt+o'] }] } });
+  const tuiKey = JSON.parse(fs.readFileSync(path.join(HOME, '.config', 'opencode', 'tui.json'), 'utf8').replace(/^\uFEFF/, ''));
+  check('คีย์ลัดคงที่เขียนลง tui.json ได้', kbFix.json?.ok === true && JSON.stringify(tuiKey.keybinds.messages_copy) === JSON.stringify(['ctrl+alt+m', 'ctrl+alt+o']), JSON.stringify(tuiKey.keybinds));
+
+  // --- [ULTRA LOOP 3] installer: min ตรวจผ่าน probe + optional ไม่ถูกนับเป็นขาด ---
+  const inst = await post({ id: 'install-tools', params: {} });
+  check('install-tools คืน need (required) แยกจาก advisory (optional)',
+    Array.isArray(inst.json?.need) && Array.isArray(inst.json?.advisory) && !inst.json.need.some((n) => n.id === 'plannotator'),
+    JSON.stringify({ need: inst.json?.need?.map((n) => n.id), advisory: inst.json?.advisory?.map((a) => a.id) }));
+  const { PASSIVE_DIR } = await import('../env.mjs');
+  const instSpec = JSON.parse(fs.readFileSync(path.join(PASSIVE_DIR, '02INSTALLER', 'install.json'), 'utf8'));
+  check('install.json: step ที่มี min ต้องตรวจผ่าน probe',
+    instSpec.steps.filter((s) => s.min).every((s) => !!s.check?.probe),
+    JSON.stringify(instSpec.steps.filter((s) => s.min).map((s) => [s.id, s.check?.probe])));
+
+  // --- [ULTRA LOOP 3] open-target: โฟลเดอร์ไม่มี → เตือน ไม่ใช่ "สำเร็จ" ---
+  const missingOpen = await post({ id: 'open-target', params: { which: 'major' } });
+  check('open-target: โฟลเดอร์มีจริง → เปิดได้', missingOpen.json?.ok === true && missingOpen.json?.opened === true, missingOpen.json?.summary);
+  const home2 = path.join(os.tmpdir(), 'bazer', 'api test home 2');
+  fs.rmSync(home2, { recursive: true, force: true });
+  fs.mkdirSync(home2, { recursive: true });
+  const srv2 = spawn(process.execPath, [SERVER, `--port=${PORT + 1}`, `--home=${home2}`, '--no-open'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const token2 = await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('เซิร์ฟเวอร์ตัวที่ 2 ไม่ขึ้น')), 15000);
+    srv2.stdout.on('data', (b) => {
+      if (b.toString().includes('http://127.0.0.1')) { clearTimeout(t); resolve(fs.readFileSync(path.join(__dirname, '..', '..', 'var', `token-${PORT + 1}`), 'utf8').trim()); }
+    });
+  });
+  const H2 = { 'content-type': 'application/json', 'x-bazer-token': token2 };
+  const r2 = await fetch(`http://127.0.0.1:${PORT + 1}/api/action`, { method: 'POST', headers: H2, body: JSON.stringify({ id: 'open-target', params: { confirmed: true, which: 'config' } }) });
+  const j2 = await r2.json();
+  check('open-target: โฟลเดอร์ไม่มี → warn (ไม่ใช่ ok)', j2?.warn === true && j2?.opened === false, JSON.stringify(j2).slice(0, 160));
+  srv2.kill();
+  fs.rmSync(home2, { recursive: true, force: true });
+
+  // --- [ULTRA LOOP 3] พอร์ตชน: ต้องพิมพ์ URL ครั้งเดียวและเป็นพอร์ตจริง ---
+  const srv3 = spawn(process.execPath, [SERVER, `--port=${PORT}`, `--home=${path.join(os.tmpdir(), 'bazer', 'api test home 3')}`, '--no-open'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let log3 = '';
+  srv3.stdout.on('data', (b) => { log3 += b.toString(); });
+  srv3.stderr.on('data', (b) => { log3 += b.toString(); });
+  await new Promise((r) => setTimeout(r, 3500));
+  const urlLines = log3.split(/\r?\n/).filter((l) => l.includes('127.0.0.1:')).length;
+  const port3 = Number(/127\.0\.0\.1:(\d+)/.exec(log3)?.[1] || 0);
+  srv3.kill();
+  check('พอร์ตชน: พิมพ์ URL ครั้งเดียว และเป็นพอร์ตใหม่', urlLines === 1 && port3 > PORT, `lines=${urlLines} port=${port3}`);
+
+  // --- [WAVE B] ปลั๊กอิน gate: ติดตั้ง/ลงทะเบียน/prune ---
+  const reg = await post({ id: 'plugin-register', params: { confirmed: true, name: 'bazer-flow' } });
+  const cfgPlug = fs.readFileSync(cfgPath, 'utf8');
+  check('plugin-register เพิ่ม ./plugins/bazer-flow ใน config', reg.json?.ok === true && cfgPlug.includes('./plugins/bazer-flow'), reg.json?.summary);
+  const reg2 = await post({ id: 'plugin-register', params: { confirmed: true, name: 'bazer-flow' } });
+  check('plugin-register รันซ้ำไม่เพิ่มซ้ำ', (fs.readFileSync(cfgPath, 'utf8').match(/\.\/plugins\/bazer-flow/g) || []).length === 1 && reg2.json?.ok === true);
+
+  const pl = await post({ id: 'apply', params: { confirmed: true, ids: ['plugin.bazer-flow'] } });
+  const plugDir = path.join(HOME, '.config', 'opencode', 'plugins', 'bazer-flow');
+  const plugFiles = fs.existsSync(plugDir) ? fs.readdirSync(plugDir) : [];
+  check('ติดตั้งปลั๊กอินลงเครื่อง (copy-tree)', pl.json?.ok === true && plugFiles.includes('index.ts') && plugFiles.includes('logic.mjs'), plugFiles.join(','));
+  const orphan = path.join(plugDir, 'old-junk.mjs');
+  fs.writeFileSync(orphan, '// ของเก่า', 'utf8');
+  const pl2 = await post({ id: 'apply', params: { confirmed: true, ids: ['plugin.bazer-flow'] } });
+  const prunedDir = fs.readdirSync(plugDir);
+  check('prune: ไฟล์ซากรุ่นเก่าถูกย้ายออกจากปลายทาง', !prunedDir.includes('old-junk.mjs'), prunedDir.join(','));
+  check('prune: ยังเก็บสำเนาไว้ (ไม่ลบ)', (pl2.json?.apply?.applied?.length ?? 0) >= 0 && fs.existsSync(path.join(VAR, 'backups')));
+
+  const bkList = await post({ id: 'backup-list', params: {} });
+  check('backup-list คืนรายรอบ + ไฟล์', bkList.json?.ok === true && Array.isArray(bkList.json.backups) && bkList.json.backups.length > 0, `${bkList.json?.summary}`);
+  const firstWithFiles = (bkList.json?.backups || []).find((b) => b.items && b.items.length);
+  if (firstWithFiles) {
+    const item = firstWithFiles.items[0];
+    const bkRestore = await post({ id: 'backup-restore', params: { confirmed: true, stamp: firstWithFiles.stamp, target: item.target } });
+    check('backup-restore คืนไฟล์เดียวได้', bkRestore.json?.ok === true && bkRestore.json?.run?.from === firstWithFiles.stamp, bkRestore.json?.summary);
+  } else {
+    check('backup-restore คืนไฟล์เดียวได้', false, 'ไม่พบรอบที่มีไฟล์');
+  }
+  const bkBad = await post({ id: 'backup-restore', params: { confirmed: true, stamp: '19990101-000000-000', target: cfgPath } });
+  check('backup-restore รอบที่ไม่มี → ล้มอย่างสุภาพ', bkBad.json?.ok === false && bkBad.status === 200);
+
+  const plCfg = await post({ id: 'plannotator-config', params: { confirmed: true, target: 'buddha' } });
+  check('plannotator-config: ไม่มีปลั๊กอินใน config → บอกตรง ๆ', plCfg.json?.ok === false && /plannotator/.test(plCfg.json?.summary || ''), plCfg.json?.summary);
+
+  // --- [WAVE B] arena: เก็บ effort inline (model#effort) + ลบบรรทัด efforts รุ่นเก่า ---
+  const modelsFile = path.join(HOME, '.agents', 'pstack-models.md');
+  if (fs.existsSync(modelsFile)) {
+    const withLegacy = `${fs.readFileSync(modelsFile, 'utf8')}\narena runner efforts: low, low\narena judge efforts: max\n`;
+    fs.writeFileSync(modelsFile, withLegacy, 'utf8');
+    const arenaSave = await post({ id: 'settings-save', params: { confirmed: true, patches: [
+      { id: 'arena.runners', value: 'opencode-go/beam-free#low, opencode-go/deepseek-v4.1-flash#max' },
+      { id: 'arena.judge', value: 'opencode-go/glm-5#high' },
+    ] } });
+    const arenaText = fs.readFileSync(modelsFile, 'utf8');
+    check('arena: บันทึกเป็น model#effort inline',
+      arenaSave.json?.ok === true && /^arena runners: opencode-go\/beam-free#low, opencode-go\/deepseek-v4\.1-flash#max$/m.test(arenaText),
+      arenaText.split(/\r?\n/).filter((l) => l.startsWith('arena')).join(' | '));
+    check('arena: บรรทัด efforts รุ่นเก่าถูกลบ (ไม่ให้ขัดกัน)',
+      !/^arena runner efforts:/m.test(arenaText) && !/^arena judge efforts:/m.test(arenaText));
+    const arenaState = await get('/api/state');
+    check('arena: Console อ่านกลับเป็น 2 ที่นั่งของ runner + 1 judge',
+      String(arenaState.json.settingsValues['arena.runners']).includes('#low') && String(arenaState.json.settingsValues['arena.judge']).includes('#high'),
+      String(arenaState.json.settingsValues['arena.runners']));
+  } else {
+    check('arena: บันทึกเป็น model#effort inline', false, 'ไม่พบ pstack-models.md');
+  }
+
+  const ladderFile = path.join(HOME, '.config', 'opencode', 'agents', 'buddha.md');
+  const beforeLadder = fs.readFileSync(ladderFile, 'utf8');
+  const lv2 = await post({ id: 'policy-set', params: { confirmed: true, level: '2' } });
+  const afterLadder = fs.readFileSync(ladderFile, 'utf8');
+  check('บันไดเขียนลง frontmatter ของ agent file ด้วย',
+    lv2.json?.ok === true && afterLadder !== beforeLadder && /permission:/.test(afterLadder) && /shell: allow/.test(afterLadder),
+    (afterLadder.match(/permission:[\s\S]{0,160}/) || [''])[0].slice(0, 120));
+  const afterState = await get('/api/state');
+  const buddhaEntry = afterState.json.plan.entries.find((e) => e.id === 'agent.buddha');
+  check('บันไดไม่ทำให้ agent ขึ้น stale ปลอม', buddhaEntry?.state === 'ok', buddhaEntry?.state);
 } catch (e) {
   fails.push(`exception: ${e.message}`);
   console.error('EXCEPTION', e);

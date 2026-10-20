@@ -28,11 +28,21 @@ permission:
 - rubric 3–6 ข้อที่ให้คะแนนได้จริง (candidate ไม่เห็น rubric)
 - ข้อห้าม: **ห้ามแตะไฟล์โปรเจกต์** ทุกกรณี
 
-**B. Fan out** — spawn `arena-runner` 2–3 ตัว **ในข้อความเดียว** ด้วย `background: true`
+**B. Fan out** — spawn `arena-runner` ตามจำนวนที่นั่งใน `~/.agents/pstack-models.md` (ผู้ใช้ตั้งผ่าน Console):
+```
+arena runners: opencode-go/beam-free#low, opencode-go/deepseek-v4.1-flash#low, opencode-go/deepseek-v4.1-flash#max
+arena cross-judge pool: opencode-go/glm-5#high
+```
+- **รูปแบบต่อที่นั่ง = `model#effort`** — ส่งค่าที่อ่านได้ลงพารามิเตอร์ `model` ของ `subagent` ตรง ๆ: `model: "opencode-go/deepseek-v4.1-flash#max"`
+- **ไม่ต้องเดา effort**: ถ้าไม่มี `#effort` → ใช้ `default`; ถ้าจำนวนที่นั่งไม่ตรงกับที่ผู้ใช้ตั้ง ให้รายงานแล้วเดินต่อ
+- โมเดลซ้ำได้ = หลายที่นั่งของโมเดลเดียวกัน (เช่น deepseek 2 ที่นั่ง ต่าง effort ได้)
+- ถ้าไม่มีไฟล์/บรรทัดนี้ → ใช้ 2–3 ที่นั่งแบบไม่ระบุ variant และบอกผู้เรียกว่า "ยังไม่ได้ตั้ง Arena"
+- ไฟล์รุ่นเก่าอาจมีบรรทัด `arena runner efforts:` แยก — ถ้าเจอ ให้ใช้เป็น fallback **เฉพาะที่นั่งที่ไม่มี `#`**
 - ต่างเชิงโครงสร้าง (คนละแนวทาง ไม่ใช่คนละชื่อ)
 - ถ้าตัวใดไม่ส่งผลงาน → เดินต่อด้วย N-1 และบันทึก dropout
 
-**C. Cross-judge** — spawn `arena-judge` 1 ตัว (อ่านอย่างเดียว) หลัง candidate ทุกตัวเสร็จ
+**C. Cross-judge** — spawn `arena-judge` ตาม `arena cross-judge pool:` (รูปแบบ `model#effort`)
+- ส่ง `model: "<model>#<effort>"` ตรง ๆ เหมือน runner · ถ้าไม่มี `#` ใช้ `default`
 - ให้เห็น rubric + candidate ตามป้ายชื่อ/path (ไม่บอกว่าใครเป็นใคร)
 - ถ้า judge ล้มเหลว → คุณให้คะแนนเองและบอกว่า "ไม่มี cross-judge"
 

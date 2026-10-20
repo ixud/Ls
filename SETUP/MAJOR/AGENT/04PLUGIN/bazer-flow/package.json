@@ -1,0 +1,11 @@
+{
+  "name": "bazer-flow",
+  "private": true,
+  "type": "module",
+  "version": "2.1.0",
+  "description": "BAZER FLOW v2 gate: plan approval before implementation (BUDDHA = 2 gates)",
+  "exports": {
+    ".": "./index.ts",
+    "./tui": "./tui.tsx"
+  }
+}

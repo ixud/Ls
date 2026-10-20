@@ -40,6 +40,11 @@ export function buildVars(homeOverride) {
     if (spec.kind === 'home') value = home;
     else if (spec.kind === 'path') value = expand(spec.value, guard + 1);
     else if (spec.kind === 'temp') value = path.join(os.tmpdir(), 'bazer');
+    else if (spec.kind === 'env') {
+      // ค่าจาก environment ของเครื่อง (เช่น LOCALAPPDATA) — ถ้าไม่มี ใช้ fallback ที่ประกาศใน env.json
+      const fromEnv = spec.name ? process.env[spec.name] : '';
+      value = fromEnv && String(fromEnv).trim() ? fromEnv : expand(spec.fallback || '${HOME}', guard + 1);
+    }
     else if (spec.kind === 'active') value = ACTIVE_DIR;
     else if (spec.kind === 'var') value = VAR_DIR;
     else if (spec.kind === 'major') value = ROOT;

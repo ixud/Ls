@@ -1,25 +1,36 @@
 # GUIDELINE — 04PLUGIN
 
-ปลั๊กอินคือ **โค้ดที่รันใน process ของ OpenCode** — โฟลเดอร์เดียวใน `AGENT/` ที่เป็นโค้ดได้ (ยกเว้นจาก R1 อย่างเป็นทางการ)
+โฟลเดอร์นี้เป็น **ที่เดียวใน `AGENT/` ที่มีโค้ดได้** (กฎ R1 ยกเว้นไว้แล้ว — ถ้าแก้ `law.json` ต้องคง exception นี้)
 
-| ของเดิม | สถานะใน MAJOR | หมายเหตุ |
-|---|---|---|
-| `bazer-flow` (gate บังคับอนุมัติก่อนเขียนไฟล์) | **ยังไม่เขียนใหม่** — ดูหัวข้อ "ทำไมยังไม่เขียน" | ของเดิมถูกทิ้งตามคำสั่ง ("เขียนใหม่หมด") |
-| `bazer-fire` (badge/สถานะบน TUI) | รอตัดสิน | ใช้แสดงเฟส Buddha บน TUI |
+```
+04PLUGIN/
+└─ bazer-flow/          ปลั๊กอิน gate (BAZER FLOW v2)
+   ├─ index.ts          ตัวปลั๊กอินฝั่งเซิร์ฟเวอร์ (hook execute/permission/context)
+   ├─ logic.mjs         สมองการตัดสิน (ไม่มี I/O — เทสต์ตรงได้)
+   ├─ tui.tsx           badge PLAN/ARENA/BUILD บน TUI
+   └─ package.json      exports "." → index.ts · "./tui" → tui.tsx
+```
 
-## ทำไมยังไม่เขียน `bazer-flow` ใหม่
+## กติกา
 
-ของใหม่มี 2 ตัวบังคับ gate อยู่แล้วโดยไม่ต้องมีปลั๊กอิน:
+1. **ห้ามแก้ปลั๊กอินที่ติดตั้งแล้วด้วยมือ** (`~/.config/opencode/plugins/bazer-flow`) — ให้แก้ที่โฟลเดอร์นี้แล้วติดตั้งผ่าน Console (`manifest: plugin.bazer-flow` · strategy `copy-tree` · `prune: true`)
+2. `logic.mjs` ต้องไม่มี I/O และไม่มี dependency — เพื่อให้ `nodetest`/selftest ตรวจได้โดยไม่ต้องรัน OpenCode
+3. กติกาที่ยืนยันแล้ว (อย่าถอยกลับ):
+   - **SNACK ไม่ถูก gate** — โหมดนี้คือ "แก้ไฟล์เร็ว ไม่มีแผน"
+   - **BUDDHA ต้องอนุมัติ 2 ครั้ง** (GATE 1 Arena → GATE 2 Build)
+   - **BAZER ต้องอนุมัติ 1 ครั้ง**
+   - **ARENA / POTETO-MODE เขียนได้เฉพาะ `%TEMP%\bazer`** แม้อนุมัติแล้ว
+   - ข้อความ feedback ของ Plannotator (`# Plan Feedback`, "I've reviewed this plan…") **ไม่ใช่** user prompt ใหม่ → ต้องไม่รีเซ็ต approval
+   - Plan ห้ามมีข้อยกเว้น `edit *.md` (ช่องรั่วที่เคยมี)
+4. ทุกครั้งที่แก้: เพิ่มเทสต์ใน `SERVER/tools/selftest.mjs` (เทสต์ `gate logic`) และอัพเดต `CHANGELOG.md` + `LOGS.md`
+5. เวอร์ชันของปลั๊กอิน = `version` ใน `package.json` — Console ใช้ hash ของไฟล์เป็นตัวตัดสิน stale (ไม่ใช้ version)
 
-1. `MANIFEST/policies.json` + Console → คุมว่าโหมดไหนเขียนไฟล์ได้แค่ไหน (บังคับจริงระดับ permission ของ OpenCode)
-2. Plannotator → gate ของแผน (ยื่น → อนุมัติ → จึงสร้าง) พร้อมปุ่ม approve กลับไป `BUDDHA`/`BAZER` ตามโหมดที่เรียก
+## ติดตั้ง / ถอด
 
-→ ปลั๊กอิน gate จึงควรมีเฉพาะเมื่อ **พิสูจน์ได้ว่า 2 อย่างข้างบนรั่ว** และจะเขียนเมื่อมี probe ยืนยันเคสนั้น (เช่น โมเดลเขียนไฟล์ก่อนแผนอนุมัติทั้งที่ permission ไม่อนุญาต)
-
-## กฎเมื่อถึงเวลาต้องเขียนจริง
-
-1. ปลั๊กอินต้องมี `index.ts` + `package.json` + **เทสต์ที่รันได้** และต้องผ่าน `opencode plugin list` บนเครื่องจริง
-2. ห้ามทำหน้าที่ซ้ำกับ Console (Console = ผู้คุม config, ปลั๊กอิน = ผู้คุมพฤติกรรมในเซสชัน)
-3. ต้องปิดได้ (`flow-toggle`-style) และปิดแล้ว**ไม่มีร่องรอยค้างในไฟล์ระบบ**
-4. ห้ามฝัง path ของเครื่องใครในโค้ด — ใช้ค่าที่ console ส่งให้
-5. ติดตั้ง/ถอดผ่าน Console เท่านั้น (มี entry ใน `manifest.json` + ปุ่มใน `actions.json`)
+```
+Console → แท็บ ระบบ → ปลั๊กอิน gate
+  ติดตั้ง/อัปเดตไฟล์  → copy-tree (+ prune ซากเข้า backup)
+  ลงทะเบียนใน config  → เพิ่ม ./plugins/bazer-flow ใน plugins[]
+  ถอดจาก config       → retire-old-flow
+```
+หลังติดตั้ง/ถอด **ต้องปิด-เปิด OpenCode** ให้ปลั๊กอินถูกโหลดใหม่

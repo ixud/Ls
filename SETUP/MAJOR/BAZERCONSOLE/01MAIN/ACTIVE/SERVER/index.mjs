@@ -17,6 +17,7 @@ import { getAtPath } from './jsonc.mjs';
 import { listModels } from './models.mjs';
 
 const APP_VERSION = '0.1.0';
+const STARTED = Date.now();
 const arg = (name, def) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
   return hit ? hit.split('=').slice(1).join('=') : def;
@@ -26,9 +27,11 @@ const HOME = arg('home', '');
 const NO_OPEN = process.argv.includes('--no-open');
 
 ensureVarDir();
-const tokenFile = path.join(VAR_DIR, 'token');
-if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(24).toString('hex'), 'utf8');
+// token ต่อการเปิดหนึ่งครั้ง + แยกตาม port — หลาย instance (console/apitest) ไม่ทับกัน
+const tokenFile = path.join(VAR_DIR, `token-${PORT}`);
+fs.writeFileSync(tokenFile, crypto.randomBytes(24).toString('hex'), 'utf8');
 const TOKEN = fs.readFileSync(tokenFile, 'utf8').trim();
+try { fs.rmSync(path.join(VAR_DIR, 'token'), { force: true }); } catch { /* ไม่มีไฟล์รุ่นเก่า */ }
 
 /* ---------- log bus (SSE) ---------- */
 const clients = new Set();
@@ -110,7 +113,11 @@ function buildState(home, { withProbes = false } = {}) {
   if (withProbes) probeResult = runAction('probe', { home }, {}).probes;
 
   return {
-    app: { version: APP_VERSION, root: ROOT, home, platform: process.platform, node: process.versions.node, tokenInPage: true },
+    app: {
+      version: APP_VERSION, root: ROOT, home, platform: process.platform, node: process.versions.node,
+      pid: process.pid, port: server.address()?.port || PORT, startedAt: STARTED,
+      tokenInPage: true,
+    },
     vars,
     plan,
     law: checkLaw({ handlerIds: actionIds }),
@@ -122,6 +129,12 @@ function buildState(home, { withProbes = false } = {}) {
     },
     policies: Object.entries(policies).filter(([k]) => k !== 'note').map(([id, p]) => ({ id, title: p.title, mode: p.mode, defaultLevel: p.defaultLevel, levels: p.levels.map(({ permission, ...rest }) => rest) })),
     policyState: state.policy || null,
+    policyStateAll: state.policies || {},
+    policyDetected: Object.fromEntries(
+      Object.keys(policies).filter((k) => k !== 'note').map((id) => {
+        try { return [id, detectPolicyLevel(home, id)]; } catch (e) { return [id, { level: null, source: 'error', error: e.message }]; }
+      }),
+    ),
     settings,
     settingsValues: settingsValues(home),
     rawSettings: rawSettings(home),
@@ -224,17 +237,24 @@ function listen(port, tries = 0) {
     console.error('เปิดเซิร์ฟเวอร์ไม่ได้:', e.message);
     process.exit(1);
   });
-  server.listen(port, '127.0.0.1', () => {
-    const link = `http://127.0.0.1:${port}/?t=${TOKEN}`;
-    console.log(`BAZERCONSOLE ${APP_VERSION} · ${link}`);
-    console.log(`home: ${HOME || '(ค่าเริ่มต้นของเครื่อง)'}`);
-    if (!NO_OPEN) {
-      const cmd = process.platform === 'win32' ? 'cmd' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-      const args = process.platform === 'win32' ? ['/c', 'start', '', link] : [link];
-      import('node:child_process').then(({ spawn }) => {
-        try { spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref(); } catch { /* เปิดไม่ได้ก็ไม่เป็นไร */ }
-      });
-    }
-  });
+  server.listen(port, '127.0.0.1');
 }
+
+// ผูก 'listening' ครั้งเดียว — ถ้าผูกใน listen() จะซ้ำทุกครั้งที่ EADDRINUSE และเปิด URL ของ instance อื่น
+server.once('listening', () => {
+  const actual = server.address().port;   // พอร์ตที่ได้จริง ไม่ใช่พอร์ตที่ขอ
+  const link = `http://127.0.0.1:${actual}/?t=${TOKEN}`;
+  console.log(`BAZERCONSOLE ${APP_VERSION} · ${link}`);
+  console.log(`home: ${HOME || '(ค่าเริ่มต้นของเครื่อง)'}`);
+  if (actual !== PORT) console.log(`(พอร์ต ${PORT} ถูกใช้อยู่ — เลื่อนมาที่ ${actual})`);
+  if (!NO_OPEN) {
+    const cmd = process.platform === 'win32' ? 'cmd' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+    const args = process.platform === 'win32' ? ['/c', 'start', '', link] : [link];
+    import('node:child_process').then(({ spawn }) => {
+      try { spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref(); } catch { /* เปิดไม่ได้ก็ไม่เป็นไร */ }
+    });
+  }
+});
+
 listen(PORT);
+

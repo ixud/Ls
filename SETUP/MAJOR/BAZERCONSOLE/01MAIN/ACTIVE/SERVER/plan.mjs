@@ -5,8 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeResolver } from './env.mjs';
-import { manifest, policies, sha256File, sha256, srcPath, treeFiles, mustExist } from './manifest.mjs';
+import { manifest, policies, sha256File, sha256, srcPath, treeFiles, mustExist, walk } from './manifest.mjs';
 import { parseJsonc, getAtPath, setAtPath } from './jsonc.mjs';
+import { stripFrontmatterPermission, setFrontmatterPermission } from './frontmatter.mjs';
 
 const exists = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
@@ -54,6 +55,15 @@ export function policyPermission(entry, level) {
   return { ...lv.permission, ...(entry.policyOverrides || {}) };
 }
 
+/** permission ของ agent หนึ่งตัวตามบันได (รวม override ที่ประกาศใน manifest) */
+export function ladderPermission(agentId, policyId = 'buddha-ladder', levelId) {
+  const cfg = manifest.entries.find(
+    (e) => e.fromPolicy === policyId && e.valuePath === `agent.${agentId}.permission`,
+  );
+  const lv = policyLevel(policyId, levelId);
+  return { ...lv.permission, ...(cfg?.policyOverrides || {}) };
+}
+
 function desiredConfigValue(entry, home) {
   if (entry.fromPolicy) {
     return policyPermission(entry, policyLevel(entry.fromPolicy));
@@ -76,6 +86,11 @@ export function stateOf(entry, home) {
   const strat = entry.strategy;
   if (strat === 'overwrite') {
     if (!exists(target)) return { ...base, state: 'missing', writable: true };
+    // agent ที่ผูกกับบันได: เนื้อหาในไฟล์มี permission ที่ระบบเขียนให้ → เทียบโดยไม่นับบล็อกนั้น
+    if (entry.ladderPolicy) {
+      const same = stripFrontmatterPermission(readText(target)) === stripFrontmatterPermission(readText(srcPath(entry)));
+      return { ...base, state: same ? 'ok' : 'stale', writable: !same, note: same ? 'permission มาจากบันได' : 'เนื้อหาไฟล์ต่างจากต้นทาง' };
+    }
     const same = sha256File(target) === sha256File(srcPath(entry));
     return { ...base, state: same ? 'ok' : 'stale', writable: !same };
   }
@@ -113,8 +128,20 @@ export function stateOf(entry, home) {
       else if (sha256File(dst) !== sha256File(f.abs)) diff++;
       else same++;
     }
-    const state = miss ? 'missing' : diff ? 'stale' : 'ok';
-    return { ...base, state, note: `${files.length} ไฟล์ · ตรง ${same} · ต่าง ${diff} · ยังไม่มี ${miss}`, writable: miss + diff > 0, counts: { same, diff, miss, total: files.length } };
+    // ไฟล์ในปลายทางที่ไม่มีในต้นทาง = ซากของรุ่นเก่า (entry ที่ prune=true จะย้ายเข้า backup ตอน apply)
+    let extra = 0;
+    if (entry.prune) {
+      const wanted = new Set(files.map((f) => path.normalize(path.join(target, f.rel)).toLowerCase()));
+      for (const abs of walk(target)) if (!wanted.has(path.normalize(abs).toLowerCase())) extra++;
+    }
+    const state = miss ? 'missing' : diff ? 'stale' : extra ? 'stale' : 'ok';
+    return {
+      ...base,
+      state,
+      note: `${files.length} ไฟล์ · ตรง ${same} · ต่าง ${diff} · ยังไม่มี ${miss}${extra ? ` · เกิน ${extra}` : ''}`,
+      writable: miss + diff + extra > 0,
+      counts: { same, diff, miss, extra, total: files.length },
+    };
   }
   if (strat === 'line') {
     const line = entry.line;
@@ -159,6 +186,13 @@ export function computePlan(home, { lawResult } = {}) {
     catch (err) { return { id: e.id, kind: e.kind, title: e.title, state: 'broken', note: err.message, writable: false, blocker: true }; }
   });
   const summary = entries.reduce((acc, e) => { acc[e.state] = (acc[e.state] || 0) + 1; return acc; }, { ok: 0, stale: 0, missing: 0, broken: 0, design: 0 });
+  // แยก "กดติดตั้งได้เลย" ออกจาก "รอคุณตัดสินใจ" (owner=user / auto=false)
+  const autoRunnable = entries.filter((e) => ['missing', 'stale'].includes(e.state) && e.writable && e.auto);
+  const manualOnly = entries.filter((e) => ['missing', 'stale'].includes(e.state) && e.writable && !e.auto);
+  const locked = entries.filter((e) => ['missing', 'stale'].includes(e.state) && !e.writable);
+  summary.actionable = autoRunnable.length;   // "ติดตั้งทั้งหมด" จะเขียนให้
+  summary.manualOnly = manualOnly.length;     // ต้องกดรายตัว/หน้าโซนที่เกี่ยวข้อง
+  summary.locked = locked.length;             // ของผู้ใช้/ระบบไม่ทับ
   const foreign = scanForeign(home);
   const blockers = [];
   for (const e of entries) if (e.blocker) blockers.push(`${e.id}: ${e.note}`);
@@ -166,7 +200,24 @@ export function computePlan(home, { lawResult } = {}) {
   return { at: new Date().toISOString(), home, entries, summary, foreign, foreignTotal: foreign.length, blockers, applicable: entries.filter((e) => e.auto && e.writable).length };
 }
 
-/** ข้อความ before/after สำหรับแสดง diff (ตัดที่ 24k ตัวอักษร) */
+/**
+ * ตรวจว่า "ตอนนี้อยู่ขั้นไหน" จาก config จริง (ไม่ใช่จาก state ที่ Console เคยเขียน)
+ * ใช้เทียบ subset ของ permission ของ agent หลักของ policy (buddha / bazer)
+ * คืน { level: '1'..'5' | 'custom' | null, source, agent, matched }
+ */
+export function detectPolicyLevel(home, policyId) {
+  const p = policies[policyId];
+  if (!p) return { level: null, source: 'none', matched: [] };
+  const agent = p.mode === 'bazer' ? 'bazer' : 'buddha';
+  const { resolve } = makeResolver(home);
+  const file = resolve('${CONFIG}/opencode.jsonc');
+  if (!exists(file)) return { level: null, source: 'none', agent, matched: [] };
+  let cur;
+  try { cur = getAtPath(readText(file), ['agent', agent, 'permission']); } catch { cur = undefined; }
+  if (!cur || typeof cur !== 'object') return { level: null, source: 'config', agent, matched: [] };
+  const matched = (p.levels || []).filter((l) => subsetMatch(cur, l.permission)).map((l) => String(l.id));
+  return { level: matched.length ? matched[matched.length - 1] : 'custom', source: 'config', agent, matched };
+}
 export function diffFor(entryId, home) {
   const entry = manifest.entries.find((e) => e.id === entryId);
   if (!entry) throw new Error(`ไม่พบ entry: ${entryId}`);
@@ -175,7 +226,15 @@ export function diffFor(entryId, home) {
   const clip = (s) => (s.length > 24000 ? s.slice(0, 24000) + '\n… (ตัด)' : s);
   const before = target && exists(target) ? readText(target) : '';
   if (entry.strategy === 'overwrite' || entry.strategy === 'create-only' || entry.strategy === 'template-once') {
-    return { id: entry.id, target, before: clip(before), after: clip(readText(srcPath(entry))) };
+    let after = readText(srcPath(entry));
+    if (entry.ladderPolicy && entry.ladderAgent) {
+      try {
+        const det = detectPolicyLevel(home, entry.ladderPolicy);
+        const lv = det.level && det.level !== 'custom' ? det.level : policies[entry.ladderPolicy]?.defaultLevel;
+        after = setFrontmatterPermission(after, ladderPermission(entry.ladderAgent, entry.ladderPolicy, lv));
+      } catch { /* ไม่มี frontmatter */ }
+    }
+    return { id: entry.id, target, before: clip(before), after: clip(after) };
   }
   if (entry.strategy === 'jsonc-merge') {
     const desired = desiredConfigValue(entry, home);

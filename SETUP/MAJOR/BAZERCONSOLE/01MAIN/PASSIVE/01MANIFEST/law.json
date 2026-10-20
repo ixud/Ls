@@ -7,7 +7,8 @@
       "kind": "no-code-in-data",
       "paths": ["AGENT/**", "BAZERCONSOLE/01MAIN/CONFIGTEMPLATEFORAPPLY/**", "BAZERCONSOLE/01MAIN/PASSIVE/**"],
       "forbidExt": [".mjs", ".js", ".cjs", ".ts", ".tsx", ".ps1", ".cmd", ".bat", ".vbs", ".exe", ".dll"],
-      "except": ["BAZERCONSOLE/01MAIN/PASSIVE/02INSTALLER/**"]
+      "except": ["BAZERCONSOLE/01MAIN/PASSIVE/02INSTALLER/**", "AGENT/03SKILLS/**/scripts/**", "AGENT/04PLUGIN/**"],
+      "why": "AGENT/04PLUGIN เป็นที่เดียวที่ GUIDELINE อนุญาตให้มีโค้ดของปลั๊กอิน (ต้นทางปลั๊กอิน bazer-flow) — exception นี้ทำให้กฎตรงกับ GUIDELINE"
     },
     {
       "id": "R2",

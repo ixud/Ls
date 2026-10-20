@@ -152,7 +152,8 @@ function mergeInto(text, objStart, obj, unit, baseIndent) {
   for (const [k, v] of entries) {
     const p = findProp(props, k);
     if (p && v && typeof v === 'object' && !Array.isArray(v) && text[p.valueStart] === '{') {
-      mergeInto(text, p.valueStart, v, unit, baseIndent + unit);
+      // ต้องรับค่าที่คืนกลับ — สตริงเป็นค่าที่คัดลอก ถ้าไม่รับ การ merge ชั้นถัดไปจะหายเงียบ
+      text = mergeInto(text, p.valueStart, v, unit, baseIndent + unit);
     } else if (p) {
       const ind = indentAt(text, p.keyStart);
       text = text.slice(0, p.valueStart) + format(v, ind, unit) + text.slice(p.valueEnd);
@@ -222,6 +223,53 @@ export function setAtPath(text, keys, value, { merge = false } = {}) {
     objStart = p.valueStart;
   }
   return bom + src;
+}
+
+/** เพิ่มสมาชิกใน array ถ้ายังไม่มี (คงคอมเมนต์/รูปแบบเดิม) — คู่กับ removeArrayItem */
+export function appendArrayItem(text, keys, item) {
+  let bom = '';
+  let src = text || '';
+  if (src.charCodeAt(0) === 0xfeff) { bom = '\uFEFF'; src = src.slice(1); }
+
+  const rootStart = skipWs(src, 0, src.length);
+  if (src[rootStart] !== '{') return text;
+  let objStart = rootStart;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const p = findProp(objectProps(src, objStart).props, keys[i]);
+    if (!p || src[p.valueStart] !== '{') return text;
+    objStart = p.valueStart;
+  }
+  const prop = findProp(objectProps(src, objStart).props, keys[keys.length - 1]);
+  if (!prop) {
+    // ไม่มี key เลย → สร้าง array ใหม่ที่ระดับบนสุดของ object นี้
+    const unit = unitIndent(src);
+    const next = setAtPath(src, keys, [item], { merge: false });
+    return bom + next;
+  }
+  if (src[prop.valueStart] !== '[') return text;
+
+  const arrStart = prop.valueStart;
+  const arrEnd = valueEnd(src, arrStart, src.length);
+  const spans = [];
+  let i = skipWs(src, arrStart + 1, arrEnd - 1);
+  while (i < arrEnd - 1) {
+    i = skipWs(src, i, arrEnd - 1);
+    if (i >= arrEnd - 1) break;
+    if (src[i] === ',') { i++; continue; }
+    const ve = valueEnd(src, i, arrEnd - 1);
+    spans.push({ start: i, end: ve, raw: src.slice(i, ve) });
+    i = ve;
+  }
+  const exists = spans.some((sp) => { try { return parseJsonc(sp.raw) === item; } catch { return false; } });
+  if (exists) return text;
+
+  const ind = indentAt(src, prop.keyStart) + unitIndent(src);
+  const body = JSON.stringify(item);
+  if (!spans.length) {
+    return `${bom}${src.slice(0, arrStart + 1)}\n${ind}${body}\n${indentAt(src, prop.keyStart)}${src.slice(arrEnd - 1)}`;
+  }
+  const last = spans[spans.length - 1];
+  return `${bom}${src.slice(0, last.end)},\n${ind}${body}${src.slice(last.end)}`;
 }
 
 export function getAtPath(text, keys) {

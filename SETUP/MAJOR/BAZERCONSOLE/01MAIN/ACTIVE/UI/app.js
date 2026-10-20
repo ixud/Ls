@@ -15,7 +15,7 @@
     advisor: 'คุยจากบริบทในแชต อ่าน/แก้ไม่ได้เลย',
   };
 
-  let S = null, TAB = 'overview', FILE_SUB = 'all', SET_SUB = 'full', DRAFTS = {}, BUSY = false, PALETTE_SEL = 0, PALETTE_ITEMS = [];
+  let S = null, TAB = 'overview', FILE_SUB = 'all', SET_SUB = 'full', DRAFTS = {}, FULL_DRAFT = {}, BUSY = false, PALETTE_SEL = 0, PALETTE_ITEMS = [];
   let MODELS = { ok: false, models: [], providers: [], error: '' };
 
   async function api(path, opts = {}) {
@@ -84,7 +84,8 @@
       providers: Array.isArray(mr?.providers) ? mr.providers : [],
       error: mr?.error || (modelsRes.status === 'rejected' ? modelsRes.reason?.message || 'โหลดรายชื่อโมเดลไม่ได้' : ''),
     };
-    DRAFTS = {};
+    // ไม่ล้าง DRAFTS ทั้งก้อน — ผู้ใช้อาจพิมพ์ค้างไว้แล้วมี action อื่นทำงานเบื้องหลัง
+    // (ค่าที่บันทึกสำเร็จจะถูกล้างเป็นราย id ใน act({ dropDrafts }))
     render();
   }
 
@@ -107,6 +108,14 @@
       const label = r.ok ? (r.warn ? 'ยังไม่พร้อม' : 'สำเร็จ') : 'ไม่สำเร็จ';
       toast(label, r.summary || '', kind);
       if (r.law) S.law = r.law;
+      // ล้างเฉพาะช่องที่บันทึกสำเร็จจริง (ช่องที่ล้มต้องไม่หายจากจอ)
+      if (id === 'settings-save' && r.ok !== false) ARENA = null;
+      for (const x of r.settings?.results || []) if (x.ok) delete DRAFTS[x.id];
+      if (r.full?.file) delete FULL_DRAFT[r.full.file];
+      if (Array.isArray(r.list)) SYS.list = r.list;
+      if (Array.isArray(r.backups)) SYS.backups = r.backups;
+      if (r.locate) SYS.locate = r.locate;
+      if (r.patch) SYS.locate = r.patch;
       await load(id === 'probe' || id === 'self-check');
     } catch (e) {
       toast('ผิดพลาด', e.message, 'err');
@@ -147,6 +156,7 @@
       renderModes();
       renderFiles();
       renderSettings();
+      renderSystem();
       renderHistory();
       showTab(TAB);
     } catch (e) {
@@ -157,7 +167,8 @@
 
   function renderHeader() {
     const p = S.plan;
-    const todo = p.summary.missing + p.summary.stale;
+    const todo = p.summary.actionable ?? (p.summary.missing + p.summary.stale);
+    const manual = p.summary.manualOnly || 0;
     $('#subtitle').textContent = `${S.app.platform} · node ${S.app.node} · ${S.app.root}`;
     $('#cmdBtn').textContent = S.app.platform === 'darwin' ? '⌘ K' : 'Ctrl K';
     const ladder = S.policies.find((x) => x.mode === 'buddha') || S.policies[0];
@@ -165,7 +176,8 @@
       ? ladder.levels.find((l) => String(l.id) === String(S.policyState.level))
       : ladder.levels.find((l) => String(l.id) === String(ladder.defaultLevel));
     $('#statusStrip').innerHTML = [
-      `<span class="pill ${todo ? 'warn' : 'ok'}"><span class="dot"></span>ต้องทำ <b>${todo}</b></span>`,
+      `<span class="pill ${todo ? 'warn' : 'ok'}"><span class="dot"></span>ติดตั้งได้ <b>${todo}</b></span>`,
+      manual ? `<span class="pill warn"><span class="dot"></span>ต้องสั่งเอง <b>${manual}</b></span>` : '',
       `<span class="pill ${p.summary.broken ? 'bad' : 'ok'}"><span class="dot"></span>ไม่ทำงาน <b>${p.summary.broken}</b></span>`,
       `<span class="pill ${S.law.ok ? 'ok' : 'bad'}"><span class="dot"></span>กฎ <b>${S.law.ok ? 'ผ่าน' : 'ไม่ผ่าน'}</b></span>`,
       `<span class="pill"><span class="dot" style="background:var(--buddha)"></span>BUDDHA <b>${esc(pol?.name || '-')}</b></span>`,
@@ -193,10 +205,13 @@
 
   function renderOverview() {
     const p = S.plan;
-    const wired = new Set(['policy-set', 'policy-undo', 'settings-save', 'settings-full', 'pstack-preset', 'rollback', 'apply', 'builtin-toggle', 'retire-old-flow', 'history-list', 'probe', 'plannotator-patch', 'plannotator-locate', 'cleanup-plan', 'cleanup-old', 'reset-template', 'lock-restore']);
+    const wired = new Set(['policy-set', 'policy-undo', 'settings-save', 'settings-full', 'pstack-preset', 'rollback', 'apply', 'builtin-toggle', 'retire-old-flow', 'history-list', 'probe', 'plannotator-locate', 'lock-snapshot', 'cleanup-plan', 'cleanup-old', 'reset-template', 'lock-restore', 'law-check', 'install-tools', 'open-target']);
     const heroIds = new Set(['self-check', 'plan', 'apply']);
     const hero = [...heroIds].map((id) => S.actions.find((a) => a.id === id)).filter(Boolean);
-    const acts = S.actions.filter((a) => (a.group === 'overview' || !wired.has(a.id)) && !heroIds.has(a.id));
+    // ปุ่มที่มีที่กดเฉพาะที่แล้ว (ไม่ต้องลงการ์ด "เครื่องมืออื่น" ซ้ำ)
+    const placed = new Set(['install-tools', 'law-check']);
+    const installAct = S.actions.find((a) => a.id === 'install-tools');
+    const acts = S.actions.filter((a) => (a.group === 'overview' || !wired.has(a.id)) && !heroIds.has(a.id) && !placed.has(a.id));
     const probeRows = S.probes ? S.probes.results.map((r) => `<tr>
         <td>${esc(r.title)}</td><td>${r.ok ? '<span class="badge ok">ผ่าน</span>' : `<span class="badge ${r.severity === 'fail' ? 'missing' : 'stale'}">${r.severity === 'fail' ? 'ตก' : 'เตือน'}</span>`}</td>
         <td class="mono muted">${esc(r.detail || '')}</td></tr>`).join('') : '';
@@ -205,10 +220,17 @@
       <div class="card" style="border-color:rgba(235,137,91,0.38)">
         <div class="btn-row">
           ${hero.map((a) => `<button class="btn ${a.id === 'apply' ? 'primary' : ''}" data-act="${esc(a.id)}">${esc(a.cta || a.title)}</button>`).join('')}
+          ${installAct ? `<button class="btn danger" data-act="install-tools">${esc(installAct.cta || installAct.title)}</button>` : ''}
         </div>
-        <p class="hint" style="margin-top:10px">${p.summary.missing + p.summary.stale > 0
-          ? `ยังมี ${p.summary.missing + p.summary.stale} รายการที่ไม่ตรงกับ MAJOR — กด “ติดตั้ง / อัพเดตทั้งหมด” (backup ทุกไฟล์)`
-          : 'ทุกอย่างตรงกับ MAJOR แล้ว — กด “ตรวจของจริง” เพื่อยืนยันว่า OpenCode อ่านค่าจริง'}</p>
+        <p class="hint" style="margin-top:10px">${(p.summary.actionable || 0) > 0
+          ? `มี ${p.summary.actionable} รายการที่ “ติดตั้ง / อัพเดตทั้งหมด” เขียนให้ได้เลย (backup ทุกไฟล์)`
+          : 'ไม่มีอะไรให้ติดตั้งอัตโนมัติ — ดูรายการ “ต้องสั่งเอง” ด้านล่าง'}</p>
+        ${(p.summary.manualOnly || 0) > 0 ? `<div class="card" style="margin-top:10px;border-color:rgba(255,196,0,.35)">
+          <p><strong>ต้องสั่งเอง ${p.summary.manualOnly} รายการ</strong> <span class="small muted">(auto=false — ตั้งใจไม่ให้ “ติดตั้งทั้งหมด” แตะ ต้องสั่งเป็นรายตัว)</span></p>
+          <ul class="small" style="margin:8px 0 0 16px">${p.entries.filter((e) => ['missing', 'stale'].includes(e.state) && e.writable && !e.auto).map((e) => `<li>${esc(e.title)} <span class="mono muted">${esc(e.id)}</span> <button class="btn tiny" data-apply-one="${esc(e.id)}">ติดตั้งรายตัว</button></li>`).join('')}</ul>
+        </div>` : ''}
+        ${(p.summary.locked || 0) > 0 ? `<p class="hint">มี ${p.summary.locked} ไฟล์ที่เป็นของคุณเอง (ต่างจากแม่แบบ) — ระบบไม่ทับให้ กด “รีเซ็ต” ในแท็บ ไฟล์ &amp; สกิล ถ้าต้องการให้ตรงแม่แบบ</p>` : ''}
+        <p class="hint">ยังไม่มี Node/OpenCode/Plannotator บนเครื่อง? กด “ติดตั้งเครื่องมือที่ขาด” (ต้องมีเน็ต · ไม่ติดตั้งอะไรโดยไม่ยืนยัน)</p>
       </div>
       <div class="grid c4" style="margin-top:12px">
         <div class="card"><p>ต้องติดตั้ง</p><div class="big" style="color:var(--bad)">${p.summary.missing}</div></div>
@@ -220,6 +242,7 @@
       ${(S.drift || []).length ? `<h2 class="section">ค่าถูกเปลี่ยนหลังล็อก</h2><div class="card"><ul class="small">${S.drift.map((d) => `<li><strong>${esc(d.mode)}</strong>: ตั้งไว้ <code>${esc(d.was.model || '-')}/${esc(d.was.variant || '-')}</code> แต่ตอนนี้ <code>${esc(d.now.model || '-')}/${esc(d.now.variant || '-')}</code></li>`).join('')}</ul><div class="btn-row" style="margin-top:10px"><button class="btn primary" data-act="lock-restore">ล็อกคืนตาม snapshot</button></div></div>` : ''}
       <h2 class="section">เครื่องมืออื่น</h2>
       <div class="grid c3">${acts.map(actionCard).join('')}</div><h2 class="section">กฎ 4 ข้อ</h2>
+      <div class="btn-row" style="margin-bottom:10px"><button class="btn ghost" data-act="law-check">ตรวจกฎ 4 ข้ออีกครั้ง</button></div>
       <div class="grid c2">${S.law.rules.map(lawCard).join('')}</div>
       <h2 class="section">ของจริง (probe)</h2>
       <div class="card">
@@ -228,11 +251,341 @@
       </div>`;
   }
 
+  /* ---------------- models: dropdown ---------------- */
+  const MODEL_IDS = () => (MODELS.models || []).map((m) => m.id);
+  const MODEL_LABEL = (id) => (MODELS.models || []).find((m) => m.id === id)?.name || id;
+  const EFFORTS = ['default', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+  function modelDropdown(id, value, { placeholder = '— ยังไม่ตั้ง —' } = {}) {
+    const opts = MODEL_IDS();
+    const custom = !!value && !opts.includes(value);
+    return `<select data-model="${esc(id)}">
+        <option value="">${esc(placeholder)}</option>
+        ${opts.map((m) => `<option value="${esc(m)}" ${m === value ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+        <option value="__custom" ${custom ? 'selected' : ''}>กำหนดเอง…</option>
+      </select>
+      <input data-draft="${esc(id)}" data-custom-input="1" value="${esc(value || '')}" placeholder="provider/model-id" ${custom ? '' : 'hidden'} />`;
+  }
+
+  /* ---------------- arena editor (runner/judge กี่ตัวก็ได้ · effort รายตัว) ---------------- */
+  let ARENA = null;
+  const parseList = (v) => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+
+  function arenaState() {
+    if (ARENA) return ARENA;
+    // รูปแบบหลัก: model#effort (Console เก็บแบบนี้ตั้งแต่บันทึก)
+    // รองรับไฟล์เก่า: model เดี่ยว + บรรทัด `arena runner efforts: …` แยก
+    const legacy = (v) => parseList(v);
+    const mk = (models, efforts) => parseList(models).map((raw, i) => {
+      const hash = raw.lastIndexOf('#');
+      const inlineModel = hash > 0 ? raw.slice(0, hash) : raw;
+      const inlineEffort = hash > 0 ? raw.slice(hash + 1) : '';
+      const fromLegacy = legacy(efforts)[i];
+      const effort = EFFORTS.includes(inlineEffort) ? inlineEffort : EFFORTS.includes(fromLegacy) ? fromLegacy : 'default';
+      return { model: inlineModel, effort };
+    });
+    ARENA = {
+      runners: mk(S.settingsValues['arena.runners'], S.settingsValues['arena.runnerEffort']),
+      judges: mk(S.settingsValues['arena.judge'], S.settingsValues['arena.judgeEffort']),
+    };
+    return ARENA;
+  }
+  const which = (side) => (side === 'runners' ? 'runners' : 'judges');
+  const nth = (list, model, idx) => list.slice(0, idx + 1).filter((s) => s.model === model).length;
+
+  function arenaChip(side, idx, s) {
+    const list = arenaState()[which(side)];
+    const n = nth(list, s.model, idx);
+    const total = list.filter((x) => x.model === s.model).length;
+    return `<span class="chip" data-side="${esc(side)}" data-idx="${idx}">
+      <b>${side === 'runners' ? 'runner' : 'judge'}</b>
+      <span class="chip-name" title="${esc(s.model)}">${esc(s.model)}</span>
+      ${total > 1 ? `<i>#${n}</i>` : ''}
+      <span class="chip-eff">${esc(s.effort)}</span>
+      <button class="chip-x" data-chip-dup="${esc(side)}:${idx}" title="เพิ่มตัวซ้ำ">＋</button>
+      <button class="chip-x" data-chip-rm="${esc(side)}:${idx}" title="ลบ">×</button>
+    </span>`;
+  }
+
+  function renderArenaEditor() {
+    const a = arenaState();
+    const row = (side, title, hint) => `
+      <div class="arena-row">
+        <div class="arena-row-head"><strong>${title}</strong> <span class="small muted">${hint}</span></div>
+        <div class="chips">
+          ${a[side].map((s, i) => arenaChip(side === 'runners' ? 'runners' : 'judges', i, s)).join('') || '<span class="empty small">ยังไม่มี — กด “เพิ่มโมเดล”</span>'}
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn tiny" data-arena-add="${side}">+ เพิ่มโมเดล</button>
+          ${a[side].length ? `<button class="btn tiny ghost" data-arena-dup="${side}">+ ซ้ำตัวสุดท้าย</button>` : ''}
+        </div>
+      </div>`;
+
+    const matrix = EFFORTS.map((eff) => {
+      const slots = [];
+      for (const side of ['runners', 'judges']) {
+        a[side].forEach((s, i) => {
+          if (s.effort === eff) slots.push({ side, idx: i, s });
+        });
+      }
+      return `<div class="eff-box" data-eff="${eff}">
+        <div class="eff-head"><strong>${eff}</strong><span class="small muted">${slots.length} ตัว</span></div>
+        <div class="chips">${slots.map((x) => `<span class="chip small">
+            <b>${x.side === 'runners' ? 'runner' : 'judge'}</b> ${esc(x.s.model)}${nth(a[x.side], x.s.model, x.idx) > 1 ? `<i>#${nth(a[x.side], x.s.model, x.idx)}</i>` : ''}
+            <button class="chip-x" data-eff-reset="${x.side}:${x.idx}" title="กลับเป็น default">×</button>
+          </span>`).join('') || '<span class="small muted">—</span>'}</div>
+        <button class="btn tiny ghost" data-eff-add="${eff}" style="margin-top:6px">+ เลือกโมเดล</button>
+      </div>`;
+    }).join('');
+
+    const total = a.runners.length + a.judges.length;
+    return `<div class="card">
+      ${row('runners', 'ผู้แข่ง (runner)', 'กี่ตัวก็ได้ · ซ้ำได้ · รันพร้อมกัน ลำดับไม่สำคัญ')}
+      ${row('judges', 'กรรมการ (judge)', 'ควรต่างตระกูลจาก runner')}
+      <details class="adv" ${total > 1 ? 'open' : ''}>
+        <summary>กำหนด effort รายตัว (${total} ที่นั่ง)</summary>
+        <p class="hint">แต่ละโมเดลตั้ง effort แยกได้ — กด “+ เลือกโมเดล” ในกล่องที่ต้องการ</p>
+        <div class="eff-grid">${matrix}</div>
+      </details>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn primary" data-save-group="arena">บันทึก ARENA</button>
+        <button class="btn ghost" data-reload="1">โหลดค่าใหม่</button>
+        <span class="small muted">${MODELS.excluded ? `ซ่อน ${MODELS.excluded} โมเดลที่ไม่ใช่ Harness` : ''}</span>
+      </div>
+    <p class="hint">เขียนลง <code>~/.agents/pstack-models.md</code> — <code>arena runners: model#effort, model#effort</code> · <code>arena cross-judge pool: model#effort</code> (ลำดับ = ที่นั่ง · ซ้ำได้)</p>
+      <p class="hint">${esc(modelHint())}</p>
+    </div>`;
+  }
+
+  /** เปิด panel เลือกหลายรายการ (ค้นหาได้ · ไม่ใช้ <select multiple>) */
+  function openPick({ title, note = '', items, selected = [], onDone }) {
+    const sel = new Set(selected);
+    const render = (q = '') => {
+      const list = items.filter((i) => `${i.label} ${i.id}`.toLowerCase().includes(q.toLowerCase()));
+      $('#modalBody').innerHTML = `
+        <p class="hint">${esc(note)}</p>
+        <input id="pickSearch" placeholder="ค้นหา…" value="${esc(q)}" />
+        <div class="pick-list">${list.map((i) => `<label class="pick-row">
+          <input type="checkbox" data-pick="${esc(i.id)}" ${sel.has(i.id) ? 'checked' : ''} />
+          <span>${esc(i.label)}</span>
+          <code class="small">${esc(i.id)}</code>
+        </label>`).join('') || '<div class="empty">ไม่พบ</div>'}</div>`;
+      const search = $('#pickSearch');
+      search.oninput = () => render(search.value);
+      $$('[data-pick]').forEach((el) => {
+        el.onchange = () => { if (el.checked) sel.add(el.dataset.pick); else sel.delete(el.dataset.pick); };
+      });
+      search.focus();
+      search.setSelectionRange(q.length, q.length);
+    };
+    openModal({
+      title,
+      body: '',
+      foot: '<button class="btn ghost" data-close="1">ยกเลิก</button><button class="btn primary" id="pickGo">ตกลง</button>',
+    });
+    render('');
+    $('#pickGo').onclick = () => { closeModal(); onDone([...sel]); };
+  }
+
+  const modelItems = () => (MODELS.models || []).map((m) => ({ id: m.id, label: m.label || m.id }));
+
+  function arenaAdd(side) {
+    const cur = new Set(arenaState()[side].map((s) => s.model));
+    openPick({
+      title: `เพิ่ม${side === 'runners' ? 'ผู้แข่ง' : 'กรรมการ'}`,
+      note: MODELS.ok ? `เลือกได้หลายตัว (ซ้ำได้ภายหลังด้วยปุ่ม ＋) · ${MODELS.models.length} โมเดล` : esc(modelHint()),
+      items: modelItems().filter((i) => !cur.has(i.id) || true),
+      selected: [],
+      onDone: (ids) => {
+        if (!ids.length) return;
+        for (const id of ids) arenaState()[side].push({ model: id, effort: 'default' });
+        renderModes();
+      },
+    });
+  }
+
+  function arenaPickEffort(eff) {
+    const a = arenaState();
+    const slots = [];
+    for (const side of ['runners', 'judges']) a[side].forEach((s, i) => slots.push({ id: `${side}:${i}`, label: `${side === 'runners' ? 'runner' : 'judge'}-${s.model}`, cur: s.effort, side, idx: i }));
+    const items = slots.map((s) => ({ id: s.id, label: `${s.label} (ตอนนี้: ${s.cur})` }));
+    const selected = slots.filter((s) => s.cur === eff).map((s) => s.id);
+    openPick({
+      title: `ตั้ง effort = ${eff}`,
+      note: 'เลือกที่นั่งที่จะใช้ effort นี้ (เอาออกจากกล่องอื่นให้อัตโนมัติ)',
+      items,
+      selected,
+      onDone: (ids) => {
+        const chosen = new Set(ids);
+        for (const s of slots) {
+          const next = chosen.has(s.id) ? eff : s.cur === eff ? 'default' : s.cur;
+          arenaState()[s.side][s.idx].effort = next;
+        }
+        renderModes();
+      },
+    });
+  }
+
+  /* ---------------- แท็บ ระบบ ---------------- */
+  let SYS = { backups: null, list: null, patch: null, locate: null };
+
+  function renderSystem() {
+    const p = S.plan;
+    const plugin = p.entries.find((e) => e.id === 'plugin.bazer-flow');
+    const plugProbe = (S.probes?.results || []).find((r) => r.id === 'plugin-registered');
+    const app = S.app;
+    const up = Math.max(0, Math.round((Date.now() - (app.startedAt || Date.now())) / 1000));
+    const hhmm = `${Math.floor(up / 3600)} ชม. ${Math.floor((up % 3600) / 60)} น.`;
+    const backups = SYS.backups || [];
+    const loc = SYS.locate;
+
+    $('#view-system').innerHTML = `
+      <h2 class="section">ปลั๊กอิน gate (bazer-flow)</h2>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>ต้นทางใน MAJOR → ปลายทางในเครื่อง</h3>
+          <span>${badge(plugin?.state || 'design')}</span>
+        </div>
+        <p class="muted">Console เทียบไฟล์จริงกับ <code>AGENT/04PLUGIN/bazer-flow</code> — กดติดตั้งแล้วไฟล์ส่วนเกิน (ซากรุ่นเก่า) จะถูกย้ายเข้า backup ไม่ลบทิ้ง</p>
+        <p class="hint">ลงทะเบียนใน config: ${plugProbe ? (plugProbe.ok ? '<b>มีแล้ว</b>' : '<b>ยังไม่มี</b>') : 'ยังไม่ได้ตรวจ (กด “ตรวจของจริง”)'} · ${esc(plugin?.target || '')}</p>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn primary" data-apply-one="plugin.bazer-flow">ติดตั้ง / อัปเดตไฟล์</button>
+          <button class="btn danger" data-act="plugin-register" data-params='{"name":"bazer-flow"}'>ลงทะเบียนใน config</button>
+          <button class="btn ghost" data-act="retire-old-flow">ถอดจาก config</button>
+          <button class="btn ghost" data-act="probe">ตรวจของจริง</button>
+        </div>
+      </div>
+
+      <h2 class="section">เครื่องมือ</h2>
+      <div class="grid c2">
+        <div class="card"><h3>ติดตั้งเครื่องมือที่ขาด</h3>
+          <p>Node · OpenCode · ปลั๊กอิน Plannotator — ตรวจผ่าน probe (รวม version ขั้นต่ำ)</p>
+          <div class="btn-row" style="margin-top:10px"><button class="btn" data-act="install-tools">ตรวจ/ติดตั้ง</button></div>
+        </div>
+        <div class="card"><h3>ปลั๊กอินที่ OpenCode เห็น</h3>
+          <p>อ่านจาก <code>opencode plugin list</code></p>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn ghost" data-act="plugin-list">ดูรายการ</button>
+            <button class="btn danger" data-act="plugin-update" data-params='{"package":"@plannotator/opencode"}'>อัพเดต Plannotator plugin</button>
+          </div>
+          ${SYS.list ? `<pre class="code small" style="margin-top:10px">${esc(SYS.list.join('\n'))}</pre>` : ''}
+        </div>
+      </div>
+
+      <h2 class="section">Plannotator</h2>
+      <div class="card">
+        <p class="muted">"อนุมัติแล้วกลับโหมดไหน" เป็น <strong>ค่าที่เลือกในหน้า review UI</strong> ของ Plannotator (ปลั๊กอินจะเรียก <code>session.switchAgent</code> ให้) — ไม่มีไฟล์ให้ Console แพตช์ · ที่ Console ตั้งได้คือ <code>options</code> ของปลั๊กอิน</p>
+        ${loc ? `<p class="hint">รูปแบบที่ตรวจเจอ: <b>${esc(loc.kind === 'cli-only' ? 'UI ฝังใน exe (CLI)' : loc.kind === 'files' ? 'มีไฟล์ปลั๊กอิน' : 'ไม่พบ')}</b> · สแกน ${loc.scanned} ไฟล์ ใน ${loc.roots.length} โฟลเดอร์</p>` : ''}
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn ghost" data-act="plannotator-locate">ตรวจ Plannotator</button>
+          <button class="btn ghost" data-act="open-target" data-params='{"which":"plannotator"}'>เปิดโฟลเดอร์ข้อมูล (plans/config)</button>
+        </div>
+        <p class="hint">Console แตะ Plannotator ได้ 3 อย่างเท่านั้น: <strong>ตรวจ</strong> (เจอ CLI/ปลั๊กอินไหม) · <strong>ตั้ง options</strong> (workflow/runtime/planningAgents) · <strong>เปิดโฟลเดอร์ข้อมูล</strong> — ไม่มีการแพตช์ไฟล์ เพราะ UI อยู่ใน exe</p>
+        <div class="arena-bar" style="margin-top:14px">
+          <div class="field"><label>workflow</label>
+            <select id="plWorkflow">
+              <option value="plan-agent">plan-agent (ค่าเริ่มต้น)</option>
+              <option value="user-managed">user-managed (Console/เรา คุม permission เอง)</option>
+              <option value="all-agents">all-agents</option>
+              <option value="manual">manual (ไม่ลงทะเบียน tool)</option>
+            </select>
+          </div>
+          <div class="field"><label>runtime</label>
+            <select id="plRuntime">
+              <option value="">auto</option>
+              <option value="cli">cli (บังคับใช้ CLI)</option>
+            </select>
+          </div>
+          <div class="field"><label>planningAgents</label>
+            <select id="plTarget">
+              <option value="buddha">buddha</option>
+              <option value="bazer">bazer</option>
+            </select>
+          </div>
+          <button class="btn primary" id="plSave">บันทึก options</button>
+        </div>
+        <p class="hint">งานของเราใช้ <code>user-managed</code> ได้ถ้าไม่อยากให้ปลั๊กอินแก้ prompt/permission เอง (gate เป็นหน้าที่ของ <code>bazer-flow</code> + <code>PLANNOTATOR</code> อยู่แล้ว) · มีผลหลังเปิด OpenCode ใหม่</p>
+      </div>
+
+      <h2 class="section">Backup</h2>
+      <div class="card">
+        <div class="btn-row" style="margin-bottom:10px"><button class="btn ghost" data-act="backup-list">ดูรายการ backup</button></div>
+        ${backups.length ? `<table><thead><tr><th>รอบ</th><th>เวลา</th><th>ไฟล์</th><th></th></tr></thead><tbody>${backups.map((b) => `<tr>
+            <td class="mono small">${esc(b.stamp)}</td>
+            <td class="small muted">${esc((b.at || '').replace('T', ' ').slice(0, 19))}</td>
+            <td class="small">${b.count} ไฟล์${b.pruned ? ' · มีไฟล์ที่ถูก prune' : ''}</td>
+            <td><button class="btn tiny ghost" data-bk-open="${esc(b.stamp)}">ดูไฟล์</button></td>
+          </tr>`).join('')}</tbody></table>` : '<div class="empty">กด “ดูรายการ backup” เพื่ออ่านจาก var/backups</div>'}
+      </div>
+
+      <h2 class="section">เซิร์ฟเวอร์</h2>
+      <div class="card">
+        <table><tbody>
+          <tr><td class="muted">พอร์ต</td><td class="mono">${app.port}</td></tr>
+          <tr><td class="muted">PID</td><td class="mono">${app.pid}</td></tr>
+          <tr><td class="muted">ทำงานมา</td><td class="mono">${hhmm}</td></tr>
+          <tr><td class="muted">โหมด home</td><td class="mono small">${esc(app.home || '(เครื่องนี้)')}</td></tr>
+          <tr><td class="muted">MAJOR</td><td class="mono small">${esc(app.root)}</td></tr>
+          <tr><td class="muted">node</td><td class="mono small">${esc(app.node)}</td></tr>
+        </tbody></table>
+        <div class="btn-row" style="margin-top:10px"><button class="btn ghost" data-act="open-target" data-params='{"which":"plugins"}'>เปิดโฟลเดอร์ปลั๊กอิน</button></div>
+      </div>`;
+  }
+
+  function openBackupFiles(stamp) {
+    const b = (SYS.backups || []).find((x) => x.stamp === stamp);
+    if (!b) return;
+    openModal({
+      title: `backup ${stamp}`,
+      body: `<p class="hint">เลือกไฟล์ที่จะคืน — ระบบสำรองของปัจจุบันก่อนเขียนทับเสมอ</p>
+        <table><thead><tr><th>ไฟล์</th><th>ปลายทาง</th><th></th></tr></thead><tbody>
+        ${b.items.map((it) => `<tr>
+          <td class="mono small">${esc(it.name)}</td>
+          <td class="mono small muted">${esc(it.target)}</td>
+          <td><button class="btn tiny danger" data-bk-restore="${esc(it.target)}" data-bk-stamp="${esc(stamp)}">คืนไฟล์นี้</button></td>
+        </tr>`).join('') || '<tr><td colspan="3" class="empty">รอบนี้ไม่มีไฟล์</td></tr>'}
+        </tbody></table>`,
+      foot: '<button class="btn ghost" data-close="1">ปิด</button>',
+    });
+  }
+
   function renderModes() {
     const agents = S.plan.entries.filter((e) => e.kind === 'agent');
-    const ladder = S.policies.find((x) => x.mode === 'buddha') || S.policies[0];
-    const cur = S.policyState?.policyId === ladder.id ? String(S.policyState.level) : String(ladder.defaultLevel);
-    const arenaCtl = S.settings.groups.find((g) => g.id === 'arena').controls;
+    const ladders = S.policies.filter((x) => x.mode === 'buddha' || x.mode === 'bazer');
+    const curOf = (l) => {
+      const det = (S.policyDetected || {})[l.id];
+      if (det?.level && det.level !== 'custom') return String(det.level);
+      const st = (S.policyStateAll || {})[l.id];
+      const legacy = S.policyState?.policyId === l.id ? S.policyState.level : null;
+      return String(st?.level ?? legacy ?? l.defaultLevel);
+    };
+    const srcOf = (l) => {
+      const det = (S.policyDetected || {})[l.id];
+      if (det?.level === 'custom') return 'กำหนดเอง (ไม่ตรงขั้นไหนในบันได)';
+      if (det?.level) return `อ่านจาก ${l.mode === 'bazer' ? 'bazer' : 'buddha'}.md/config`;
+      return 'ยังไม่มีค่าใน config (ใช้ขั้นเริ่มต้น)';
+    };
+    const ladderCard = (l) => {
+      const cur = curOf(l);
+      const who = l.mode === 'buddha' ? 'BUDDHA' : 'BAZER';
+      return `<h2 class="section">บันไดเหมาเข่ง · ${who}</h2>
+      <div class="card">
+        <p class="muted">กดขั้นที่ต้องการ → ยืนยัน → เขียนค่าลง <code>opencode.jsonc</code> + frontmatter ของ agent ทันที · มีผลกับ session ใหม่</p>
+        <div class="ladder" style="margin-top:12px">
+          ${l.levels.map((x) => `<div class="step ${String(x.id) === cur ? 'active' : ''}" data-ladder="${esc(x.id)}" data-policy="${esc(l.id)}">
+            <div class="num">${esc(x.id)}</div>
+            <div><div class="name">${esc(x.name)} <span class="tag">· ${esc(x.tagline || '')}</span></div><span class="risk-why">${esc(x.why)}</span></div>
+            <div>${riskBadge(x.risk)}</div>
+          </div>`).join('')}
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn ghost" data-act="policy-undo" data-params='{"policy":"${esc(l.id)}"}'>ย้อนระดับก่อนหน้า (${who})</button>
+          ${badge(S.policyDetected?.[l.id]?.level && S.policyDetected[l.id].level !== 'custom' ? 'ok' : 'design')}
+          <span class="small muted">ตอนนี้: ${esc(l.levels.find((x) => String(x.id) === cur)?.name || '-')} (ขั้น ${esc(cur)}) · ${esc(srcOf(l))}</span>
+        </div>
+      </div>`;
+    };
+    const arenaCtl = S.settings.groups.find((g) => g.id === 'arena')?.controls || [];
 
     const modeCards = agents.map((e) => {
       const key = e.id.split('.').pop();
@@ -247,43 +600,19 @@
       <h2 class="section">โหมดหลัก</h2>
       <div class="grid c2">${modeCards}</div>
 
-      <h2 class="section">บันไดเหมาเข่ง · BUDDHA เท่านั้น</h2>
-      <div class="card">
-        <p class="muted">กดขั้นที่ต้องการ → ยืนยัน → เขียนค่าลง <code>opencode.jsonc</code> ทันที (ไม่ต้องกดอัพเดตอีกที) · มีผลกับ session ใหม่</p>
-        <div class="ladder" style="margin-top:12px">
-          ${ladder.levels.map((l) => `<div class="step ${String(l.id) === cur ? 'active' : ''}" data-ladder="${esc(l.id)}">
-            <div class="num">${esc(l.id)}</div>
-            <div><div class="name">${esc(l.name)} <span class="tag">· ${esc(l.tagline || '')}</span></div><span class="risk-why">${esc(l.why)}</span></div>
-            <div>${riskBadge(l.risk)}</div>
-          </div>`).join('')}
-        </div>
-        <div class="btn-row" style="margin-top:12px">
-          <button class="btn ghost" data-act="policy-undo">ย้อนระดับก่อนหน้า</button>
-          ${badge(S.policyState ? 'ok' : 'design')}<span class="small muted">ตอนนี้: ${esc(ladder.levels.find((l) => String(l.id) === cur)?.name || '-')}</span>
-        </div>
-      </div>
+      ${ladders.map(ladderCard).join('')}
 
       <h2 class="section">โมเดล &amp; Effort ของ ARENA</h2>
-      <div class="card">
-        <div class="arena-bar">
-          ${arenaCtl.map((c) => `<div class="field"><label>${esc(c.label)}</label>
-            <input data-draft="${esc(c.id)}" ${c.type === 'model-list' ? 'data-list="1"' : ''} ${['model', 'model-list'].includes(c.type) ? 'list="bazer-models"' : ''} value="${esc(DRAFTS[c.id] ?? S.settingsValues[c.id] ?? '')}" placeholder="${esc(c.placeholder || '')}" />
-            ${riskBadge(c.risk.level, c.risk.why, false)}</div>`).join('')}
-          <button class="btn primary" data-save-group="arena">บันทึก ARENA</button>
-        </div>
-        <p class="hint">เขียนลง <code>${esc('~/.agents/pstack-models.md')}</code> — ใช้ร่วมกับ Arena ใน BUDDHA</p>
-        <p class="hint">${esc(modelHint())}</p>
-      </div>
+      ${renderArenaEditor()}
 
-      <h2 class="section">ปุ่มอนุมัติ Plannotator</h2>
+      <h2 class="section">Plannotator</h2>
       <div class="card">
-        <p class="muted">กำหนดว่าหลังกดอนุมัติแล้วจะกลับไปโหมดไหน — เขียนลงไฟล์ของปลั๊กอิน (ต้องติดตั้ง Plannotator ก่อน)</p>
+        <p class="muted">"อนุมัติแล้วกลับโหมดไหน" เลือกในหน้า review UI (ปลั๊กอินเรียก <code>session.switchAgent</code>) — งานของเราไม่พึ่งค่านั้น เพราะ <code>bazer-flow</code> ล็อกเซสชันไว้ และ <code>PLANNOTATOR</code> อ่านผลจาก <code>--result-file</code></p>
+        <p class="hint">ตั้ง <code>workflow</code> / <code>runtime</code> / <code>planningAgents</code> ได้ที่ <strong>แท็บ ระบบ → Plannotator</strong></p>
         <div class="btn-row" style="margin-top:10px">
-          <button class="btn ghost" data-act="plannotator-locate">ตรวจหาไฟล์</button>
-          <button class="btn" data-patch="buddha">แพตช์ → BUDDHA</button>
-          <button class="btn" data-patch="bazer">แพตช์ → BAZER</button>
+          <button class="btn ghost" data-act="plannotator-locate">ตรวจ Plannotator</button>
+          <button class="btn ghost" data-act="open-target" data-params='{"which":"plannotator"}'>เปิดโฟลเดอร์ข้อมูล</button>
         </div>
-        <p class="hint">ข้อจำกัด: ปุ่มของ Plannotator เป็นปุ่มเดียว (global) — เลือกได้ว่ากลับโหมดไหน; ถ้าต้องการสลับตามผู้เรียกอัตโนมัติ ต้องรอ Plannotator รองรับ per-agent (PLANNOTATOR จะรายงานถ้าปุ่มชี้ผิดโหมด)</p>
       </div>
 
       <h2 class="section">โหมดที่มากับ OpenCode</h2>
@@ -299,7 +628,8 @@
   }
 
   function entryRow(e) {
-    const canApply = ['missing', 'stale'].includes(e.state) && e.writable;
+    const canApply = ['missing', 'stale'].includes(e.state) && e.writable && e.auto;
+    const manual = ['missing', 'stale'].includes(e.state) && e.writable && !e.auto;
     const canReset = e.strategy === 'template-once';
     return `<tr>
       <td><div><strong>${esc(e.title)}</strong></div><div class="mono muted small">${esc(e.id)}</div></td>
@@ -309,6 +639,7 @@
       <td style="white-space:nowrap">
         <button class="btn tiny ghost" data-diff="${esc(e.id)}">ดู diff</button>
         ${canApply ? `<button class="btn tiny" data-apply-one="${esc(e.id)}">ติดตั้ง</button>` : ''}
+        ${manual ? '<span class="small muted" title="auto=false — ต้องสั่งจากหน้า โหมด &amp; สิทธิ์ หรือ Ctrl+K">สั่งเอง</span>' : ''}
         ${canReset ? `<button class="btn tiny danger" data-reset="${esc(e.id)}">รีเซ็ต</button>` : ''}
       </td></tr>`;
   }
@@ -350,6 +681,13 @@
         ${[['all', 'ทั้งหมด'], ['pstack', 'PSTACK'], ['bazer', 'BAZER'], ['foreign', `ของเก่า (${oldTotal})`]]
           .map(([k, t]) => `<button data-filesub="${k}" class="${FILE_SUB === k ? 'active' : ''}">${t}</button>`).join('')}
       </div>
+      <div class="btn-row" style="margin:0 0 10px">
+        <span class="small muted">เปิดโฟลเดอร์:</span>
+        <button class="btn tiny ghost" data-params='{"which":"config"}' data-act="open-target">ตั้งค่า OpenCode</button>
+        <button class="btn tiny ghost" data-params='{"which":"skills"}' data-act="open-target">สกิล</button>
+        <button class="btn tiny ghost" data-params='{"which":"major"}' data-act="open-target">MAJOR</button>
+        <button class="btn tiny ghost" data-params='{"which":"backups"}' data-act="open-target">backups</button>
+      </div>
       ${FILE_SUB === 'foreign'
         ? renderCleanup()
         : `<div class="card"><table><thead><tr><th>รายการ</th><th>สถานะ</th><th>ปลายทาง</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>${rows.map(entryRow).join('')}</tbody></table></div>`}
@@ -358,31 +696,86 @@
 
   function controlField(c) {
     const v = DRAFTS[c.id] ?? S.settingsValues[c.id] ?? '';
-    const isModel = c.type === 'model' || c.type === 'model-list';
-    const isList = c.type === 'keybind-list' || c.type === 'model-list';
+    const isModel = c.type === 'model';
+    const isList = c.type === 'keybind-list';
     const input = c.type === 'select'
       ? `<select data-draft="${esc(c.id)}">${(c.options || []).map((o) => `<option value="${esc(o)}" ${String(o) === String(v) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
       : c.type === 'toggle'
         ? `<label class="small"><input type="checkbox" data-draft="${esc(c.id)}" ${v ? 'checked' : ''} style="width:auto"> เปิด</label>`
-        : `<input data-draft="${esc(c.id)}" ${isList ? 'data-list="1"' : ''} ${isModel ? 'list="bazer-models"' : ''} value="${esc(Array.isArray(v) ? v.join(', ') : v)}" placeholder="${esc(c.placeholder || '')}" type="${c.type === 'number' ? 'number' : 'text'}" />`;
+        : isModel ? modelDropdown(c.id, String(v ?? ''))
+          : `<input data-draft="${esc(c.id)}" ${isList ? 'data-list="1"' : ''} value="${esc(Array.isArray(v) ? v.join(', ') : v)}" placeholder="${esc(c.placeholder || '')}" type="${c.type === 'number' ? 'number' : 'text'}" />`;
     return `<div class="field"><label>${esc(c.label)}</label>${input}${riskBadge(c.risk.level, c.risk.why)}</div>`;
   }
+
+  let QUICK_SUB = 'buddha';
+  const QUICK_MODES = ['buddha', 'bazer', 'snack', 'advisor'];
+  const QUICK_MODE_LABEL = { buddha: 'BUDDHA', bazer: 'BAZER', snack: 'SNACK', advisor: 'ADVISOR' };
+  const KEYBIND_FIXED = ['ctrl+alt+m', 'ctrl+alt+o'];
+  const quickDrift = (mode) => (S.drift || []).find((d) => d.mode === mode);
 
   function renderQuick() {
     const group = S.settings.groups.find((g) => g.id === 'quick');
     if (!group) { $('#view-quick').innerHTML = '<div class="empty">ไม่พบกลุ่ม Quick Access ใน settings.json</div>'; return; }
+    const byId = new Map(group.controls.map((c) => [c.id, c]));
+    const lock = byId.get('lock.models');
+    const sub = QUICK_SUB === 'keys' ? 'keys' : (QUICK_MODES.includes(QUICK_SUB) ? QUICK_SUB : 'buddha');
+
+    const tabs = `
+      <div class="subtabs">
+        ${QUICK_MODES.map((m) => `<button data-quicksub="${m}" class="${sub === m ? 'active' : ''}">${QUICK_MODE_LABEL[m]}</button>`).join('')}
+        <button data-quicksub="keys" class="${sub === 'keys' ? 'active' : ''}">คีย์ลัด</button>
+      </div>`;
+
+    if (sub === 'keys') {
+      const cfg = byId.get('keybind.copy');
+      const cur = S.settingsValues['keybind.copy'];
+      const curTxt = Array.isArray(cur) ? cur.join(', ') : String(cur ?? '');
+      const want = KEYBIND_FIXED.join(', ');
+      $('#view-quick').innerHTML = `
+        ${tabs}
+        <div class="card">
+          <h3>คีย์ copy ข้อความล่าสุด</h3>
+          <p class="hint">ค่าคงที่ของระบบ — ไม่ให้แก้ (เลี่ยงคีย์ชนกัน)</p>
+          <div class="row" style="gap:10px;align-items:center;margin-top:10px">
+            <code class="mono">${esc(want)}</code>
+            ${curTxt === want ? '<span class="badge ok">ตรงแล้ว</span>' : `<span class="badge stale">ตอนนี้: ${esc(curTxt || '(ไม่มี)')}</span>`}
+          </div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn primary" data-fixed-keybind="1" ${curTxt === want ? 'disabled title="ตรงกับค่าคงที่อยู่แล้ว"' : ''}>เขียนคีย์ลัดลงระบบ</button>
+            <button class="btn ghost" data-reload="1">โหลดค่าใหม่</button>
+          </div>
+          ${cfg?.risk ? `<p class="hint">${riskBadge(cfg.risk.level, cfg.risk.why)}</p>` : ''}
+          <p class="hint">เขียนลง <code>tui.json → keybinds.messages_copy</code> (array) — ไม่ทับคีย์อื่น</p>
+        </div>`;
+      return;
+    }
+
+    const d = quickDrift(sub);
     $('#view-quick').innerHTML = `
+      ${tabs}
       <div class="card">
-        <h3>${esc(group.title)}</h3>
-        <p>${esc(group.subtitle || '')}</p>
-        <div class="grid c2" style="margin-top:12px">${group.controls.map(controlField).join('')}</div>
+        <h3>${QUICK_MODE_LABEL[sub]}</h3>
+        <p class="hint">โมเดล + effort ของโหมดนี้ — snapshot/คืนค่าแยกจากโหมดอื่น</p>
+        <div class="grid c2" style="margin-top:12px">
+          ${[byId.get(`model.${sub}`), byId.get(`variant.${sub}`)].filter(Boolean).map(controlField).join('')}
+        </div>
         <div class="btn-row" style="margin-top:14px">
-          <button class="btn primary" data-save-group="quick">บันทึกเฉพาะช่องที่แก้</button>
+          <button class="btn primary" data-quick-save="${sub}">บันทึกเฉพาะช่องที่แก้</button>
           <button class="btn ghost" data-reload="1">โหลดค่าใหม่</button>
+        </div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn" data-lock-snap="${sub}">ถ่าย snapshot โหมดนี้</button>
+          <button class="btn ${d ? 'danger' : ''}" data-lock-back="${sub}" ${d ? '' : 'disabled title="ยังไม่มี drift ของโหมดนี้"'}>คืนค่าตาม snapshot</button>
+          ${d ? `<span class="small" style="color:var(--warn)">drift: ตั้งไว้ <code>${esc(d.was.model || '-')}/${esc(d.was.variant || '-')}</code> · ตอนนี้ <code>${esc(d.now.model || '-')}/${esc(d.now.variant || '-')}</code></span>` : ''}
         </div>
         <p class="hint" style="margin-top:10px">Quick Access แก้เฉพาะคีย์ที่เปลี่ยน — ถ้าต้องแก้ทั้งไฟล์ ไปที่ <strong>ตั้งค่า → การตั้งค่าฉบับเต็ม</strong></p>
         <p class="hint">${esc(modelHint())}</p>
-      </div>`;
+      </div>
+      ${lock ? `<div class="card" style="margin-top:12px">
+        <h3>การเฝ้าค่า (ทั้งระบบ)</h3>
+        ${controlField(lock)}
+        <p class="hint">เป็นการเฝ้าระวัง ไม่ได้บล็อก: ถ้าไฟล์ config ถูกเปลี่ยน ระบบจะขึ้นแบนเนอร์เตือนตอนเปิด Console (ค่าที่เปลี่ยนผ่าน /models ใน session มองไม่เห็น)</p>
+      </div>` : ''}`;
   }
 
   function renderSettings() {
@@ -401,7 +794,7 @@
           ${raw.exists ? '<span class="badge ok">มีไฟล์</span>' : '<span class="badge missing">ยังไม่มี — จะสร้างใหม่</span>'}
         </div>
         <p class="hint">${esc(f.note || '')} · <span class="mono">${esc(raw.file || '')}</span></p>
-        <textarea class="code" data-full="${esc(f.id)}" spellcheck="false">${esc(raw.text || '{\n}\n')}</textarea>
+        <textarea class="code" data-full="${esc(f.id)}" spellcheck="false">${esc(FULL_DRAFT[f.id] ?? raw.text ?? '{\n}\n')}</textarea>
         <div class="btn-row" style="margin-top:10px">
           <button class="btn" data-validate="${esc(f.id)}">ตรวจ JSON</button>
           <button class="btn danger" data-fullsave="${esc(f.id)}">เขียนทับทั้งไฟล์</button>
@@ -459,6 +852,7 @@
       <td><button class="btn tiny danger" data-rollback="${esc(h.stamp)}">ย้อนรอบนี้</button></td></tr>`).join('');
     $('#view-history').innerHTML = `
       <h2 class="section">ประวัติการเขียนไฟล์</h2>
+      <div class="btn-row" style="margin-bottom:10px"><button class="btn ghost" data-act="history-list">อ่านประวัติล่าสุด (200)</button></div>
       <div class="card">${rows ? `<table><thead><tr><th>เวลา</th><th>รายการ</th><th>ไฟล์</th><th>ผล</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty">ยังไม่มีการเขียนไฟล์</div>'}</div>`;
   }
 
@@ -472,13 +866,13 @@
 
   /* ---------------- events ---------------- */
   document.addEventListener('click', async (ev) => {
-    const t = ev.target.closest('[data-close],[data-tab],[data-act],[data-diff],[data-apply-one],[data-reset],[data-patch],[data-ladder],[data-filesub],[data-setsub],[data-save-group],[data-reload],[data-rollback],[data-validate],[data-fullsave]');
+    const t = ev.target.closest('[data-close],[data-tab],[data-quicksub],[data-quick-save],[data-lock-snap],[data-lock-back],[data-fixed-keybind],[data-act],[data-diff],[data-apply-one],[data-reset],[data-ladder],[data-filesub],[data-setsub],[data-save-group],[data-reload],[data-rollback],[data-validate],[data-fullsave]');
     if (!t) return;
 
     if (t.dataset.close) return closeModal();
     if (t.dataset.tab) return showTab(t.dataset.tab);
     if (t.dataset.filesub) { FILE_SUB = t.dataset.filesub; return renderFiles(); }
-    if (t.dataset.setsub) { SET_SUB = t.dataset.setsub; DRAFTS = {}; return renderSettings(); }
+    if (t.dataset.setsub) { SET_SUB = t.dataset.setsub; return renderSettings(); }
     if (t.dataset.reload) return load();
 
     if (t.dataset.validate) {
@@ -522,32 +916,32 @@
       });
     }
 
-    if (t.dataset.patch) {
-      const target = t.dataset.patch;
-      return confirmSheet({
-        title: `แพตช์ปุ่มอนุมัติ → ${target.toUpperCase()}`,
-        risk: { level: 3, why: 'แก้ไฟล์ปลั๊กอิน Plannotator ในเครื่อง — backup ทุกไฟล์และตรวจซ้ำหลังเขียน' },
-        body: `<p>หลังกดอนุมัติใน Plannotator จะกลับไปโหมด <strong>${esc(target)}</strong></p><p class="hint">ปุ่มเป็นปุ่มเดียว (global) — ถ้าเรียกจากอีกโหมด ปุ่มจะชี้ผิด; PLANNOTATOR จะรายงานให้ทราบ</p>`,
-        confirmText: 'แพตช์เลย',
-        onConfirm: () => act('plannotator-patch', { target, apply: true }, { confirmed: true }),
-      });
-    }
-
     if (t.dataset.ladder) {
-      const ladder = S.policies.find((x) => x.mode === 'buddha') || S.policies[0];
+      const policyId = t.dataset.policy || 'buddha-ladder';
+      const ladder = S.policies.find((x) => x.id === policyId) || S.policies.find((x) => x.mode === 'buddha');
+      const who = ladder.mode === 'buddha' ? 'BUDDHA' : 'BAZER';
       const lv = ladder.levels.find((l) => String(l.id) === String(t.dataset.ladder));
       const keys = Object.entries(lv.permission || {}).map(([k, v]) => `<code>${esc(k)}: ${esc(v)}</code>`).join(' · ');
       return confirmSheet({
-        title: `เปลี่ยน BUDDHA เป็นขั้น ${lv.id} · ${lv.name}`,
+        title: `เปลี่ยน ${who} เป็นขั้น ${lv.id} · ${lv.name}`,
         risk: { level: lv.risk, why: lv.why },
         body: `<p>${esc(lv.tagline || '')}</p><p class="small muted">ค่าที่จะเขียน: ${keys || '(ไม่ระบุ)'}</p><p class="small">มีผลกับ <strong>session ใหม่</strong> · บันทึกทันทีโดยไม่ต้องกดอัพเดต</p>`,
         confirmText: 'ยืนยันและบันทึกทันที',
-        onConfirm: () => act('policy-set', { level: lv.id }, { confirmed: true }),
+        onConfirm: () => act('policy-set', { policy: policyId, level: lv.id }, { confirmed: true }),
       });
     }
 
     if (t.dataset.saveGroup) {
       const groupId = t.dataset.saveGroup;
+      if (groupId === 'arena') {
+        const a = arenaState();
+        if (!a.runners.length) return toast('ยังไม่มีผู้แข่ง', 'เลือก runner อย่างน้อย 1 ตัวก่อนบันทึก', 'err');
+        const patches = [
+          { id: 'arena.runners', value: a.runners.map((s) => `${s.model}#${s.effort}`).join(', ') },
+          { id: 'arena.judge', value: a.judges.map((s) => `${s.model}#${s.effort}`).join(', ') },
+        ];
+        return act('settings-save', { patches });
+      }
       const controls = groupId === 'pstack'
         ? S.settings.pstack.roles.map((r) => ({ id: `pstack.${r.id}`, cur: S.settingsValues[`pstack.${r.id}`] }))
         : (S.settings.groups.find((g) => g.id === groupId) || { controls: [] }).controls.map((c) => ({ id: c.id, cur: S.settingsValues[c.id] }));
@@ -589,11 +983,29 @@
   document.addEventListener('input', (ev) => {
     const d = ev.target.closest('[data-draft]');
     if (d) DRAFTS[d.dataset.draft] = d.type === 'checkbox' ? d.checked : d.value;
+    const f = ev.target.closest('[data-full]');
+    if (f) FULL_DRAFT[f.dataset.full] = f.value;
+  });
+
+  // dropdown โมเดล: เลือกแล้ว sync ลง input ที่ saveGroup อ่าน (และสลับช่อง "กำหนดเอง")
+  document.addEventListener('change', (ev) => {
+    const sel = ev.target.closest('[data-model]');
+    if (!sel) return;
+    const id = sel.dataset.model;
+    const input = $(`[data-draft="${id}"]`);
+    if (!input) return;
+    if (sel.value === '__custom') {
+      input.hidden = false;
+      input.focus();
+      return;
+    }
+    input.hidden = true;
+    input.value = sel.value;
+    DRAFTS[id] = sel.value;
   });
 
   document.addEventListener('click', (ev) => {
-    const go = ev.target.closest('#presetGo');
-    if (go) {
+    const go = ev.target.closest('#presetGo');    if (go) {
       const mode = $('#presetMode').value;
       const a = $('#presetA').value.trim();
       const b = $('#presetB').value.trim();
@@ -602,8 +1014,98 @@
       return;
     }
 
-    const clean = ev.target.closest('#cleanupGo');
-    if (clean) {
+    /* ---- Quick Access: แท็บต่อโหมด ---- */
+    const qs = ev.target.closest('[data-quicksub]');
+    if (qs) { QUICK_SUB = qs.dataset.quicksub; return renderQuick(); }
+    const qsave = ev.target.closest('[data-quick-save]');
+    if (qsave) {
+      const mode = qsave.dataset.quickSave;
+      const patches = [];
+      for (const id of [`model.${mode}`, `variant.${mode}`]) {
+        const el = $(`[data-draft="${id}"]`);
+        if (!el) continue;
+        const val = String(el.value ?? '').trim();
+        const cur = String(S.settingsValues[id] ?? '');
+        if (val !== cur) patches.push({ id, value: val });
+      }
+      if (!patches.length) return toast('ไม่มีอะไรเปลี่ยน', `โหมด ${mode}`, 'ok');
+      return act('settings-save', { patches });
+    }
+    const snap = ev.target.closest('[data-lock-snap]');
+    if (snap) return act('lock-snapshot', { mode: snap.dataset.lockSnap });
+    const back = ev.target.closest('[data-lock-back]');
+    if (back) {
+      const mode = back.dataset.lockBack;
+      return confirmSheet({
+        title: `คืนค่าโมเดล/effort · ${mode.toUpperCase()}`,
+        risk: { level: 2, why: 'เขียนทับค่าใน opencode.jsonc ด้วย snapshot ของโหมดนี้ (backup ทุกไฟล์)' },
+        body: `<p>คืน <code>agent.${esc(mode)}.model</code> และ <code>.variant</code> เป็นค่าที่ถ่าย snapshot ไว้</p>`,
+        confirmText: 'คืนค่าโหมดนี้',
+        onConfirm: () => act('lock-restore', { mode }),
+      });
+    }
+    const kb = ev.target.closest('[data-fixed-keybind]');
+    if (kb) return act('settings-save', { patches: [{ id: 'keybind.copy', value: KEYBIND_FIXED }] });
+
+    /* ---- plannotator options ---- */
+    const plSave = ev.target.closest('#plSave');
+    if (plSave) {
+      return act('plannotator-config', {
+        target: $('#plTarget').value,
+        workflow: $('#plWorkflow').value,
+        runtime: $('#plRuntime').value,
+      });
+    }
+
+    /* ---- arena editor ---- */
+    const add = ev.target.closest('[data-arena-add]');
+    if (add) return arenaAdd(add.dataset.arenaAdd);
+    const dup = ev.target.closest('[data-arena-dup]');
+    if (dup) {
+      const side = dup.dataset.arenaDup;
+      const list = arenaState()[side];
+      if (list.length) list.push({ ...list[list.length - 1] });
+      return renderModes();
+    }
+    const rm = ev.target.closest('[data-chip-rm]');
+    if (rm) {
+      const [side, idx] = rm.dataset.chipRm.split(':');
+      arenaState()[side].splice(Number(idx), 1);
+      return renderModes();
+    }
+    const dupe = ev.target.closest('[data-chip-dup]');
+    if (dupe) {
+      const [side, idx] = dupe.dataset.chipDup.split(':');
+      const s = arenaState()[side][Number(idx)];
+      arenaState()[side].push({ ...s });
+      return renderModes();
+    }
+    const effAdd = ev.target.closest('[data-eff-add]');
+    if (effAdd) return arenaPickEffort(effAdd.dataset.effAdd);
+    const effReset = ev.target.closest('[data-eff-reset]');
+    if (effReset) {
+      const [side, idx] = effReset.dataset.effReset.split(':');
+      arenaState()[side][Number(idx)].effort = 'default';
+      return renderModes();
+    }
+
+    /* ---- system: backup ---- */
+    const bkOpen = ev.target.closest('[data-bk-open]');
+    if (bkOpen) return openBackupFiles(bkOpen.dataset.bkOpen);
+    const bkRestore = ev.target.closest('[data-bk-restore]');
+    if (bkRestore) {
+      const target = bkRestore.dataset.bkRestore;
+      const stamp = bkRestore.dataset.bkStamp;
+      return confirmSheet({
+        title: `คืนไฟล์จาก backup ${stamp}`,
+        risk: { level: 3, why: 'เขียนทับไฟล์จริงด้วยสำเนาเก่า — ระบบสำรองของปัจจุบันก่อนเสมอ' },
+        body: `<p class="mono small">${esc(target)}</p>`,
+        confirmText: 'คืนไฟล์นี้',
+        onConfirm: () => { closeModal(); act('backup-restore', { stamp, target }); },
+      });
+    }
+
+    const clean = ev.target.closest('#cleanupGo');    if (clean) {
       const groups = $$('[data-clean-group]').filter((el) => el.checked).map((el) => el.dataset.cleanGroup);
       if (!groups.length) return toast('ยังไม่ได้เลือก', 'เลือกอย่างน้อยหนึ่งกลุ่ม', 'err');
       const info = S.cleanup.groups.filter((g) => groups.includes(g.id)).map((g) => `<li>${esc(g.title)} — ${g.count} รายการ</li>`).join('');
@@ -629,6 +1131,7 @@
       { label: 'ไป โหมด & สิทธิ์', sub: 'แท็บ', run: () => showTab('modes') },
       { label: 'ไป ไฟล์ & สกิล', sub: 'แท็บ', run: () => showTab('files') },
       { label: 'ไป ตั้งค่า', sub: 'แท็บ', run: () => showTab('settings') },
+      { label: 'ไป ระบบ', sub: 'แท็บ', run: () => showTab('system') },
       { label: 'ไป ประวัติ', sub: 'แท็บ', run: () => showTab('history') },
     ];
     PALETTE_ITEMS = items;

@@ -33,6 +33,19 @@
       "why": "ถ้าผู้ใช้เคยกดบันไดไว้แล้ว ห้ามทับด้วยค่า default ตอนอัพเดต"
     },
     {
+      "id": "cfg.bazer-default",
+      "kind": "config",
+      "title": "ระดับความแรงเริ่มต้นของ BAZER (ขั้น 1 สุภาพ)",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-merge",
+      "valuePath": "agent.bazer.permission",
+      "fromPolicy": "bazer-ladder",
+      "onlyIfMissing": true,
+      "status": "ready",
+      "auto": true,
+      "why": "บันไดของ BAZER แยกจาก BUDDHA — ถ้าผู้ใช้เคยกดบันไดไว้แล้ว ห้ามทับด้วยค่า default"
+    },
+    {
       "id": "cfg.arena-runner-permission",
       "kind": "config",
       "title": "permission ของ ARENA-RUNNER (ตามบันได + ห้าม spawn)",
@@ -81,24 +94,14 @@
       "auto": true
     },
     {
-      "id": "cfg.retire-old-flow",
-      "kind": "config",
-      "title": "ถอดปลั๊กอิน bazer-flow รุ่นเก่าออกจาก config",
-      "target": "${CONFIG}/opencode.jsonc",
-      "strategy": "jsonc-remove-array-item",
-      "valuePath": "plugins",
-      "remove": "./plugins/bazer-flow",
-      "status": "ready",
-      "auto": false,
-      "why": "ของเก่าค้างใน config; ตัวใหม่ไม่ต้องใช้ gate plugin (ใช้ permission + Plannotator). ทำเมื่อผู้ใช้สั่งเท่านั้น"
-    },
-    {
       "id": "agent.buddha",
       "kind": "agent",
       "title": "โหมด BUDDHA",
       "source": "AGENT/01PRIMARY/BUDDHA.md",
       "target": "${CONFIG}/agents/buddha.md",
       "strategy": "overwrite",
+      "ladderPolicy": "buddha-ladder",
+      "ladderAgent": "buddha",
       "owner": "ours",
       "status": "ready",
       "auto": true
@@ -110,6 +113,8 @@
       "source": "AGENT/01PRIMARY/BAZER.md",
       "target": "${CONFIG}/agents/bazer.md",
       "strategy": "overwrite",
+      "ladderPolicy": "bazer-ladder",
+      "ladderAgent": "bazer",
       "owner": "ours",
       "status": "ready",
       "auto": true
@@ -187,6 +192,8 @@
       "source": "AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-RUNNER.md",
       "target": "${CONFIG}/agents/arena-runner.md",
       "strategy": "overwrite",
+      "ladderPolicy": "buddha-ladder",
+      "ladderAgent": "arena-runner",
       "owner": "ours",
       "status": "ready",
       "auto": true
@@ -198,6 +205,8 @@
       "source": "AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-JUDGE.md",
       "target": "${CONFIG}/agents/arena-judge.md",
       "strategy": "overwrite",
+      "ladderPolicy": "buddha-ladder",
+      "ladderAgent": "arena-judge",
       "owner": "ours",
       "status": "ready",
       "auto": true
@@ -251,24 +260,18 @@
       "why": "ตัวเปิดต้องอยู่ติดกับ MAJOR เพื่อหา server เจอ — การติดตั้งไปที่อื่นจะทำให้ path เพี้ยน ใช้ 03WINDOWS/BAZER CONSOLE.vbs โดยตรง หรือรัน 02SHORTCUT/create-desktop-shortcut.ps1"
     },
     {
-      "id": "patch.plannotator",
-      "kind": "patch",
-      "title": "แพตช์ปุ่มอนุมัติ Plannotator → BUDDHA / BAZER",
-      "target": "${PLANNOTATOR}",
-      "strategy": "patch",
-      "status": "design",
-      "auto": false,
-      "why": "แพตช์จริงทำผ่านการ์ด 'ปุ่มอนุมัติ Plannotator' ในหน้าโหมด & สิทธิ์ (ต้องหาไฟล์เจอก่อน) — entry นี้เป็นเพียงการประกาศว่ามีของชิ้นนี้"
-    },
-    {
       "id": "plugin.bazer-flow",
       "kind": "plugin",
-      "title": "ปลั๊กอิน gate (เขียนใหม่)",
+      "title": "ปลั๊กอิน gate bazer-flow (ต้นทางใน MAJOR)",
+      "source": "AGENT/04PLUGIN/bazer-flow",
       "target": "${CONFIG}/plugins/bazer-flow",
       "strategy": "copy-tree",
-      "status": "design",
+      "prune": true,
+      "owner": "ours",
+      "status": "ready",
       "auto": false,
-      "why": "ของใหม่บังคับด้วย permission + Plannotator ก่อน; จะเขียนเมื่อ probe พิสูจน์ว่ายังมีช่องรั่ว"
+      "proof": "plugin-registered",
+      "why": "auto=false โดยเจตนา: การเปิด gate เป็นการเปลี่ยนพฤติกรรมทั้งระบบ ต้องกดเอง. prune=true = ไฟล์รุ่นเก่าที่ไม่มีในต้นทางถูกย้ายเข้า backup (ไม่ลบทิ้ง)"
     },
     {
       "id": "plugin.bazer-fire",
@@ -277,7 +280,8 @@
       "target": "${CONFIG}/plugins/bazer-fire",
       "strategy": "copy-tree",
       "status": "design",
-      "auto": false
+      "auto": false,
+      "why": "badge บน TUI เป็นของประดับ ไม่กระทบความถูกต้องของงาน — ยังไม่เขียนจนกว่าจะมี probe ที่พิสูจน์ว่าผู้ใช้ต้องการ; ข้อมูลสถานะมีอยู่ที่หน้า Console แล้ว"
     }
   ]
 }

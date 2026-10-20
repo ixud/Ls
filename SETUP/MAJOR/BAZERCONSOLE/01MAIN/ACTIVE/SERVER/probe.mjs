@@ -3,6 +3,7 @@
  * kind ทั้งหมดต้องมาจาก probes.json — ถ้าเพิ่ม kind ใหม่ ต้องเพิ่มใน README + CHANGELOG
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { makeResolver } from './env.mjs';
@@ -15,27 +16,44 @@ const run = (cmd, args = [], timeout = 20000) => {
   // Windows: `opencode` เป็น shim (.cmd/.ps1) — spawn ตรง ๆ จะ ENOENT ต้องผ่าน shell
   const line = [cmd, ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
   const r = spawnSync(line, { shell: true, encoding: 'utf8', timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
-  return { code: r.status ?? -1, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
+  return { code: r.status ?? -1, out: (r.stdout || '').trim(), err: (r.stderr || '').trim(), error: r.error ? r.error.message : '' };
 };
 
+// Node ไม่มี sleep แบบ synchronous — probe รันใน request เดียว จึงหน่วงด้วย Atomics.wait ได้
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+const CUSTOM_AGENT_IDS = new Set(['buddha', 'bazer', 'snack', 'advisor']);
 let agentCache = { at: 0, data: null };
 export function opencodeAgents({ fresh = false } = {}) {
   if (!fresh && agentCache.data && Date.now() - agentCache.at < 8000) return agentCache.data;
   let data = null;
   let lastErr = '';
-  for (let attempt = 0; attempt < 2 && !data; attempt++) {
+  let lastParsed = null;
+  for (let attempt = 0; attempt < 3 && !data; attempt++) {
     const r = run('opencode', ['debug', 'agents']);
     if (r.code !== 0 || !r.out.startsWith('[')) {
-      lastErr = `opencode debug agents ล้มเหลว: ${(r.err || r.out).slice(0, 300)}`;
+      lastErr = `opencode debug agents ล้มเหลว: ${(r.err || r.error || r.out).slice(0, 300)}`;
+      sleep(300);
       continue;
     }
     let parsed;
-    try { parsed = JSON.parse(r.out); } catch (e) { lastErr = `อ่านผลไม่ได้: ${e.message}`; continue; }
-    if (!Array.isArray(parsed)) { lastErr = 'ผลของ opencode debug agents ไม่ใช่ array'; continue; }
-    // ลิสต์ว่างเคยเจอแบบไม่สม่ำเสมอ — ลองใหม่หนึ่งครั้งก่อนสรุป (กันรายงานผิดว่า "ไม่มี agent")
-    if (parsed.length === 0) { lastErr = 'opencode debug agents ตอบลิสต์ว่าง'; continue; }
+    try { parsed = JSON.parse(r.out); } catch (e) { lastErr = `อ่านผลไม่ได้: ${e.message}`; sleep(300); continue; }
+    if (!Array.isArray(parsed)) { lastErr = 'ผลของ opencode debug agents ไม่ใช่ array'; sleep(300); continue; }
+    // ลิสต์ว่างเคยเจอแบบไม่สม่ำเสมอ — ลองใหม่ก่อนสรุป (กันรายงานผิดว่า "ไม่มี agent")
+    if (parsed.length === 0) { lastErr = 'opencode debug agents ตอบลิสต์ว่าง'; sleep(300); continue; }
+    // cold start: เห็นเฉพาะ plan/build ของ built-in ก่อนโหลด agent ของเรา — retry
+    // ถ้าครบ 3 ครั้งยังเป็นแบบนี้ (ยังไม่ติดตั้งจริง) ค่อยคืนผลเดิมให้ probe รายงาน "ไม่พบ" ตามจริง
+    const cold = !parsed.some((a) => CUSTOM_AGENT_IDS.has(a.id))
+      && parsed.some((a) => a.id === 'plan' && a.mode === 'primary');
+    if (cold) {
+      lastErr = 'opencode debug agents ตอบ built-in ก่อนโหลด agent ของเรา';
+      lastParsed = parsed;
+      sleep(500);
+      continue;
+    }
     data = parsed;
   }
+  if (!data && lastParsed) data = lastParsed;
   if (!data) throw new Error(lastErr || 'opencode debug agents ล้มเหลว');
   agentCache = { at: Date.now(), data };
   return data;
@@ -76,9 +94,44 @@ export function agentFilePermission(home, agentId) {
   return out;
 }
 
+function findPlannotatorCli(home) {
+  // Console ที่ไม่ส่ง `--home` จะได้ undefined — ต้องตีความเป็น home จริง ไม่ใช่ sandbox
+  const homePath = home || os.homedir();
+  // sandbox (`--home`) ต้องไม่สืบทอด CLI ของเครื่องจริง — กันเทสต์หลอกว่าพบ
+  let realHome = false;
+  try { realHome = path.resolve(homePath) === path.resolve(os.homedir()); } catch { realHome = false; }
+  if (!realHome) return { found: false, path: null, source: 'sandbox' };
+
+  const candidates = [];
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    candidates.push(path.join(process.env.LOCALAPPDATA, 'plannotator', 'plannotator.exe'));
+  }
+  candidates.push(path.join(homePath, '.local', 'bin', 'plannotator'));
+  candidates.push(path.join(homePath, 'bin', 'plannotator'));
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return { found: true, path: p, source: 'file' };
+  }
+  const r = process.platform === 'win32' ? run('where', ['plannotator']) : run('command', ['-v', 'plannotator']);
+  if (r.code === 0 && r.out) {
+    const first = r.out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0];
+    if (first) return { found: true, path: first, source: 'path' };
+  }
+  return { found: false, path: null, source: 'none' };
+}
+
 export function plannotatorLocate(home) {
   const { resolve } = makeResolver(home);
-  const roots = [resolve('${HOME}/.cache/opencode/npm'), resolve('${HOME}/.plannotator'), resolve('${HOME}/.local/share/opencode')].filter((p) => fs.existsSync(p));
+  // ลำดับตามที่ Plannotator ไปอยู่จริง: ปลั๊กอิน OpenCode (npm/packages) · โฟลเดอร์ผู้ใช้ · CLI
+  const roots = [
+    resolve('${CACHE}/npm/@plannotator'),
+    resolve('${CACHE}/packages/@plannotator'),
+    resolve('${CACHE}/npm'),
+    resolve('${CACHE}/packages'),
+    resolve('${HOME}/.plannotator'),
+    resolve('${HOME}/.local/share/opencode'),
+    resolve('${LOCALAPP}/plannotator'),
+  ].filter((p) => fs.existsSync(p));
+  const cli = findPlannotatorCli(home);
   const hits = [];
   let visited = 0;
   const deadline = Date.now() + 5000;
@@ -99,7 +152,9 @@ export function plannotatorLocate(home) {
     }
   };
   for (const r of roots) walk(r);
-  return { roots, hits, scanned: visited };
+  // แยกรูปแบบการติดตั้ง: มีไฟล์เว็บให้แพตช์ หรือมีแต่ CLI (แพตช์ไม่ได้)
+  const kind = hits.length ? 'files' : cli.found ? 'cli-only' : 'none';
+  return { roots, hits, scanned: visited, cli, kind };
 }
 
 const impl = {
@@ -109,10 +164,19 @@ const impl = {
   },
   'cmd-version': (p) => {
     const r = run(p.cmd, ['--version']);
-    if (r.code !== 0) return { ok: false, detail: `เรียก ${p.cmd} ไม่ได้: ${(r.err || r.out).slice(0, 200)}` };
+    if (r.code !== 0) return { ok: false, detail: `เรียก ${p.cmd} ไม่ได้: ${(r.err || r.error || r.out).slice(0, 200)}` };
     const m = /(\d+\.\d+\.\d+)/.exec(r.out);
     const v = m ? m[1] : r.out.slice(0, 40);
     return { ok: m ? cmpVersion(v, p.min) >= 0 : false, detail: `${p.cmd} ${v} (ต้องการ ≥ ${p.min})` };
+  },
+  'cmd-contains': (p) => {
+    const r = run(p.cmd, p.args || []);
+    const text = `${r.out}\n${r.err}`;
+    const hit = text.includes(p.text);
+    return {
+      ok: r.code === 0 && hit,
+      detail: hit ? `พบ "${p.text}"` : `ไม่พบ "${p.text}" — ${(r.err || r.error || r.out).slice(0, 200)}`,
+    };
   },
   'agents-hidden': (p, home) => {
     const data = opencodeAgents();
@@ -148,7 +212,9 @@ const impl = {
   },
   'permission-level': (p, home) => {
     const state = readState();
-    const levelId = state.policy?.policyId === p.policy ? state.policy.level : undefined;
+    const perPolicy = (state.policies || {})[p.policy];
+    const legacy = state.policy && state.policy.policyId === p.policy ? state.policy : null;
+    const levelId = perPolicy?.level ?? legacy?.level;
     const level = policyLevel(p.policy, levelId);
     // params.expect = ค่าที่บังคับเพิ่มเติมของ agent นั้น (เช่น ARENA-RUNNER ห้าม spawn) — ทับค่าในระดับ
     const expected = { ...level.permission, ...(p.expect || {}) };
@@ -213,9 +279,45 @@ const impl = {
     const f = resolve(p.target);
     return { ok: fs.existsSync(f), detail: fs.existsSync(f) ? 'มีอยู่' : `ไม่พบ ${f}` };
   },
+  'jsonc-array-contains': (p, home) => {
+    const { resolve } = makeResolver(home);
+    const f = resolve(p.target);
+    if (!fs.existsSync(f)) return { ok: false, detail: `ไม่พบ ${f}` };
+    try {
+      const arr = getAtPath(fs.readFileSync(f, 'utf8'), String(p.path).split('.'));
+      if (!Array.isArray(arr)) return { ok: false, detail: `${p.path} ไม่ใช่ array` };
+      const has = arr.some((v) => (typeof v === 'object' ? String(v?.package || '') === p.value : v === p.value));
+      return { ok: has, detail: has ? `พบ ${p.value} ใน ${p.path}` : `ไม่พบ ${p.value} ใน ${p.path} (มี ${arr.length} รายการ)` };
+    } catch (e) { return { ok: false, detail: `อ่านไม่ได้: ${e.message}` }; }
+  },
+  'exe-version': (p, home) => {
+    const { resolve } = makeResolver(home);
+    const f = resolve(p.target);
+    if (!fs.existsSync(f)) return { ok: false, detail: `ไม่พบไฟล์: ${f}` };
+    const r = run(`"${f}"`, ['--version']);
+    const text = `${r.out} ${r.err}`.trim();
+    const m = /(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.]+)?)/.exec(text);
+    return {
+      ok: !!m,
+      detail: m ? `${path.basename(f)} ${m[1]}` : `เรียก --version ไม่ได้: ${text.slice(0, 160) || `exit ${r.code}`}`,
+      extra: { file: f, raw: text.slice(0, 300) },
+    };
+  },
   'plannotator-locate': (p, home) => {
     const r = plannotatorLocate(home);
-    return { ok: r.hits.length > 0, detail: r.hits.length ? `เจอ ${r.hits.length} ไฟล์` : `ไม่เจอใน ${r.roots.join(' · ')}`, extra: r };
+    const bits = [];
+    if (r.cli?.found) bits.push(`CLI: ${r.cli.path}`);
+    if (r.hits.length) bits.push(`ไฟล์ปลั๊กอิน ${r.hits.length} ไฟล์`);
+    const detail = bits.length
+      ? bits.join(' · ')
+      : r.cli.found
+        ? `เจอ CLI แต่ไม่มีไฟล์เว็บให้แพตช์ (CLI-only) — สแกน ${r.roots.length} โฟลเดอร์`
+        : `ไม่เจอ CLI หรือไฟล์ — สแกน ${r.roots.length} โฟลเดอร์`;
+    return {
+      ok: !!(r.cli?.found || r.hits.length),
+      detail,
+      extra: r,
+    };
   },
 };
 
@@ -236,11 +338,13 @@ export function runProbes(home) {  const results = [];
   return { at: new Date().toISOString(), results, ok: failed.length === 0, failed: failed.length, warn: results.filter((r) => !r.ok && r.severity === 'warn').length };
 }
 
-export function verifyProofs(home) {
+/** ตรวจว่า entry ที่ประกาศ proof ผ่านจริง — ใช้ผล probe ที่รันมาแล้ว (ไม่รันซ้ำทั้งชุด) */
+export function verifyProofs(home, probeResult) {
+  const pr = probeResult || runProbes(home);
   const out = [];
   for (const e of manifest.entries) {
     if (!e.proof) continue;
-    const r = runProbes(home).results.find((x) => x.id === e.proof);
+    const r = pr.results.find((x) => x.id === e.proof);
     out.push({ entry: e.id, probe: e.proof, ok: !!r?.ok, detail: r?.detail });
   }
   return out;

@@ -22,18 +22,17 @@
         { "id": "variant.snack", "label": "Effort SNACK", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.variant", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น" } },
         { "id": "model.advisor", "label": "โมเดล ADVISOR", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
         { "id": "variant.advisor", "label": "Effort ADVISOR", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.variant", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
-        { "id": "keybind.copy", "label": "คีย์ copy ข้อความล่าสุด", "type": "keybind-list", "target": "${CONFIG}/tui.json", "strategy": "jsonc-set", "path": "keybinds.messages_copy", "placeholder": "ctrl+alt+m, ctrl+alt+o", "risk": { "level": 1, "why": "ถ้าชนกับคีย์อื่น จะกดแล้วไม่มีผล" } },
-        { "id": "lock.models", "label": "ล็อกโมเดล/effort (เตือนเมื่อมีคนเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "models", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร" } },
-        { "id": "lock.keybinds", "label": "ล็อกคีย์ลัด (เตือนเมื่อมีคนเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "keybinds", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร" } }
+        { "id": "keybind.copy", "label": "คีย์ copy ข้อความล่าสุด (ค่าคงที่)", "type": "keybind-list", "target": "${CONFIG}/tui.json", "strategy": "jsonc-set", "path": "keybinds.messages_copy", "fixed": ["ctrl+alt+m", "ctrl+alt+o"], "risk": { "level": 2, "why": "เขียนทับคีย์ลัดใน tui.json ด้วยค่าคงที่ของระบบ (มี backup)" } },
+        { "id": "lock.models", "label": "เฝ้าโมเดล/effort (เตือนเมื่อไฟล์ถูกเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "models", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร — ค่าจริงอยู่ใน config ใครเขียนก็เปลี่ยนได้" } }
       ]
     },
     {
       "id": "arena",
       "title": "ARENA",
-      "subtitle": "ที่นั่งของ Arena — ใช้ร่วมกับ BUDDHA และการเรียก Arena ตรง ๆ",
+      "subtitle": "ที่นั่งของ Arena — runner/judge กี่ตัวก็ได้ ซ้ำได้ และกำหนด effort รายตัว",
       "controls": [
-        { "id": "arena.runners", "label": "arena runners", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena runners:", "placeholder": "model-a, model-b", "risk": { "level": 2, "why": "ถ้าใส่โมเดลที่ไม่มีสิทธิ์ ที่นั่งนั้นจะรันด้วย default และผล Arena จะไม่ตรงที่คิด" } },
-        { "id": "arena.judge", "label": "arena cross-judge pool", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena cross-judge pool:", "placeholder": "model-c, model-d", "risk": { "level": 2, "why": "ควรต่างตระกูลจาก runner เพื่อไม่ให้กรรมการเข้าข้างตัวเอง" } }
+        { "id": "arena.runners", "label": "ผู้แข่ง (runner) — model#effort ต่อตัว", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena runners:", "placeholder": "opencode-go/beam-free#low, opencode-go/deepseek-v4.1-flash#low", "risk": { "level": 2, "why": "แต่ละที่นั่งเก็บเป็น model#effort — ถ้าใส่โมเดลที่ไม่มีสิทธิ์ ที่นั่งนั้นจะรันด้วย default และผล Arena จะไม่ตรงที่คิด" } },
+        { "id": "arena.judge", "label": "กรรมการ (judge) — model#effort ต่อตัว", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena cross-judge pool:", "placeholder": "opencode-go/glm-5#high", "risk": { "level": 2, "why": "ควรต่างตระกูลจาก runner เพื่อไม่ให้กรรมการเข้าข้างตัวเอง" } }
       ]
     },
     {

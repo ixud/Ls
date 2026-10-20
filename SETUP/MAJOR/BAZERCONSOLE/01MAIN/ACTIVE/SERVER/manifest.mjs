@@ -11,6 +11,15 @@ const read = (name) => JSON.parse(fs.readFileSync(path.join(MANIFEST_DIR, name),
 
 export const manifest = read('manifest.json');
 export const policies = read('policies.json');
+
+// policy ที่ declare "inherit" = ใช้ระดับชุดเดียวกับตัวต้นทาง (แต่แยกสถานะ/ปุ่มของตัวเอง)
+for (const [id, p] of Object.entries(policies)) {
+  if (!p || typeof p !== 'object' || !p.inherit) continue;
+  const base = policies[p.inherit];
+  if (!base) continue;
+  p.levels = p.levels || base.levels;
+  p.target = p.target || base.target;
+}
 export const settings = read('settings.json');
 export const actions = read('actions.json');
 export const probes = read('probes.json');

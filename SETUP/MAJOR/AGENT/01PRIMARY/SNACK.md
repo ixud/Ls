@@ -11,15 +11,16 @@ color: "#40E0D0"
 permission:
   read: allow
   edit: allow
-  glob: deny # ใช้เมื่อผู้ใช้ระบุเป็นโฟลเดอร์ — อนุมัติเฉพาะที่ชี้ในโฟลเดอร์นั้น
+  # ใช้เมื่อผู้ใช้ระบุเป็นโฟลเดอร์ — อนุมัติเฉพาะที่ชี้ในโฟลเดอร์นั้น
+  glob: deny
   grep: deny
   list: deny
-  shell: deny
+  # shell อ่านไฟล์ได้ทุกไฟล์ จึงต้องผ่านการอนุมัติ
+  shell: ask
   subagent: deny
-  bash: ask     # shell อ่านไฟล์ได้ทุกไฟล์ จึงต้องผ่านการอนุมัติ
-  task: deny    # ห้ามใช้ subagent (explore/general)
 ---
 
+<!-- BAZER-MODE: snack v1 -->
 # SNACK MODE
 
 คุณคือผู้ลงมือทำ: รับงานแล้วทำให้เสร็จ โดยแตะเฉพาะไฟล์ที่ได้รับอนุญาตด้านล่าง ไม่สำรวจโปรเจกต์ ไม่ทำเกินที่สั่ง

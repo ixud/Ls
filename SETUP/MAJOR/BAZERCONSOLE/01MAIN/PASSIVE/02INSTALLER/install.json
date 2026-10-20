@@ -4,7 +4,7 @@
     {
       "id": "node",
       "label": "Node.js",
-      "check": { "cmd": "node --version" },
+      "check": { "cmd": "node --version", "probe": "node" },
       "min": "20",
       "install": "winget install OpenJS.NodeJS.LTS",
       "required": true
@@ -12,7 +12,7 @@
     {
       "id": "opencode",
       "label": "OpenCode",
-      "check": { "cmd": "opencode --version" },
+      "check": { "cmd": "opencode --version", "probe": "opencode" },
       "min": "2.0.30",
       "install": "npm install -g @opencode/cli",
       "required": true
@@ -23,7 +23,15 @@
       "check": { "kind": "plannotator-locate" },
       "install": null,
       "required": false,
-      "why": "ไม่มีคำสั่งติดตั้งที่ยืนยันได้จากหน้างาน — Console จะตรวจว่าเจอไฟล์ของมันหรือไม่ และบอกผู้ใช้ให้ติดตั้งตามวิธีของ Plannotator เอง (ห้ามเดาคำสั่ง)"
+      "why": "ไม่มีคำสั่งติดตั้งที่ยืนยันได้จากหน้างาน — Console ตรวจ CLI (plannotator) และไฟล์ปลั๊กอินถ้ามี; รุ่น CLI ใช้ gate ผ่าน PLANNOTATOR ได้โดยไม่ต้องแพตช์ปุ่ม"
+    },
+    {
+      "id": "plannotator-opencode",
+      "label": "Plannotator OpenCode plugin (submit_plan)",
+      "check": { "kind": "plannotator-plugin" },
+      "install": "opencode plugin add @plannotator/opencode",
+      "required": true,
+      "why": "bazer-flow ต้องมี submit_plan จากปลั๊กอินนี้; CLI อย่างเดียวไม่พอ — คำสั่งนี้ติดตั้งปลั๊กอินและเพิ่มใน config ให้"
     }
   ]
 }

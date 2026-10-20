@@ -104,5 +104,12 @@
         }
       }
     ]
+  },
+  "bazer-ladder": {
+    "title": "บันได BAZER",
+    "mode": "bazer",
+    "inherit": "buddha-ladder",
+    "defaultLevel": "1",
+    "note": "ระดับเดียวกับ BUDDHA (inherit) แต่แยกสถานะ/ปุ่มของตัวเอง — ตั้งคนละขั้นได้"
   }
 }

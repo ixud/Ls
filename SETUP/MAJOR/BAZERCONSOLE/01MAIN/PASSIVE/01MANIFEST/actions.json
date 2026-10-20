@@ -150,34 +150,34 @@
     {
       "id": "plannotator-locate",
       "group": "settings",
-      "title": "หาไฟล์ Plannotator",
-      "cta": "หาไฟล์ Plannotator",
-      "subtitle": "ก่อนแพตช์ปุ่มอนุมัติ",
+      "title": "ตรวจ Plannotator (CLI/ไฟล์)",
+      "cta": "ตรวจ Plannotator",
+      "subtitle": "ตรวจ CLI สำหรับ gate และไฟล์ปลั๊กอินถ้ามี",
       "kind": "read",
       "risk": { "level": 1, "why": "ค้นหาไฟล์เท่านั้น" },
       "confirm": "none"
     },
     {
-      "id": "plannotator-patch",
-      "group": "modes",
-      "title": "แพตช์ปุ่มอนุมัติ Plannotator",
-      "cta": "แพตช์ปุ่มอนุมัติ",
-      "subtitle": "กำหนดว่าอนุมัติแล้วกลับโหมดไหน (BUDDHA / BAZER)",
+      "id": "lock-snapshot",
+      "group": "quick",
+      "title": "ถ่าย snapshot โมเดล/effort ของโหมดนี้",
+      "cta": "ถ่าย snapshot",
+      "subtitle": "จำค่าปัจจุบันไว้เทียบ (แยกต่อโหมด)",
       "kind": "write",
-      "risk": { "level": 3, "why": "แก้ไฟล์ของปลั๊กอิน Plannotator ในเครื่อง — backup ทุกไฟล์และตรวจซ้ำหลังเขียน" },
-      "confirm": "popup",
-      "confirmUnlessParam": "apply",
-      "params": ["target", "apply"]
+      "risk": { "level": 1, "why": "เขียนลง state.json ของ Console เท่านั้น ไม่แตะ config" },
+      "confirm": "none",
+      "params": ["mode"]
     },
     {
       "id": "lock-restore",
-      "group": "settings",
-      "title": "ล็อกค่ากลับตาม snapshot",
-      "cta": "ล็อกคืน",
+      "group": "quick",
+      "title": "คืนโมเดล/effort ของโหมดนี้ตาม snapshot",
+      "cta": "คืนค่าโหมดนี้",
       "subtitle": "เขียน model/effort กลับเป็นค่าที่บันทึกไว้",
       "kind": "write",
-      "risk": { "level": 2, "why": "เขียนทับ model/effort ของ 4 โหมด (backup ทุกไฟล์)" },
-      "confirm": "popup"
+      "risk": { "level": 2, "why": "เขียนทับ model/effort ของโหมดที่เลือกใน opencode.jsonc (backup ทุกไฟล์)" },
+      "confirm": "popup",
+      "params": ["mode"]
     },
     {
       "id": "cleanup-plan",
@@ -234,6 +234,71 @@
       "risk": { "level": 1, "why": "เปิด File Explorer เท่านั้น" },
       "confirm": "none",
       "params": ["which"]
+    },
+    {
+      "id": "plugin-register",
+      "group": "system",
+      "title": "ลงทะเบียนปลั๊กอิน gate ใน config",
+      "cta": "ลงทะเบียนใน config",
+      "subtitle": "เพิ่ม ./plugins/bazer-flow เข้า plugins[]",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เปิด gate ของระบบ: หลังเปิด OpenCode ใหม่ จะเขียนไฟล์โปรเจกต์ไม่ได้จนกว่าจะอนุมัติแผน" },
+      "confirm": "popup",
+      "params": ["name"]
+    },
+    {
+      "id": "plugin-list",
+      "group": "system",
+      "title": "ดูปลั๊กอินที่ OpenCode เห็น",
+      "cta": "ดูรายการปลั๊กอิน",
+      "subtitle": "อ่านจาก opencode plugin list",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่านอย่างเดียว" },
+      "confirm": "none"
+    },
+    {
+      "id": "plugin-update",
+      "group": "system",
+      "title": "อัพเดตปลั๊กอินจาก registry",
+      "cta": "อัพเดตปลั๊กอิน",
+      "subtitle": "รัน opencode plugin add <package>",
+      "kind": "write",
+      "risk": { "level": 3, "why": "ดึงของใหม่จากเน็ตและแก้ config ของ OpenCode — อาจได้เวอร์ชันที่พฤติกรรมเปลี่ยน" },
+      "confirm": "popup",
+      "confirmUnlessParam": "apply",
+      "params": ["package", "apply"]
+    },
+    {
+      "id": "plannotator-config",
+      "group": "system",
+      "title": "ตั้งค่า options ของปลั๊กอิน Plannotator",
+      "cta": "บันทึก options",
+      "subtitle": "workflow · runtime · planningAgents ใน opencode.jsonc",
+      "kind": "write",
+      "risk": { "level": 2, "why": "แก้ options ของปลั๊กอิน Plannotator — มีผลกับว่าโหมดไหนเรียก submit_plan ได้ และใช้ runtime ไหน (มี backup)" },
+      "confirm": "popup",
+      "params": ["target", "workflow", "runtime"]
+    },
+    {
+      "id": "backup-list",
+      "group": "system",
+      "title": "ดู backup ทุกครั้งที่เขียนไฟล์",
+      "cta": "ดูรายการ backup",
+      "subtitle": "รายรอบ + ไฟล์ในรอบนั้น",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่านรายการเท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "backup-restore",
+      "group": "system",
+      "title": "คืนไฟล์เดียวจาก backup",
+      "cta": "คืนไฟล์นี้",
+      "subtitle": "เลือกจากรายการ backup ของรอบที่ระบุ",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เขียนทับไฟล์จริงด้วยสำเนาเก่า — ระบบสำรองของปัจจุบันก่อนเขียนเสมอ" },
+      "confirm": "popup",
+      "params": ["stamp", "target"]
     }
   ]
 }

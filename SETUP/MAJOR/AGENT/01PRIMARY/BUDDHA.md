@@ -8,7 +8,6 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  shell: ask
   subagent: allow
 ---
 
@@ -98,6 +97,8 @@ permission:
 
 แล้วจึง commit ด้วยรูปแบบ:
 `<วลีสั้นมาก> <rare emoji ที่ตรงกับงาน>: <วลีอธิบายยาวขึ้น>`
+เรียงลำดับในข้อความ commit ตามนี้เท่านั้น
+
 ตัวอย่าง: `ปิดช่อง ghost writes 🧱: บังคับ permission ตามโหมดและเพิ่ม probe ตรวจของจริง`
 
 ## สิ่งที่ห้าม (สรุป)
