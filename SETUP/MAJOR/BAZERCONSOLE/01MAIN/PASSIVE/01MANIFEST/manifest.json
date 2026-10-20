@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "note": "ที่อยู่ปลายทางทั้งหมดอยู่ในไฟล์นี้ที่เดียว — ACTIVE/** ห้าม hardcode (R2)",
+  "entries": [
+    {
+      "id": "cfg.builtin-off",
+      "kind": "config",
+      "title": "ซ่อน Plan/Build ที่มากับ OpenCode",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-merge",
+      "valuePath": "agent",
+      "value": {
+        "plan": { "mode": "subagent", "hidden": true },
+        "build": { "mode": "subagent", "hidden": true }
+      },
+      "status": "ready",
+      "auto": true,
+      "proof": "builtin-hidden",
+      "why": "ผู้ใช้ต้องการเหลือโหมดของเรา 4 ตัว — ซ่อนจาก config ไม่ลบไฟล์ จึงย้อนกลับได้"
+    },
+    {
+      "id": "cfg.buddha-default",
+      "kind": "config",
+      "title": "ระดับความแรงเริ่มต้นของ BUDDHA (ขั้น 1 สุภาพ)",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-merge",
+      "valuePath": "agent.buddha.permission",
+      "fromPolicy": "buddha-ladder",
+      "onlyIfMissing": true,
+      "status": "ready",
+      "auto": true,
+      "why": "ถ้าผู้ใช้เคยกดบันไดไว้แล้ว ห้ามทับด้วยค่า default ตอนอัพเดต"
+    },
+    {
+      "id": "cfg.keybinds",
+      "kind": "config",
+      "title": "คีย์ลัดเริ่มต้น (copy ข้อความล่าสุด)",
+      "target": "${CONFIG}/tui.json",
+      "strategy": "jsonc-merge",
+      "valuePath": "keybinds.messages_copy",
+      "value": ["ctrl+alt+m", "ctrl+alt+o"],
+      "onlyIfMissing": true,
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "cfg.retire-old-flow",
+      "kind": "config",
+      "title": "ถอดปลั๊กอิน bazer-flow รุ่นเก่าออกจาก config",
+      "target": "${CONFIG}/opencode.jsonc",
+      "strategy": "jsonc-remove-array-item",
+      "valuePath": "plugins",
+      "remove": "./plugins/bazer-flow",
+      "status": "ready",
+      "auto": false,
+      "why": "ของเก่าค้างใน config; ตัวใหม่ไม่ต้องใช้ gate plugin (ใช้ permission + Plannotator). ทำเมื่อผู้ใช้สั่งเท่านั้น"
+    },
+    {
+      "id": "agent.buddha",
+      "kind": "agent",
+      "title": "โหมด BUDDHA",
+      "source": "AGENT/01PRIMARY/BUDDHA.md",
+      "target": "${CONFIG}/agents/buddha.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "agent.bazer",
+      "kind": "agent",
+      "title": "โหมด BAZER",
+      "source": "AGENT/01PRIMARY/BAZER.md",
+      "target": "${CONFIG}/agents/bazer.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "agent.snack",
+      "kind": "agent",
+      "title": "โหมด SNACK",
+      "source": "AGENT/01PRIMARY/SNACK.md",
+      "target": "${CONFIG}/agents/snack.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "agent.advisor",
+      "kind": "agent",
+      "title": "โหมด ADVISOR",
+      "source": "AGENT/01PRIMARY/ADVISOR.md",
+      "target": "${CONFIG}/agents/advisor.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "sub.poteto",
+      "kind": "subagent",
+      "title": "POTETO (เขียนแผนด้วย pstack)",
+      "source": "AGENT/02SUBAGENT/POTETO.md",
+      "target": "${CONFIG}/agents/poteto.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "sub.plannotator",
+      "kind": "subagent",
+      "title": "PLANNOTATOR (ยื่นแผน + กลับโหมดเดิม)",
+      "source": "AGENT/02SUBAGENT/PLANNOTATOR.md",
+      "target": "${CONFIG}/agents/plannotator.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "sub.arena",
+      "kind": "subagent",
+      "title": "ARENA (6 เฟส)",
+      "source": "AGENT/02SUBAGENT/ARENA.md",
+      "target": "${CONFIG}/agents/arena.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "sub.builder",
+      "kind": "subagent",
+      "title": "BUILDER (มือของ Plan Mode เดิม)",
+      "source": "AGENT/02SUBAGENT/BUILDER.md",
+      "target": "${CONFIG}/agents/builder.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "subsub.arena-runner",
+      "kind": "subsubagent",
+      "title": "ARENA runner (ผู้แข่งขัน 1 ที่นั่ง)",
+      "source": "AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-RUNNER.md",
+      "target": "${CONFIG}/agents/arena-runner.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "subsub.arena-judge",
+      "kind": "subsubagent",
+      "title": "ARENA judge (กรรมการให้คะแนน)",
+      "source": "AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-JUDGE.md",
+      "target": "${CONFIG}/agents/arena-judge.md",
+      "strategy": "overwrite",
+      "owner": "ours",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "skills.pstack",
+      "kind": "skill",
+      "title": "PSTACK skills (ทั้งชุด ยกเว้น arena)",
+      "source": "AGENT/03SKILLS/PSTACK",
+      "target": "${SKILLS}",
+      "strategy": "copy-tree",
+      "owner": "pstack",
+      "exclude": ["GUIDELINE.md", "ADAPT-OPENCODE.md", "README.md"],
+      "status": "ready",
+      "auto": true,
+      "why": "copy-tree: โฟลเดอร์ย่อยของ skill (references/ playbooks/ scripts/) ต้องไปด้วย"
+    },
+    {
+      "id": "tpl.agents-md",
+      "kind": "template",
+      "title": "AGENTS.md (กฎระดับเครื่อง)",
+      "source": "BAZERCONSOLE/01MAIN/CONFIGTEMPLATEFORAPPLY/AGENTS.md.template",
+      "target": "${CONFIG}/AGENTS.md",
+      "strategy": "template-once",
+      "owner": "user",
+      "status": "ready",
+      "auto": true,
+      "why": "สร้างครั้งเดียว ไม่ทับของผู้ใช้ — ถ้า template เปลี่ยน ผู้ใช้ต้องกดรีเซ็ตเอง"
+    },
+    {
+      "id": "tpl.pstack-models",
+      "kind": "template",
+      "title": "pstack-models.md (โมเดลของ PSTACK)",
+      "source": "BAZERCONSOLE/01MAIN/CONFIGTEMPLATEFORAPPLY/pstack-models.md.template",
+      "target": "${HOME}/.agents/pstack-models.md",
+      "strategy": "template-once",
+      "owner": "user",
+      "status": "ready",
+      "auto": true
+    },
+    {
+      "id": "launch.windows",
+      "kind": "launcher",
+      "title": "ตัวเปิด Console (Windows)",
+      "source": "BAZERCONSOLE/03WINDOWS/BAZER CONSOLE.vbs",
+      "target": "${LAUNCH}/bazer-console.vbs",
+      "strategy": "create-only",
+      "platform": "win32",
+      "status": "design",
+      "auto": false,
+      "why": "ตัวเปิดต้องอยู่ติดกับ MAJOR เพื่อหา server เจอ — การติดตั้งไปที่อื่นจะทำให้ path เพี้ยน ใช้ 03WINDOWS/BAZER CONSOLE.vbs โดยตรง หรือรัน 02SHORTCUT/create-desktop-shortcut.ps1"
+    },
+    {
+      "id": "patch.plannotator",
+      "kind": "patch",
+      "title": "แพตช์ปุ่มอนุมัติ Plannotator → BUDDHA / BAZER",
+      "target": "${PLANNOTATOR}",
+      "strategy": "patch",
+      "status": "design",
+      "auto": false,
+      "why": "แพตช์จริงทำผ่านการ์ด 'ปุ่มอนุมัติ Plannotator' ในหน้าโหมด & สิทธิ์ (ต้องหาไฟล์เจอก่อน) — entry นี้เป็นเพียงการประกาศว่ามีของชิ้นนี้"
+    },
+    {
+      "id": "plugin.bazer-flow",
+      "kind": "plugin",
+      "title": "ปลั๊กอิน gate (เขียนใหม่)",
+      "target": "${CONFIG}/plugins/bazer-flow",
+      "strategy": "copy-tree",
+      "status": "design",
+      "auto": false,
+      "why": "ของใหม่บังคับด้วย permission + Plannotator ก่อน; จะเขียนเมื่อ probe พิสูจน์ว่ายังมีช่องรั่ว"
+    },
+    {
+      "id": "plugin.bazer-fire",
+      "kind": "plugin",
+      "title": "ปลั๊กอิน badge บน TUI",
+      "target": "${CONFIG}/plugins/bazer-fire",
+      "strategy": "copy-tree",
+      "status": "design",
+      "auto": false
+    }
+  ]
+}

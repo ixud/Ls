@@ -1,0 +1,64 @@
+{
+  "note": "ข้อพิสูจน์กับของจริง — 5 สถานะข้อที่ 5 (broken) มาจากที่นี่. kind ต้องมีอยู่ใน SERVER/probe.mjs",
+  "probes": [
+    {
+      "id": "node",
+      "title": "Node.js ≥ 20",
+      "kind": "node-version",
+      "params": { "min": 20 },
+      "severity": "fail"
+    },
+    {
+      "id": "opencode",
+      "title": "OpenCode ≥ 2.0.30",
+      "kind": "cmd-version",
+      "params": { "cmd": "opencode", "min": "2.0.30" },
+      "severity": "fail"
+    },
+    {
+      "id": "builtin-hidden",
+      "title": "Plan/Build ถูกซ่อนจริง",
+      "kind": "agents-hidden",
+      "params": { "ids": ["plan", "build"] },
+      "severity": "fail",
+      "why": "ตั้งใน config แล้วแต่ OpenCode อาจไม่รับ — ต้องอ่านผลจาก debug agents"
+    },
+    {
+      "id": "modes-present",
+      "title": "โหมด 4 ตัวโหลดจริง",
+      "kind": "agents-present",
+      "params": { "ids": ["buddha", "bazer", "snack", "advisor"], "mode": "primary", "marker": "<!-- BAZER-MODE:" },
+      "severity": "fail"
+    },
+    {
+      "id": "permission-level",
+      "title": "ระดับเหมาเข่งมีผลจริง",
+      "kind": "permission-level",
+      "params": { "agent": "buddha", "policy": "buddha-ladder" },
+      "severity": "fail",
+      "why": "ค่าใน config อาจถูกกฎในไฟล์ชนะ — ตรวจจากผลลัพธ์จริง ไม่ใช่จากไฟล์ที่เขียน"
+    },
+    {
+      "id": "tui",
+      "title": "tui.json อ่านได้",
+      "kind": "json-file",
+      "params": { "target": "${CONFIG}/tui.json" },
+      "severity": "warn"
+    },
+    {
+      "id": "pstack-models",
+      "title": "pstack-models.md มีอยู่",
+      "kind": "file-exists",
+      "params": { "target": "${HOME}/.agents/pstack-models.md" },
+      "severity": "warn"
+    },
+    {
+      "id": "plannotator-locate",
+      "title": "หาไฟล์ Plannotator เจอ",
+      "kind": "plannotator-locate",
+      "params": {},
+      "severity": "warn",
+      "why": "ถ้าไม่เจอ = ยังแพตช์ปุ่มอนุมัติไม่ได้ (ต้องให้ผู้ใช้เปิด OpenCode อย่างน้อยหนึ่งครั้ง)"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "note": "คอนโทรลทั้งหมดของหน้า ตั้งค่า — UI วาดจากไฟล์นี้ (ไม่มีฟอร์มเขียนมือ). 3 กลุ่ม: Quick Access · ARENA · อื่น ๆ และ PSTACK แยกเป็น roles",
+  "full": {
+    "title": "การตั้งค่าฉบับเต็ม",
+    "subtitle": "แก้ทั้งไฟล์แล้วเขียนทับทั้งไฟล์ (ต่างจาก Quick Access ที่แก้เฉพาะบรรทัด)",
+    "files": [
+      { "id": "tui", "label": "tui.json", "target": "${CONFIG}/tui.json", "note": "ไฟล์ที่ OpenCode 2 ใช้จริง — ธีม คีย์ลัด หน้าตา" },
+      { "id": "cli", "label": "cli.json", "target": "${CONFIG}/cli.json", "note": "ไฟล์รุ่นเก่า — เก็บไว้เพื่อความเข้ากันได้ (OpenCode 2 อ่าน tui.json เป็นหลัก)" }
+    ]
+  },
+  "groups": [
+    {
+      "id": "quick",
+      "title": "Quick Access",
+      "subtitle": "ค่าที่ต้องเห็นทุกวัน — ตั้งแล้วกดบันทึกครั้งเดียว",
+      "controls": [
+        { "id": "model.buddha", "label": "โมเดล BUDDHA", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ถ้าชื่อโมเดลผิด โหมดจะเปิดไม่ขึ้นจนกว่าจะแก้คืน" } },
+        { "id": "variant.buddha", "label": "Effort BUDDHA", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.variant", "risk": { "level": 2, "why": "variant ต้องมีจริงในรุ่นนี้ — ถ้าไม่มี โมเดลอาจใช้ค่า default แทนโดยไม่แจ้ง" } },
+        { "id": "model.bazer", "label": "โมเดล BAZER", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "เหมือน BUDDHA" } },
+        { "id": "variant.bazer", "label": "Effort BAZER", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.variant", "risk": { "level": 2, "why": "เหมือน BUDDHA" } },
+        { "id": "model.snack", "label": "โมเดล SNACK", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น ความเสียหายจำกัด" } },
+        { "id": "variant.snack", "label": "Effort SNACK", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.variant", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น" } },
+        { "id": "model.advisor", "label": "โมเดล ADVISOR", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
+        { "id": "variant.advisor", "label": "Effort ADVISOR", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.variant", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
+        { "id": "keybind.copy", "label": "คีย์ copy ข้อความล่าสุด", "type": "keybind-list", "target": "${CONFIG}/tui.json", "strategy": "jsonc-set", "path": "keybinds.messages_copy", "placeholder": "ctrl+alt+m, ctrl+alt+o", "risk": { "level": 1, "why": "ถ้าชนกับคีย์อื่น จะกดแล้วไม่มีผล" } },
+        { "id": "lock.models", "label": "ล็อกโมเดล/effort (เตือนเมื่อมีคนเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "models", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร" } },
+        { "id": "lock.keybinds", "label": "ล็อกคีย์ลัด (เตือนเมื่อมีคนเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "keybinds", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร" } }
+      ]
+    },
+    {
+      "id": "arena",
+      "title": "ARENA",
+      "subtitle": "ที่นั่งของ Arena — ใช้ร่วมกับ BUDDHA และการเรียก Arena ตรง ๆ",
+      "controls": [
+        { "id": "arena.runners", "label": "arena runners", "type": "text", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena runners:", "placeholder": "model-a, model-b", "risk": { "level": 2, "why": "ถ้าใส่โมเดลที่ไม่มีสิทธิ์ ที่นั่งนั้นจะรันด้วย default และผล Arena จะไม่ตรงที่คิด" } },
+        { "id": "arena.judge", "label": "arena cross-judge pool", "type": "text", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena cross-judge pool:", "placeholder": "model-c, model-d", "risk": { "level": 2, "why": "ควรต่างตระกูลจาก runner เพื่อไม่ให้กรรมการเข้าข้างตัวเอง" } }
+      ]
+    },
+    {
+      "id": "other",
+      "title": "ตั้งค่าอื่น ๆ",
+      "subtitle": "ไม่ค่อยได้แตะ แต่ต้องหาเจอเมื่อจำเป็น",
+      "controls": [
+        { "id": "model.global", "label": "โมเดลเริ่มต้นของ OpenCode", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ทุกโหมดที่ไม่ได้ตั้งโมเดลเองจะใช้ค่านี้" } },
+        { "id": "steps.buddha", "label": "จำนวนรอบสูงสุดของ BUDDHA", "type": "number", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.steps", "placeholder": "เช่น 60", "risk": { "level": 2, "why": "ค่าน้อยไป = งานยาวถูกตัดกลางคัน; มากไป = ใช้โควตาเยอะ" } },
+        { "id": "steps.bazer", "label": "จำนวนรอบสูงสุดของ BAZER", "type": "number", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.steps", "placeholder": "เช่น 40", "risk": { "level": 2, "why": "เหมือน BUDDHA" } }
+      ]
+    }
+  ],
+  "pstack": {
+    "title": "PSTACK roles",
+    "subtitle": "15 ที่นั่ง — ไม่ต้องไล่ทีละบรรทัดก็ได้ ใช้ preset ด้านบน",
+    "target": "${HOME}/.agents/pstack-models.md",
+    "strategy": "line",
+    "budget": { "id": "pstack.budget", "line": "# budget:", "default": "large" },
+    "roles": [
+      { "id": "feature", "line": "feature, refactoring:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "bugfix", "line": "bug-fix:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "perf", "line": "perf-issue:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "hillclimb", "line": "hillclimb:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "judgment", "line": "judgment and prose:", "default": "claude-opus-5-5-xhigh" },
+      { "id": "hardest", "line": "hardest tasks:", "default": "claude-opus-5-5-xhigh" },
+      { "id": "how-explorer", "line": "how explorer:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "how-explainer", "line": "how explainer:", "default": "claude-opus-5-5-xhigh" },
+      { "id": "why-investigators", "line": "why investigators:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "why-synthesizer", "line": "why synthesizer:", "default": "claude-opus-5-5-xhigh" },
+      { "id": "reflect-tooling", "line": "reflect tooling:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "reflect-judgment", "line": "reflect judgment, divergent, synthesizer:", "default": "claude-opus-5-5-xhigh" },
+      { "id": "swarm", "line": "swarm workers:", "default": "grok-4.7-xhigh-fast" },
+      { "id": "architect", "line": "architect runners:", "default": "claude-opus-5-5-xhigh, grok-4.7-xhigh-fast" },
+      { "id": "interrogate", "line": "interrogate reviewers:", "default": "claude-opus-5-5-xhigh, grok-4.7-xhigh-fast" }
+    ]
+  }
+}

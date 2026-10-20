@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="bazer-token" content="__TOKEN__" />
+<title>BAZER CONSOLE</title>
+<link rel="icon" href="/icon.ico" type="image/x-icon" />
+<link rel="shortcut icon" href="/icon.ico" type="image/x-icon" />
+<link rel="apple-touch-icon" href="/icon.ico" />
+<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/motion.css" />
+</head>
+<body>
+<div class="orbs" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <img src="/icon.ico" alt="" onerror="this.style.display='none'" />
+      <span>B</span>
+    </div>
+    <div class="brand-text">
+      <h1>BAZER CONSOLE</h1>
+      <p id="subtitle">กำลังอ่านสถานะ…</p>
+    </div>
+  </div>
+  <div class="status-strip" id="statusStrip"></div>
+  <button class="ghost kbd-hint" id="cmdBtn" title="Command palette">⌘ K</button>
+</header>
+
+<nav class="tabs" id="tabs" aria-label="หน้าหลัก">
+  <button data-tab="overview" class="active">ภาพรวม</button>
+  <button data-tab="quick">Quick Access</button>
+  <button data-tab="modes">โหมด &amp; สิทธิ์</button>
+  <button data-tab="files">ไฟล์ &amp; สกิล</button>
+  <button data-tab="settings">ตั้งค่า</button>
+  <button data-tab="history">ประวัติ</button>
+</nav>
+
+<main id="main">
+  <section class="view" id="view-overview"></section>
+  <section class="view" id="view-quick" hidden></section>
+  <section class="view" id="view-modes" hidden></section>
+  <section class="view" id="view-files" hidden></section>
+  <section class="view" id="view-settings" hidden></section>
+  <section class="view" id="view-history" hidden></section>
+</main>
+
+<aside class="logbar" id="logbar">
+  <div class="logbar-head">
+    <span class="dot live"></span><strong>กิจกรรม</strong>
+    <span id="logState" class="muted">พร้อม</span>
+    <button class="ghost tiny" id="logToggle">ย่อ</button>
+  </div>
+  <div class="logbar-body" id="logBody"></div>
+</aside>
+
+<div class="modal-root" id="modalRoot" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="modal" role="dialog" aria-modal="true">
+    <header class="modal-head">
+      <h2 id="modalTitle"></h2>
+      <button class="ghost tiny" data-close="1">ปิด</button>
+    </header>
+    <div class="modal-body" id="modalBody"></div>
+    <footer class="modal-foot" id="modalFoot"></footer>
+  </div>
+</div>
+
+<div class="palette" id="palette" hidden>
+  <input id="paletteInput" placeholder="พิมพ์เพื่อค้นหา…" autocomplete="off" />
+  <div class="palette-list" id="paletteList"></div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>

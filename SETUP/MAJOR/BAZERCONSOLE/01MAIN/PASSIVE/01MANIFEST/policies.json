@@ -1,0 +1,105 @@
+{
+  "note": "บันไดความแรงของ BUDDHA — เขียนลง agent.buddha.permission ใน opencode.jsonc (config ต่อท้ายและชนะกฎในไฟล์ · พิสูจน์แล้ว v2.0.32)",
+  "buddha-ladder": {
+    "title": "บันไดเหมาเข่ง",
+    "mode": "buddha",
+    "target": "agent.buddha.permission",
+    "defaultLevel": "1",
+    "levels": [
+      {
+        "id": "1",
+        "name": "สุภาพ",
+        "tagline": "เท่าที่ BUDDHA รุ่นเก่าทำได้",
+        "risk": 1,
+        "why": "อ่าน/แก้ไฟล์ได้ทุกที่ แต่ shell ต้องขออนุมัติทุกครั้ง — เสี่ยงต่ำ เพราะทุกคำสั่งที่อันตรายมีจุดหยุด",
+        "permission": {
+          "read": "allow",
+          "edit": "allow",
+          "glob": "allow",
+          "grep": "allow",
+          "list": "allow",
+          "shell": "ask",
+          "subagent": "allow"
+        }
+      },
+      {
+        "id": "2",
+        "name": "ปลดกำ",
+        "tagline": "shell ไม่ถามก่อนรัน",
+        "risk": 2,
+        "why": "คำสั่ง shell รันได้ทันที — เร็วขึ้นมาก แต่คำสั่งลบ/เขียนทับจะไม่มีการเตือน ต้องอ่านคำสั่งที่โมเดลจะรันให้เป็น",
+        "permission": {
+          "read": "allow",
+          "edit": "allow",
+          "glob": "allow",
+          "grep": "allow",
+          "list": "allow",
+          "shell": "allow",
+          "subagent": "allow"
+        }
+      },
+      {
+        "id": "3",
+        "name": "ออกนอกบ้าน",
+        "tagline": "ออกนอกโปรเจกต์ + เรียกเว็บได้",
+        "risk": 2,
+        "why": "ทำงานนอกโฟลเดอร์โปรเจกต์และดึงข้อมูลจากเว็บได้ — ระวังข้อมูลลับหลุดออกไปกับ prompt และไฟล์นอกโปรเจกต์ถูกแก้โดยไม่ตั้งใจ",
+        "permission": {
+          "read": "allow",
+          "edit": "allow",
+          "glob": "allow",
+          "grep": "allow",
+          "list": "allow",
+          "shell": "allow",
+          "subagent": "allow",
+          "webfetch": "allow",
+          "websearch": "allow",
+          "external_directory": "allow"
+        }
+      },
+      {
+        "id": "4",
+        "name": "ไม่ถามใคร",
+        "tagline": "ไม่หยุดถาม และวนซ่อมตัวเองได้",
+        "risk": 3,
+        "why": "ปิดจุดหยุดสุดท้าย (question/doom_loop) — ถ้าโมเดลเข้าใจผิด จะเดินจนจบก่อนคุณรู้ตัว ควรใช้เมื่อนั่งเฝ้าจอเท่านั้น",
+        "permission": {
+          "read": "allow",
+          "edit": "allow",
+          "glob": "allow",
+          "grep": "allow",
+          "list": "allow",
+          "shell": "allow",
+          "subagent": "allow",
+          "webfetch": "allow",
+          "websearch": "allow",
+          "external_directory": "allow",
+          "question": "allow",
+          "doom_loop": "allow"
+        }
+      },
+      {
+        "id": "5",
+        "name": "เหมาเข่ง",
+        "tagline": "ทุกอย่างจริง ๆ",
+        "risk": 3,
+        "why": "เปิดทุก action ที่ OpenCode มี รวม browser — ไม่มีอะไรกันไว้เลย เขียนทับไฟล์ระบบได้ ใช้เมื่อรู้ตัวว่ากำลังทำอะไร และมี backup แล้วเท่านั้น",
+        "permission": {
+          "read": "allow",
+          "edit": "allow",
+          "glob": "allow",
+          "grep": "allow",
+          "list": "allow",
+          "shell": "allow",
+          "subagent": "allow",
+          "webfetch": "allow",
+          "websearch": "allow",
+          "external_directory": "allow",
+          "question": "allow",
+          "doom_loop": "allow",
+          "browser": "allow"
+        }
+      }
+    ]
+  }
+}

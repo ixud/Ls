@@ -1,0 +1,35 @@
+{
+  "note": "กฎ R1–R4 ในรูปข้อมูล — engine ของ law.mjs อ่านไฟล์นี้ ไม่ hardcode กฎในโค้ด",
+  "rules": [
+    {
+      "id": "R1",
+      "title": "โฟลเดอร์ข้อมูลห้ามมีโค้ด",
+      "kind": "no-code-in-data",
+      "paths": ["AGENT/**", "BAZERCONSOLE/01MAIN/CONFIGTEMPLATEFORAPPLY/**", "BAZERCONSOLE/01MAIN/PASSIVE/**"],
+      "forbidExt": [".mjs", ".js", ".cjs", ".ts", ".tsx", ".ps1", ".cmd", ".bat", ".vbs", ".exe", ".dll"],
+      "except": ["BAZERCONSOLE/01MAIN/PASSIVE/02INSTALLER/**"]
+    },
+    {
+      "id": "R2",
+      "title": "ห้าม hardcode ที่อยู่ปลายทางในโค้ด",
+      "kind": "no-hardcoded-targets",
+      "paths": ["BAZERCONSOLE/01MAIN/ACTIVE/**"],
+      "forbidPatterns": ["[A-Za-z]:\\\\Users", "%USERPROFILE%", "\\\\.config\\\\opencode", "\\\\.agents\\\\skills"],
+      "except": ["BAZERCONSOLE/01MAIN/ACTIVE/var/**"]
+    },
+    {
+      "id": "R3",
+      "title": "actions.json ต้องตรงกับ handler",
+      "kind": "actions-handlers",
+      "paths": []
+    },
+    {
+      "id": "R4",
+      "title": "ห้ามมี .bak ข้างไฟล์จริง",
+      "kind": "no-bak-files",
+      "paths": ["**"],
+      "forbidNamePatterns": ["\\.bak", "~$", "\\.orig$"],
+      "except": ["BAZERCONSOLE/01MAIN/ACTIVE/var/**"]
+    }
+  ]
+}

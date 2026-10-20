@@ -1,0 +1,29 @@
+{
+  "note": "ขั้นตอนติดตั้งเครื่องมือที่ Console ต้องมี — actions.mjs 'install-tools' อ่านไฟล์นี้ (ห้ามเขียนรายการซ้ำในโค้ด)",
+  "steps": [
+    {
+      "id": "node",
+      "label": "Node.js",
+      "check": { "cmd": "node --version" },
+      "min": "20",
+      "install": "winget install OpenJS.NodeJS.LTS",
+      "required": true
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "check": { "cmd": "opencode --version" },
+      "min": "2.0.30",
+      "install": "npm install -g @opencode/cli",
+      "required": true
+    },
+    {
+      "id": "plannotator",
+      "label": "Plannotator",
+      "check": { "kind": "plannotator-locate" },
+      "install": null,
+      "required": false,
+      "why": "ไม่มีคำสั่งติดตั้งที่ยืนยันได้จากหน้างาน — Console จะตรวจว่าเจอไฟล์ของมันหรือไม่ และบอกผู้ใช้ให้ติดตั้งตามวิธีของ Plannotator เอง (ห้ามเดาคำสั่ง)"
+    }
+  ]
+}

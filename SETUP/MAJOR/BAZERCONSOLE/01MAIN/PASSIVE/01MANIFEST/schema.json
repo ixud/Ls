@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BAZERCONSOLE MANIFEST schema v0.1.0",
+  "type": "object",
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "kind", "title", "strategy", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$" },
+        "kind": { "enum": ["agent", "subagent", "subsubagent", "skill", "plugin", "command", "config", "template", "launcher", "patch"] },
+        "title": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string", "pattern": "^\\$\\{[A-Z]+\\}(/|$)" },
+        "strategy": { "enum": ["overwrite", "create-only", "template-once", "jsonc-merge", "jsonc-remove-array-item", "copy-tree", "patch", "line"] },
+        "owner": { "enum": ["ours", "user", "pstack"] },
+        "status": { "enum": ["ready", "raw", "design"] },
+        "auto": { "type": "boolean" },
+        "exclude": { "type": "array", "items": { "type": "string" } },
+        "value": {},
+        "valuePath": { "type": "string" },
+        "fromPolicy": { "type": "string" },
+        "onlyIfMissing": { "type": "boolean" },
+        "remove": { "type": "string" },
+        "proof": { "type": "string" },
+        "why": { "type": "string" },
+        "platform": { "type": "string" }
+      }
+    },
+    "legacy": {
+      "description": "ฟิลด์ที่ถอดออกแล้ว ห้ามกลับมาใช้",
+      "forbidden": ["permissions (ลิสต์)", "bash", "task", "skill", "lsp", "mirror", "gang"]
+    },
+    "level": {
+      "type": "object",
+      "required": ["id", "name", "risk", "why", "permission"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "ชื่อไทย ต้องจำง่าย" },
+        "tagline": { "type": "string" },
+        "risk": { "enum": [1, 2, 3] },
+        "why": { "type": "string", "description": "อธิบายว่าเสี่ยงยังไงให้คนไม่ใช่ dev เข้าใจ" },
+        "permission": { "type": "object" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["id", "group", "title", "kind", "risk", "confirm"],
+      "properties": {
+        "id": { "type": "string" },
+        "group": { "enum": ["overview", "modes", "files", "settings", "history"] },
+        "title": { "type": "string" },
+        "cta": { "type": "string", "description": "ข้อความบนปุ่ม (บังคับ — selftest ตรวจ)" },
+        "subtitle": { "type": "string" },
+        "kind": { "enum": ["read", "write"] },
+        "risk": {
+          "type": "object",
+          "required": ["level", "why"],
+          "properties": {
+            "level": { "enum": [1, 2, 3] },
+            "why": { "type": "string" }
+          }
+        },
+        "confirm": { "enum": ["none", "popup"] },
+        "confirmUnlessParam": { "type": "string", "description": "ต้องยืนยันเฉพาะเมื่อพารามิเตอร์นี้เป็น true (ใช้กับปุ่มที่ dry-run ได้)" },
+        "params": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "control": {
+      "type": "object",
+      "required": ["id", "label", "type", "target", "strategy", "risk"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "type": { "enum": ["text", "number", "select", "toggle", "keybind-list"] },
+        "target": { "type": "string" },
+        "strategy": { "enum": ["jsonc-set", "line", "internal"] },
+        "path": { "type": "string" },
+        "line": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "placeholder": { "type": "string" },
+        "risk": { "type": "object", "properties": { "level": { "enum": [1, 2, 3] }, "why": { "type": "string" } } }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "required": ["id", "title", "kind", "severity"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "kind": { "type": "string", "description": "ต้องมี implementation ใน probe.mjs" },
+        "params": { "type": "object" },
+        "severity": { "enum": ["fail", "warn"] },
+        "why": { "type": "string" }
+      }
+    },
+    "lawRule": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "properties": {
+        "id": { "enum": ["R1", "R2", "R3", "R4"] },
+        "title": { "type": "string" },
+        "kind": { "type": "string", "description": "ต้องมี implementation ใน law.mjs" },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "except": { "type": "array", "items": { "type": "string" } },
+        "forbidExt": { "type": "array", "items": { "type": "string" } },
+        "forbidPatterns": { "type": "array", "items": { "type": "string" } },
+        "forbidNamePatterns": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

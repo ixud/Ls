@@ -1,0 +1,15 @@
+{
+  "note": "ค่าที่ Console ใช้จัดการปุ่มอนุมัติของ Plannotator — การแพตช์จริงทำผ่านการ์ด 'ปุ่มอนุมัติ Plannotator' ในหน้า โหมด & สิทธิ์",
+  "status": "manual",
+  "why": "ต้องรัน plannotator-locate ให้เจอไฟล์จริงก่อน (probe id: plannotator-locate) — ไม่เจอไฟล์ = ไม่แตะอะไร",
+  "approveTarget": {
+    "buddha": "buddha",
+    "bazer": "bazer"
+  },
+  "mechanism": "แทน token switchTo:\"<build|builder|buddha|bazer>\" ในไฟล์ของปลั๊กอิน (backup + ตรวจซ้ำหลังเขียน)",
+  "rule": "ถ้าเรียกจากโหมดไหน ปุ่มอนุมัติควรกลับโหมดนั้น — แต่ Plannotator มีปุ่มเดียว (global); PLANNOTATOR ต้องรายงานถ้าปุ่มชี้ผิดโหมด",
+  "verify": {
+    "afterPatch": "เปิด OpenCode ใหม่ แล้วกดอนุมัติ 1 ครั้ง ต้องกลับเข้าโหมดที่ตั้งไว้",
+    "fallback": "ถ้าแพตช์ไม่ได้ ให้ใช้ submit_plan ตามปกติ และรายงานว่าไม่มีปุ่มกลับโหมด"
+  }
+}

@@ -1,0 +1,11 @@
+# runtime ของ Console (ไม่ขึ้น git)
+BAZERCONSOLE/01MAIN/ACTIVE/var/
+
+# ไอคอนโฟลเดอร์/ทางลัด — ผูกกับเครื่อง (สร้างใหม่ได้จาก 02SHORTCUT/create-desktop-shortcut.ps1)
+BAZERCONSOLE/desktop.ini
+*.lnk
+
+# ไฟล์ชั่วคราวจากการเขียนแบบ atomic
+*.bazer-tmp-*
+
+# ไม่มี .bak ข้างไฟล์จริง (R4) — ถ้าเจอ ให้ย้ายเข้า ACTIVE/var/backups/

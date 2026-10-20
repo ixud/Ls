@@ -1,0 +1,22 @@
+# pstack model configuration — one line per role
+# `inherit-parent` หรือ `auto` = ใช้โมเดลของ parent (omit model)
+# แก้ไฟล์นี้ผ่าน BAZERCONSOLE → ตั้งค่า → PSTACK roles (มี backup)
+# budget: large
+
+feature, refactoring: grok-4.7-xhigh-fast
+bug-fix: grok-4.7-xhigh-fast
+perf-issue: grok-4.7-xhigh-fast
+hillclimb: grok-4.7-xhigh-fast
+judgment and prose: claude-opus-5-5-xhigh
+hardest tasks: claude-opus-5-5-xhigh
+how explorer: grok-4.7-xhigh-fast
+how explainer: claude-opus-5-5-xhigh
+why investigators: grok-4.7-xhigh-fast
+why synthesizer: claude-opus-5-5-xhigh
+reflect tooling: grok-4.7-xhigh-fast
+reflect judgment, divergent, synthesizer: claude-opus-5-5-xhigh
+swarm workers: grok-4.7-xhigh-fast
+architect runners: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
+interrogate reviewers: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
+arena runners: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast
+arena cross-judge pool: claude-opus-5-5-xhigh, grok-4.7-xhigh-fast

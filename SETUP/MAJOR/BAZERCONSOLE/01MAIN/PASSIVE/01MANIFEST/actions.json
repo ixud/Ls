@@ -1,0 +1,239 @@
+{
+  "note": "ปุ่มทั้งหมดของ Console — UI วาดจากไฟล์นี้ และ SERVER ต้องมี handler ตรงกับ id ทุกตัว (R3). ห้ามเพิ่มปุ่มใน HTML",
+  "actions": [
+    {
+      "id": "self-check",
+      "group": "overview",
+      "title": "ตรวจทุกอย่าง",
+      "cta": "ตรวจทุกอย่าง",
+      "subtitle": "กฎ + ความครบ + ของจริง",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่านอย่างเดียว ไม่เขียนไฟล์ใด ๆ" },
+      "confirm": "none"
+    },
+    {
+      "id": "plan",
+      "group": "overview",
+      "title": "ตรวจว่ามีอะไรใหม่",
+      "cta": "ตรวจว่ามีอะไรใหม่",
+      "subtitle": "dry-run: ยังไม่เขียนอะไร",
+      "kind": "read",
+      "risk": { "level": 1, "why": "คำนวณแผนติดตั้งเท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "apply",
+      "group": "overview",
+      "title": "ติดตั้ง / อัพเดตทั้งหมด",
+      "cta": "ติดตั้ง / อัพเดตทั้งหมด",
+      "subtitle": "เขียนเฉพาะรายการที่ auto=true",
+      "kind": "write",
+      "risk": { "level": 2, "why": "เขียนทับไฟล์ของเราในเครื่อง (มี backup ทุกไฟล์) — AGENTS.md และ pstack-models.md ถูกสร้างครั้งเดียว ไม่ทับ" },
+      "confirm": "popup"
+    },
+    {
+      "id": "probe",
+      "group": "overview",
+      "title": "ตรวจของจริง",
+      "cta": "ตรวจของจริง",
+      "subtitle": "รัน OpenCode จริงแล้วเทียบผล",
+      "kind": "read",
+      "risk": { "level": 1, "why": "เรียกคำสั่งอ่านสถานะ (opencode debug agents ฯลฯ)" },
+      "confirm": "none"
+    },
+    {
+      "id": "law-check",
+      "group": "overview",
+      "title": "ตรวจกฎ 4 ข้อ",
+      "cta": "ตรวจกฎ 4 ข้อ",
+      "subtitle": "R1–R4 ก่อนติดตั้งเสมอ",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่านโครงสร้างโฟลเดอร์เท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "policy-set",
+      "group": "modes",
+      "title": "ตั้งระดับเหมาเข่ง",
+      "cta": "ตั้งระดับนี้",
+      "subtitle": "มีผลทันทีกับ session ใหม่",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เปลี่ยนสิทธิ์ของ BUDDHA ทั้งโหมด — ระดับ 4–5 ปิดจุดหยุดถามทั้งหมด" },
+      "confirm": "popup",
+      "params": ["level"]
+    },
+    {
+      "id": "policy-undo",
+      "group": "modes",
+      "title": "ย้อนระดับก่อนหน้า",
+      "cta": "ย้อนระดับก่อนหน้า",
+      "subtitle": "คืนค่าที่เคยตั้งไว้",
+      "kind": "write",
+      "risk": { "level": 1, "why": "ย้อนกลับค่าที่บันทึกไว้ใน backup" },
+      "confirm": "none"
+    },
+    {
+      "id": "builtin-toggle",
+      "group": "modes",
+      "title": "ซ่อน/คืน Plan & Build ของ OpenCode",
+      "cta": "ซ่อน/คืน Plan & Build",
+      "subtitle": "ไม่ลบไฟล์ — แก้ config",
+      "kind": "write",
+      "risk": { "level": 2, "why": "เปลี่ยนรายการโหมดที่เห็นใน Shift+Tab" },
+      "confirm": "popup",
+      "params": ["mode"]
+    },
+    {
+      "id": "retire-old-flow",
+      "group": "modes",
+      "title": "ถอด bazer-flow รุ่นเก่า",
+      "cta": "ถอดปลั๊กอินเก่า",
+      "subtitle": "เอาปลั๊กอินเก่าออกจาก config",
+      "kind": "write",
+      "risk": { "level": 3, "why": "ถ้าปลั๊กอินเก่ายังเป็นตัวกันการเขียนไฟล์อยู่ การถอดจะทำให้ไม่มี gate จนกว่าจะติดตั้งชุดใหม่เสร็จ" },
+      "confirm": "popup"
+    },
+    {
+      "id": "settings-save",
+      "group": "settings",
+      "title": "บันทึกค่าที่ตั้ง",
+      "cta": "บันทึกเฉพาะที่แก้",
+      "subtitle": "เขียนเฉพาะช่องที่เปลี่ยน",
+      "kind": "write",
+      "risk": { "level": 2, "why": "เขียนทับค่าที่ระบุใน opencode.jsonc / tui.json / pstack-models.md (มี backup)" },
+      "confirm": "popup",
+      "params": ["patches"]
+    },
+    {
+      "id": "settings-full",
+      "group": "settings",
+      "title": "เขียนทับไฟล์ตั้งค่าทั้งไฟล์",
+      "cta": "เขียนทับทั้งไฟล์",
+      "subtitle": "tui.json / cli.json — แทนที่ทั้งไฟล์",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เขียนทับทั้งไฟล์ — ค่าที่ไม่ได้อยู่ในเนื้อหาจะหายไป (มี backup และตรวจ JSON ก่อนเขียน)" },
+      "confirm": "popup",
+      "params": ["file", "content"]
+    },
+    {
+      "id": "pstack-preset",
+      "group": "settings",
+      "title": "เติมโมเดล PSTACK ทั้งชุด",
+      "cta": "เติมทั้งชุด",
+      "subtitle": "แบบเดียวกันหมด หรือแยกงานเขียน/งานตัดสิน",
+      "kind": "write",
+      "risk": { "level": 2, "why": "เขียนทับทุกบรรทัด role ใน pstack-models.md" },
+      "confirm": "popup",
+      "params": ["mode", "modelA", "modelB"]
+    },
+    {
+      "id": "history-list",
+      "group": "history",
+      "title": "อ่านประวัติ",
+      "cta": "อ่านประวัติ",
+      "subtitle": "ทุกครั้งที่เขียนไฟล์",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่าน log เท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "rollback",
+      "group": "history",
+      "title": "ย้อนทั้งรอบ",
+      "cta": "ย้อนรอบนี้",
+      "subtitle": "คืนไฟล์จาก backup ของรอบนั้น",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เขียนทับไฟล์ระบบด้วยสำเนาเก่า — งานที่ทำหลังรอบนั้นจะหาย" },
+      "confirm": "popup",
+      "params": ["stamp"]
+    },
+    {
+      "id": "plannotator-locate",
+      "group": "settings",
+      "title": "หาไฟล์ Plannotator",
+      "cta": "หาไฟล์ Plannotator",
+      "subtitle": "ก่อนแพตช์ปุ่มอนุมัติ",
+      "kind": "read",
+      "risk": { "level": 1, "why": "ค้นหาไฟล์เท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "plannotator-patch",
+      "group": "modes",
+      "title": "แพตช์ปุ่มอนุมัติ Plannotator",
+      "cta": "แพตช์ปุ่มอนุมัติ",
+      "subtitle": "กำหนดว่าอนุมัติแล้วกลับโหมดไหน (BUDDHA / BAZER)",
+      "kind": "write",
+      "risk": { "level": 3, "why": "แก้ไฟล์ของปลั๊กอิน Plannotator ในเครื่อง — backup ทุกไฟล์และตรวจซ้ำหลังเขียน" },
+      "confirm": "popup",
+      "confirmUnlessParam": "apply",
+      "params": ["target", "apply"]
+    },
+    {
+      "id": "lock-restore",
+      "group": "settings",
+      "title": "ล็อกค่ากลับตาม snapshot",
+      "cta": "ล็อกคืน",
+      "subtitle": "เขียน model/effort กลับเป็นค่าที่บันทึกไว้",
+      "kind": "write",
+      "risk": { "level": 2, "why": "เขียนทับ model/effort ของ 4 โหมด (backup ทุกไฟล์)" },
+      "confirm": "popup"
+    },
+    {
+      "id": "cleanup-plan",
+      "group": "files",
+      "title": "ดูของเก่าที่จะเคลียร์",
+      "cta": "ดูของเก่า",
+      "subtitle": "dry-run: ยังไม่ย้ายอะไร",
+      "kind": "read",
+      "risk": { "level": 1, "why": "อ่านรายการไฟล์/ปลั๊กอินที่ไม่อยู่ใน MAJOR เท่านั้น" },
+      "confirm": "none"
+    },
+    {
+      "id": "cleanup-old",
+      "group": "files",
+      "title": "ย้ายของเก่าไป quarantine",
+      "cta": "ย้ายของเก่าไป quarantine",
+      "subtitle": "เก็บสำเนาไว้กู้คืน ไม่ได้ลบทิ้ง",
+      "kind": "write",
+      "risk": { "level": 3, "why": "ย้ายไฟล์ agent/skill/ปลั๊กอินเก่าออกจากโฟลเดอร์ระบบ และถอดปลั๊กอินเก่าออกจาก config — ของเก่าจะหายจาก OpenCode จนกว่าจะกู้จาก var/quarantine" },
+      "confirm": "popup",
+      "confirmUnlessParam": "apply",
+      "params": ["apply", "groups"]
+    },
+    {
+      "id": "reset-template",
+      "group": "files",
+      "title": "รีเซ็ตไฟล์ระบบจาก template",
+      "cta": "รีเซ็ตจาก template",
+      "subtitle": "คืน AGENTS.md / pstack-models.md ให้ตรง MAJOR (สำรองก่อนเขียน)",
+      "kind": "write",
+      "risk": { "level": 3, "why": "เขียนทับไฟล์ที่คุณอาจแก้เอง — ระบบสำรองไว้ที่ var/backups ทุกครั้ง" },
+      "confirm": "popup",
+      "params": ["id"]
+    },
+    {
+      "id": "install-tools",
+      "group": "overview",
+      "title": "ติดตั้งเครื่องมือที่ขาด",
+      "cta": "ติดตั้งเครื่องมือที่ขาด",
+      "subtitle": "Node · OpenCode · Plannotator",
+      "kind": "write",
+      "risk": { "level": 3, "why": "รันตัวติดตั้งของระบบ (winget/npm) — ต้องมีเน็ตและอาจใช้เวลาหลายนาที" },
+      "confirm": "popup",
+      "confirmUnlessParam": "apply",
+      "params": ["apply"]
+    },
+    {
+      "id": "open-target",
+      "group": "files",
+      "title": "เปิดโฟลเดอร์ปลายทาง",
+      "cta": "เปิดโฟลเดอร์",
+      "subtitle": "ดูไฟล์จริงในเครื่อง",
+      "kind": "read",
+      "risk": { "level": 1, "why": "เปิด File Explorer เท่านั้น" },
+      "confirm": "none",
+      "params": ["which"]
+    }
+  ]
+}
