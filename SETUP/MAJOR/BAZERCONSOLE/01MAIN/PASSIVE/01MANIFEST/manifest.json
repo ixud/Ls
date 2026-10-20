@@ -5,18 +5,19 @@
     {
       "id": "cfg.builtin-off",
       "kind": "config",
-      "title": "ซ่อน Plan/Build ที่มากับ OpenCode",
+      "title": "ซ่อน Plan/Build/Poteto Mode (เหลือโหมดหลัก 4 ตัว)",
       "target": "${CONFIG}/opencode.jsonc",
       "strategy": "jsonc-merge",
       "valuePath": "agent",
       "value": {
         "plan": { "mode": "subagent", "hidden": true },
-        "build": { "mode": "subagent", "hidden": true }
+        "build": { "mode": "subagent", "hidden": true },
+        "poteto-mode": { "mode": "subagent", "hidden": true }
       },
       "status": "ready",
       "auto": true,
       "proof": "builtin-hidden",
-      "why": "ผู้ใช้ต้องการเหลือโหมดของเรา 4 ตัว — ซ่อนจาก config ไม่ลบไฟล์ จึงย้อนกลับได้"
+      "why": "ผู้ใช้ต้องการเหลือโหมดของเรา 4 ตัวใน Shift+Tab — ซ่อน plan/build/poteto-mode จาก config ไม่ลบไฟล์ จึงย้อนกลับได้"
     },
     {
       "id": "cfg.buddha-default",

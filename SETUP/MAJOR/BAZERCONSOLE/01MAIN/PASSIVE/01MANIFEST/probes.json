@@ -17,18 +17,19 @@
     },
     {
       "id": "builtin-hidden",
-      "title": "Plan/Build ถูกซ่อนจริง",
+      "title": "Plan/Build/Poteto Mode ถูกซ่อนจริง",
       "kind": "agents-hidden",
-      "params": { "ids": ["plan", "build"] },
+      "params": { "ids": ["plan", "build", "poteto-mode"] },
       "severity": "fail",
-      "why": "ตั้งใน config แล้วแต่ OpenCode อาจไม่รับ — ต้องอ่านผลจาก debug agents"
+      "why": "ตั้งใน config แล้วแต่ OpenCode อาจไม่รับ — ต้องอ่านผลจาก debug agents; poteto-mode ต้องไม่โผล่ใน Shift+Tab"
     },
     {
       "id": "modes-present",
-      "title": "โหมด 4 ตัวโหลดจริง",
+      "title": "Shift+Tab เหลือ 4 โหมดหลัก",
       "kind": "agents-present",
-      "params": { "ids": ["buddha", "bazer", "snack", "advisor"], "mode": "primary", "marker": "<!-- BAZER-MODE:" },
-      "severity": "fail"
+      "params": { "ids": ["buddha", "bazer", "snack", "advisor"], "mode": "primary", "exact": true, "marker": "<!-- BAZER-MODE:" },
+      "severity": "fail",
+      "why": "ต้องมี 4 ตัวครบและต้องไม่มี primary ที่มองเห็นได้ตัวอื่น (built-in ที่ hidden อยู่แล้วไม่นับ) — กัน poteto-mode หรือโหมดใหม่หลุดเข้ามา"
     },
     {
       "id": "permission-level",

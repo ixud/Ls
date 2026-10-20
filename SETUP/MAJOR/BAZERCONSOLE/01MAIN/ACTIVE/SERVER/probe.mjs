@@ -107,7 +107,18 @@ const impl = {
       if (a.mode !== p.mode) { badList.push(`${id}: mode=${a.mode}`); continue; }
       if (p.marker && !String(a.system || '').includes(p.marker)) badList.push(`${id}: ไฟล์รุ่นเก่า (ไม่มี marker)`);
     }
-    return { ok: badList.length === 0, detail: badList.length ? badList.join(' · ') : `โหลดครบ ${p.ids.length} ตัว (ไฟล์ใหม่)` };
+    // exact = โหมด primary ที่ "มองเห็นได้" ต้องมีแค่ ids ที่ประกาศ
+    // built-in ที่ hidden อยู่แล้ว (compaction/summary/title) ไม่โผล่ใน Shift+Tab จึงไม่นับ
+    if (p.exact) {
+      const extra = data.filter((a) => a.mode === p.mode && a.hidden !== true && !p.ids.includes(a.id));
+      if (extra.length) badList.push(`โหมดเกิน: ${extra.map((a) => a.id).join(', ')}`);
+    }
+    return {
+      ok: badList.length === 0,
+      detail: badList.length
+        ? badList.join(' · ')
+        : `โหลดครบ ${p.ids.length} ตัว (ไฟล์ใหม่)${p.exact ? ' · ไม่มีโหมดเกิน' : ''}`,
+    };
   },
   'permission-level': (p, home) => {
     const state = readState();

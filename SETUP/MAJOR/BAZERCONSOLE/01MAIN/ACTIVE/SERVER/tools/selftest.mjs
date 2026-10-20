@@ -14,6 +14,7 @@ import { manifest, srcPath, probes, policies, settings } from '../manifest.mjs';
 import { makeResolver, ROOT } from '../env.mjs';
 import { PROBE_KINDS } from '../probe.mjs';
 import { plannotatorPlan, plannotatorPatch } from '../plannotator.mjs';
+import { parseModelsOutput } from '../models.mjs';
 
 let pass = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log(`  ok  ${name}`); } catch (e) { console.error(`FAIL  ${name}\n      ${e.message}`); process.exitCode = 1; } };
@@ -64,6 +65,32 @@ t('ลบสมาชิก array ได้', () => {
 t('ไฟล์ว่าง → สร้าง object ได้', () => {
   const out = setAtPath('', ['model'], 'a/b');
   assert.equal(parseJsonc(out).model, 'a/b');
+});
+
+console.log('models');
+t('parseModelsOutput จัดกลุ่ม/เรียง/label ถูก + dedupe', () => {
+  const sample = [
+    'openai/gpt-5',
+    'opencode/beam-free',
+    'opencode-go/glm-5.3',
+    'opencode/deepseek-v4.1-flash-free',
+    'groq/llama-3.3-70b-versatile',
+    'opencode/beam-free',
+    '',
+    'ไม่มี slash',
+  ].join('\n');
+  const { models, providers } = parseModelsOutput(sample);
+  assert.deepEqual(providers.map((p) => p.id), ['opencode', 'opencode-go', 'groq', 'openai']);
+  assert.equal(providers[0].label, 'OpenCode');
+  assert.equal(providers[1].label, 'OpenCode Go Harness');
+  assert.equal(providers[2].label, 'groq');
+  assert.equal(providers[0].count, 2);
+  assert.equal(models.length, 5);
+  const m = models.find((x) => x.id === 'opencode/beam-free');
+  assert.equal(m.provider, 'opencode');
+  assert.equal(m.name, 'beam-free');
+  assert.equal(m.label, 'OpenCode · beam-free');
+  assert.equal(models.filter((x) => x.id === 'opencode/beam-free').length, 1);
 });
 
 console.log('plan / law (sandbox)');
@@ -304,6 +331,24 @@ t('settings.json มี full.files สำหรับเขียนทับท
   const s = JSON.parse(fs.readFileSync(path.join(ROOT, 'BAZERCONSOLE/01MAIN/PASSIVE/01MANIFEST/settings.json'), 'utf8'));
   assert.ok(Array.isArray(s.full?.files) && s.full.files.length >= 2);
   for (const f of s.full.files) assert.match(f.target, /^\$\{/);
+});
+
+t('settings.json ใช้ type model/model-list กับช่องโมเดล', () => {
+  const byId = new Map();
+  for (const g of settings.groups) for (const c of g.controls) byId.set(c.id, c);
+  for (const id of ['model.buddha', 'model.bazer', 'model.snack', 'model.advisor', 'model.global']) {
+    assert.equal(byId.get(id)?.type, 'model', id);
+  }
+  assert.equal(byId.get('arena.runners')?.type, 'model-list');
+  assert.equal(byId.get('arena.judge')?.type, 'model-list');
+});
+
+t('probe modes-present ใช้ exact + agents-hidden ครอบ poteto-mode', () => {
+  const modes = probes.probes.find((p) => p.id === 'modes-present');
+  assert.equal(modes?.params?.exact, true);
+  const hidden = probes.probes.find((p) => p.id === 'builtin-hidden');
+  assert.equal(hidden?.kind, 'agents-hidden');
+  assert.ok(hidden?.params?.ids?.includes('poteto-mode'));
 });
 
 t('subagent ทุกตัวต้องเป็น mode: subagent (รวม builder)', () => {

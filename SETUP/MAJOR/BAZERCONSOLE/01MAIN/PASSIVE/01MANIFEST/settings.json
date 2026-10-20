@@ -14,13 +14,13 @@
       "title": "Quick Access",
       "subtitle": "ค่าที่ต้องเห็นทุกวัน — ตั้งแล้วกดบันทึกครั้งเดียว",
       "controls": [
-        { "id": "model.buddha", "label": "โมเดล BUDDHA", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ถ้าชื่อโมเดลผิด โหมดจะเปิดไม่ขึ้นจนกว่าจะแก้คืน" } },
+        { "id": "model.buddha", "label": "โมเดล BUDDHA", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ถ้าชื่อโมเดลผิด โหมดจะเปิดไม่ขึ้นจนกว่าจะแก้คืน" } },
         { "id": "variant.buddha", "label": "Effort BUDDHA", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.variant", "risk": { "level": 2, "why": "variant ต้องมีจริงในรุ่นนี้ — ถ้าไม่มี โมเดลอาจใช้ค่า default แทนโดยไม่แจ้ง" } },
-        { "id": "model.bazer", "label": "โมเดล BAZER", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "เหมือน BUDDHA" } },
+        { "id": "model.bazer", "label": "โมเดล BAZER", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "เหมือน BUDDHA" } },
         { "id": "variant.bazer", "label": "Effort BAZER", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.variant", "risk": { "level": 2, "why": "เหมือน BUDDHA" } },
-        { "id": "model.snack", "label": "โมเดล SNACK", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น ความเสียหายจำกัด" } },
+        { "id": "model.snack", "label": "โมเดล SNACK", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น ความเสียหายจำกัด" } },
         { "id": "variant.snack", "label": "Effort SNACK", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.snack.variant", "risk": { "level": 1, "why": "เป็นโหมดอ่าน/ตอบสั้น" } },
-        { "id": "model.advisor", "label": "โมเดล ADVISOR", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
+        { "id": "model.advisor", "label": "โมเดล ADVISOR", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.model", "placeholder": "provider/model-id", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
         { "id": "variant.advisor", "label": "Effort ADVISOR", "type": "select", "options": ["default", "minimal", "low", "medium", "high", "xhigh", "max"], "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.advisor.variant", "risk": { "level": 1, "why": "โหมดไม่แตะไฟล์" } },
         { "id": "keybind.copy", "label": "คีย์ copy ข้อความล่าสุด", "type": "keybind-list", "target": "${CONFIG}/tui.json", "strategy": "jsonc-set", "path": "keybinds.messages_copy", "placeholder": "ctrl+alt+m, ctrl+alt+o", "risk": { "level": 1, "why": "ถ้าชนกับคีย์อื่น จะกดแล้วไม่มีผล" } },
         { "id": "lock.models", "label": "ล็อกโมเดล/effort (เตือนเมื่อมีคนเปลี่ยน)", "type": "toggle", "target": "${ACTIVE}/var/lock.json", "strategy": "internal", "path": "models", "risk": { "level": 1, "why": "เป็นการเฝ้าระวัง ไม่ได้บล็อกใคร" } },
@@ -32,8 +32,8 @@
       "title": "ARENA",
       "subtitle": "ที่นั่งของ Arena — ใช้ร่วมกับ BUDDHA และการเรียก Arena ตรง ๆ",
       "controls": [
-        { "id": "arena.runners", "label": "arena runners", "type": "text", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena runners:", "placeholder": "model-a, model-b", "risk": { "level": 2, "why": "ถ้าใส่โมเดลที่ไม่มีสิทธิ์ ที่นั่งนั้นจะรันด้วย default และผล Arena จะไม่ตรงที่คิด" } },
-        { "id": "arena.judge", "label": "arena cross-judge pool", "type": "text", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena cross-judge pool:", "placeholder": "model-c, model-d", "risk": { "level": 2, "why": "ควรต่างตระกูลจาก runner เพื่อไม่ให้กรรมการเข้าข้างตัวเอง" } }
+        { "id": "arena.runners", "label": "arena runners", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena runners:", "placeholder": "model-a, model-b", "risk": { "level": 2, "why": "ถ้าใส่โมเดลที่ไม่มีสิทธิ์ ที่นั่งนั้นจะรันด้วย default และผล Arena จะไม่ตรงที่คิด" } },
+        { "id": "arena.judge", "label": "arena cross-judge pool", "type": "model-list", "target": "${HOME}/.agents/pstack-models.md", "strategy": "line", "line": "arena cross-judge pool:", "placeholder": "model-c, model-d", "risk": { "level": 2, "why": "ควรต่างตระกูลจาก runner เพื่อไม่ให้กรรมการเข้าข้างตัวเอง" } }
       ]
     },
     {
@@ -41,7 +41,7 @@
       "title": "ตั้งค่าอื่น ๆ",
       "subtitle": "ไม่ค่อยได้แตะ แต่ต้องหาเจอเมื่อจำเป็น",
       "controls": [
-        { "id": "model.global", "label": "โมเดลเริ่มต้นของ OpenCode", "type": "text", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ทุกโหมดที่ไม่ได้ตั้งโมเดลเองจะใช้ค่านี้" } },
+        { "id": "model.global", "label": "โมเดลเริ่มต้นของ OpenCode", "type": "model", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "model", "placeholder": "provider/model-id", "risk": { "level": 2, "why": "ทุกโหมดที่ไม่ได้ตั้งโมเดลเองจะใช้ค่านี้" } },
         { "id": "steps.buddha", "label": "จำนวนรอบสูงสุดของ BUDDHA", "type": "number", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.buddha.steps", "placeholder": "เช่น 60", "risk": { "level": 2, "why": "ค่าน้อยไป = งานยาวถูกตัดกลางคัน; มากไป = ใช้โควตาเยอะ" } },
         { "id": "steps.bazer", "label": "จำนวนรอบสูงสุดของ BAZER", "type": "number", "target": "${CONFIG}/opencode.jsonc", "strategy": "jsonc-set", "path": "agent.bazer.steps", "placeholder": "เช่น 40", "risk": { "level": 2, "why": "เหมือน BUDDHA" } }
       ]

@@ -14,6 +14,7 @@ import { runAction, actionIds } from './actions.mjs';
 import { readHistory, readState, allControls } from './apply.mjs';
 import { cleanupPlan } from './apply.mjs';
 import { getAtPath } from './jsonc.mjs';
+import { listModels } from './models.mjs';
 
 const APP_VERSION = '0.1.0';
 const arg = (name, def) => {
@@ -145,6 +146,11 @@ const server = http.createServer((req, res) => {
   const home = HOME || process.env.BAZER_HOME || undefined;
 
   if (req.method === 'GET') {
+    if (url.pathname === '/api/models') {
+      // รายชื่อโมเดลจริง — อ่านอย่างเดียว ไม่ต้องใช้ token และไม่เขียน state
+      try { return send(res, 200, JSON.stringify(listModels({ fresh: url.searchParams.get('fresh') === '1' }))); }
+      catch (e) { return send(res, 500, JSON.stringify({ ok: false, error: e.message, models: [], providers: [] })); }
+    }
     if (url.pathname === '/api/state') {
       try { return send(res, 200, JSON.stringify(buildState(home, { withProbes: url.searchParams.get('probes') === '1' }))); }
       catch (e) { return send(res, 500, JSON.stringify({ error: e.message })); }

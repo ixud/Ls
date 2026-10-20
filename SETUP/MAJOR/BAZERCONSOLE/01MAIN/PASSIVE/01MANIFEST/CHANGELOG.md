@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added — 2026-10-20 (model picker + 4 primary modes)
+- **model picker**: `SERVER/models.mjs` + `GET /api/models` อ่านรายชื่อจริงจาก `opencode models` (cache 60 วินาที · `?fresh=1` ข้าม cache) — UI สร้าง `<datalist id="bazer-models">` ให้ทุกช่อง MODEL (Quick Access · ARENA · PSTACK 15 roles · preset A/B) พิมพ์เองได้เมื่อ CLI ใช้ไม่ได้
+- **Shift+Tab 4 โหมด**: `cfg.builtin-off` เพิ่ม `agent.poteto-mode = { mode: subagent, hidden: true }`; `poteto-mode.md` ในเครื่องเปลี่ยนเป็น `mode: subagent`; probe `modes-present` ใช้ `exact` (visible primary ต้องมีแค่ 4) และ `agents-hidden` ครอบ `poteto-mode`
+
 ### Added — 2026-10-20 (รอบ 00.00.03)
 - **`plannotator-patch`**: หาไฟล์ Plannotator → แพตช์ token `switchTo:"<...>"` เป็น `buddha`/`bazer` (dry-run ได้, backup, ตรวจซ้ำ, idempotent) — ปิดช่อง "ตัดสินใจแล้วแต่ยังไม่มี"
 - **`lock-restore`**: คืน model/effort จาก snapshot ที่บันทึกตอนเปิด lock (ปุ่มในแบนเนอร์ drift)

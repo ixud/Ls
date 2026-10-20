@@ -16,6 +16,7 @@
   };
 
   let S = null, TAB = 'overview', FILE_SUB = 'all', SET_SUB = 'full', DRAFTS = {}, BUSY = false, PALETTE_SEL = 0, PALETTE_ITEMS = [];
+  let MODELS = { ok: false, models: [], providers: [], error: '' };
 
   async function api(path, opts = {}) {
     const res = await fetch(path, {
@@ -62,16 +63,27 @@
 
   /* ---------------- data ---------------- */
   async function load(withProbes = false) {
-    try {
-      S = await api(`/api/state${withProbes ? '?probes=1' : ''}`);
-    } catch (e) {
-      toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', e.message, 'err');
+    // state กับ models โหลดพร้อมกัน — models พังต้องไม่ทำให้หน้าโหลดไม่ขึ้น
+    const [stateRes, modelsRes] = await Promise.allSettled([
+      api(`/api/state${withProbes ? '?probes=1' : ''}`),
+      api('/api/models'),
+    ]);
+    if (stateRes.status === 'rejected') {
+      toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', stateRes.reason?.message || String(stateRes.reason), 'err');
       return;
     }
+    S = stateRes.value;
     if (!S || !S.plan) {
       toast('อ่านสถานะไม่ได้', S?.error || 'ผลตอบกลับไม่ครบ', 'err');
       return;
     }
+    const mr = modelsRes.status === 'fulfilled' ? modelsRes.value : null;
+    MODELS = {
+      ok: !!(mr && mr.ok),
+      models: Array.isArray(mr?.models) ? mr.models : [],
+      providers: Array.isArray(mr?.providers) ? mr.providers : [],
+      error: mr?.error || (modelsRes.status === 'rejected' ? modelsRes.reason?.message || 'โหลดรายชื่อโมเดลไม่ได้' : ''),
+    };
     DRAFTS = {};
     render();
   }
@@ -104,9 +116,31 @@
     }
   }
 
+  /* ---------------- models ---------------- */
+  function ensureModelDatalist() {
+    let dl = $('#bazer-models');
+    if (!dl) {
+      dl = document.createElement('datalist');
+      dl.id = 'bazer-models';
+      document.body.append(dl);
+    }
+    dl.innerHTML = (MODELS.models || [])
+      .map((m) => `<option value="${esc(m.id)}" label="${esc(m.label || m.id)}"></option>`)
+      .join('');
+    return dl;
+  }
+
+  function modelHint() {
+    if (MODELS.ok) {
+      return `รายชื่อโมเดลจริง: ${MODELS.models.length} รายการ จาก ${MODELS.providers.length} provider — พิมพ์เองได้ถ้าไม่พบในรายการ`;
+    }
+    return `โหลดรายชื่อโมเดลไม่ได้${MODELS.error ? ` (${MODELS.error})` : ''} — ช่องโมเดลยังพิมพ์เองได้`;
+  }
+
   /* ---------------- render ---------------- */
   function render() {
     try {
+      ensureModelDatalist();
       renderHeader();
       renderOverview();
       renderQuick();
@@ -233,11 +267,12 @@
       <div class="card">
         <div class="arena-bar">
           ${arenaCtl.map((c) => `<div class="field"><label>${esc(c.label)}</label>
-            <input data-draft="${esc(c.id)}" value="${esc(DRAFTS[c.id] ?? S.settingsValues[c.id] ?? '')}" placeholder="${esc(c.placeholder || '')}" />
+            <input data-draft="${esc(c.id)}" ${c.type === 'model-list' ? 'data-list="1"' : ''} ${['model', 'model-list'].includes(c.type) ? 'list="bazer-models"' : ''} value="${esc(DRAFTS[c.id] ?? S.settingsValues[c.id] ?? '')}" placeholder="${esc(c.placeholder || '')}" />
             ${riskBadge(c.risk.level, c.risk.why, false)}</div>`).join('')}
           <button class="btn primary" data-save-group="arena">บันทึก ARENA</button>
         </div>
         <p class="hint">เขียนลง <code>${esc('~/.agents/pstack-models.md')}</code> — ใช้ร่วมกับ Arena ใน BUDDHA</p>
+        <p class="hint">${esc(modelHint())}</p>
       </div>
 
       <h2 class="section">ปุ่มอนุมัติ Plannotator</h2>
@@ -323,11 +358,13 @@
 
   function controlField(c) {
     const v = DRAFTS[c.id] ?? S.settingsValues[c.id] ?? '';
+    const isModel = c.type === 'model' || c.type === 'model-list';
+    const isList = c.type === 'keybind-list' || c.type === 'model-list';
     const input = c.type === 'select'
       ? `<select data-draft="${esc(c.id)}">${(c.options || []).map((o) => `<option value="${esc(o)}" ${String(o) === String(v) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
       : c.type === 'toggle'
         ? `<label class="small"><input type="checkbox" data-draft="${esc(c.id)}" ${v ? 'checked' : ''} style="width:auto"> เปิด</label>`
-        : `<input data-draft="${esc(c.id)}" ${c.type === 'keybind-list' ? 'data-list="1"' : ''} value="${esc(Array.isArray(v) ? v.join(', ') : v)}" placeholder="${esc(c.placeholder || '')}" type="${c.type === 'number' ? 'number' : 'text'}" />`;
+        : `<input data-draft="${esc(c.id)}" ${isList ? 'data-list="1"' : ''} ${isModel ? 'list="bazer-models"' : ''} value="${esc(Array.isArray(v) ? v.join(', ') : v)}" placeholder="${esc(c.placeholder || '')}" type="${c.type === 'number' ? 'number' : 'text'}" />`;
     return `<div class="field"><label>${esc(c.label)}</label>${input}${riskBadge(c.risk.level, c.risk.why)}</div>`;
   }
 
@@ -344,6 +381,7 @@
           <button class="btn ghost" data-reload="1">โหลดค่าใหม่</button>
         </div>
         <p class="hint" style="margin-top:10px">Quick Access แก้เฉพาะคีย์ที่เปลี่ยน — ถ้าต้องแก้ทั้งไฟล์ ไปที่ <strong>ตั้งค่า → การตั้งค่าฉบับเต็ม</strong></p>
+        <p class="hint">${esc(modelHint())}</p>
       </div>`;
   }
 
@@ -353,7 +391,7 @@
     const other = S.settings.groups.find((g) => g.id === 'other');
     const pstackRows = ps.roles.map((r) => `<tr>
         <td class="mono small">${esc(r.line)}</td>
-        <td><input data-draft="pstack.${esc(r.id)}" value="${esc(DRAFTS[`pstack.${r.id}`] ?? S.settingsValues[`pstack.${r.id}`] ?? r.default ?? '')}" /></td>
+        <td><input data-draft="pstack.${esc(r.id)}" data-list="1" list="bazer-models" value="${esc(DRAFTS[`pstack.${r.id}`] ?? S.settingsValues[`pstack.${r.id}`] ?? r.default ?? '')}" /></td>
       </tr>`).join('');
     const editors = (full?.files || []).map((f) => {
       const raw = (S.rawSettings || {})[f.id] || { text: '', file: '', exists: false };
@@ -385,10 +423,11 @@
               <option value="uniform">ใช้ตัวเดียวทั้งชุด</option>
               <option value="split">แยกงานเขียน / งานตัดสิน</option>
             </select></div>
-            <div class="field"><label>โมเดล A (งานเขียน)</label><input id="presetA" placeholder="เช่น grok-4.7-xhigh-fast" /></div>
-            <div class="field"><label>โมเดล B (งานตัดสิน)</label><input id="presetB" placeholder="เช่น claude-opus-5-5-xhigh" /></div>
+            <div class="field"><label>โมเดล A (งานเขียน)</label><input id="presetA" list="bazer-models" placeholder="เช่น grok-4.7-xhigh-fast" /></div>
+            <div class="field"><label>โมเดล B (งานตัดสิน)</label><input id="presetB" list="bazer-models" placeholder="เช่น claude-opus-5-5-xhigh" /></div>
             <button class="btn primary" id="presetGo">เติมทั้งชุด</button>
           </div>
+          <p class="hint">${esc(modelHint())}</p>
         </div>
         <div class="card" style="margin-top:12px">
           <table><thead><tr><th>role</th><th>โมเดล</th></tr></thead><tbody>${pstackRows}</tbody></table>
@@ -518,11 +557,14 @@
         if (!el) continue;
         let val = el.type === 'checkbox' ? el.checked : el.value;
         if (typeof val === 'string') val = val.trim();
-        // ฟิลด์ประเภทลิสต์ (เช่นคีย์ลัด) ต้องเขียนเป็น array ไม่ใช่สตริง
+        // ฟิลด์ประเภทลิสต์ (เช่นคีย์ลัด/โมเดลหลายตัว) ต้องเขียนเป็น array ไม่ใช่สตริง
         if (el.dataset.list === '1' && typeof val === 'string') {
           val = val.split(',').map((s) => s.trim()).filter(Boolean);
         }
-        if (JSON.stringify(val) !== JSON.stringify(c.cur ?? '')) patches.push({ id: c.id, value: val });
+        // line strategy เก็บเป็นสตริง — รวมลิสต์กลับก่อนเทียบ/เขียน
+        const cur = c.cur ?? '';
+        const next = Array.isArray(val) && !Array.isArray(cur) ? val.join(', ') : val;
+        if (JSON.stringify(next) !== JSON.stringify(cur)) patches.push({ id: c.id, value: next });
       }
       if (!patches.length) return toast('ไม่มีอะไรเปลี่ยน', 'แก้ช่องที่ต้องการก่อน', 'ok');
       return act('settings-save', { patches });
