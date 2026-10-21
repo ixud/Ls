@@ -47,6 +47,43 @@ export function isDeniedOutput(value) {
   return /(^|\n)\s*(YOUR PLAN WAS NOT APPROVED|Plan changes requested)/i.test(String(value ?? ''));
 }
 
+/** ชื่อ gate จากข้อความ ('GATE 2' มาก่อน เพราะ GATE 2 มักอ้างถึง GATE 1 ในเนื้อหา) */
+function gateNameOf(value) {
+  const s = String(value ?? '');
+  if (/GATE\s*2/i.test(s)) return 'gate2';
+  if (/GATE\s*1/i.test(s)) return 'gate1';
+  return 'unknown';
+}
+
+/**
+ * แปลงผลของ tool call เป็น gate ที่ได้รับอนุมัติ
+ *
+ * host บางตัวไม่มี tool `submit_plan`: subagent `plannotator` ใช้ CLI
+ * (`plannotator annotate … --gate --json --require-approval --result-file`)
+ * แล้วรายงานกลับมาเป็นข้อความ `{"decision":"approved"}` ในผลของ tool `task`/`subagent`
+ *
+ * @param {{tool?: string, result?: any, input?: any}} [o]
+ * @returns {'gate1'|'gate2'|'unknown'|null}  null = ไม่ใช่การอนุมัติ
+ */
+export function approvalOf({ tool, result, input } = {}) {
+  const out = String(result ?? '');
+  if (!out) return null;
+  // ตัวปฏิเสธต้องชนะก่อน — "annotated" คือยังไม่ตัดสิน, "denied"/"error" คือไม่ผ่าน
+  if (/"decision"\s*:\s*"(annotated|pending|denied|error)"/i.test(out)) return null;
+  if (isDeniedOutput(out)) return null;
+
+  const approved =
+    /"decision"\s*:\s*"approved"/i.test(out) || isApprovedOutput(out) || /Plan approved(?:!| with notes!)/.test(out);
+  if (!approved) return null;
+
+  // gate จากสิ่งที่ส่งเข้าไปก่อน (plannotator ส่งหัวแผน `# GATE n — …` เข้า input)
+  const fromInput = gateNameOf(input);
+  if (fromInput !== 'unknown') return fromInput;
+  const fromResult = gateNameOf(out);
+  if (fromResult !== 'unknown') return fromResult;
+  return 'unknown';
+}
+
 export function isHandoffText(value) {
   const s = String(value ?? '');
   if (/Plan mode remains active; no implementation has been requested/i.test(s)) return true;
@@ -98,6 +135,54 @@ export function shellTouchesTemp(command, tempRoots = defaultTempRoots()) {
     const r = normalizedPath(root);
     return !!r && s.includes(r);
   });
+}
+
+/* ---------------------------------------------------------------- approvals
+   Approval records are plain objects: { gate1, gate2, any, count?, at }.
+   - buddha : gate1 (Arena) + gate2 (Build)
+   - plan / bazer / others that need 1: any
+   - unknown gate: sets `any` only (never fakes a BUDDHA gate)
+   `count` is kept only as a legacy mirror/floor so phase files written by
+   older builds can still be restored. */
+
+/** จำนวน approval สะท้อนจาก flag ใน record (ใช้ mirror ลง phase file) */
+export function countOf(record) {
+  const r = record || {};
+  const flags = (r.gate1 ? 1 : 0) + (r.gate2 ? 1 : 0);
+  if (flags > 0) return Math.max(flags, Number(r.count) || 0);
+  if (r.any) return Math.max(1, Number(r.count) || 0);
+  return Number(r.count) || 0;
+}
+
+/** คืน record ใหม่ที่อนุมัติ gate นั้นแล้ว — ไม่ mutate ของเดิม */
+export function markApproved(record, gate) {
+  const prev = record || {};
+  const gate1 = !!prev.gate1;
+  const gate2 = !!prev.gate2;
+  const any = !!prev.any;
+  const name = lower(gate);
+  const at = Date.now();
+  const count = countOf(prev);
+  if (name === 'gate1') return { gate1: true, gate2, any, count, at };
+  if (name === 'gate2') return { gate1, gate2: true, any, count, at };
+  // 'unknown' — ตั้ง any=true เท่านั้น ไม่แต่ง gate ของ BUDDHA
+  return { gate1, gate2, any: true, count, at };
+}
+
+/** gate สำหรับ agent นี้เปิดแล้วหรือยัง (non-planning = true) */
+export function gateSatisfied(agent, record) {
+  const name = lower(agent);
+  if (!PLANNING_AGENTS.includes(name)) return true;
+  const need = REQUIRED_APPROVALS[name] ?? 1;
+  if (need <= 0) return true;
+
+  const r = record || {};
+  const hasFlags = 'gate1' in r || 'gate2' in r || 'any' in r;
+  // record รุ่นเก่า/กู้จาก phase file: ไม่มี flag → เทียบจำนวนเดิม
+  if (!hasFlags) return countOf(r) >= need;
+
+  if (name === 'buddha') return !!(r.gate1 && r.gate2);
+  return !!r.any || countOf(r) >= need;
 }
 
 function allow() {

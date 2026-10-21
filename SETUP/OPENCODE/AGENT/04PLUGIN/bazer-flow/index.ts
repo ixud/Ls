@@ -16,10 +16,45 @@ import path from 'node:path';
 import {
   PLANNING_AGENTS,
   REQUIRED_APPROVALS,
+  approvalOf,
+  countOf,
   decide,
   defaultTempRoots,
+  gateSatisfied,
   isApprovedOutput,
+  isHandoffText,
+  markApproved,
 } from './logic.mjs';
+
+/** อ่าน gate จากหัวแผนที่ถูกส่งเข้า submit_plan */
+function gateOf(text) {
+  const s = String(text ?? '');
+  if (/GATE\s*2/i.test(s)) return 'gate2';
+  if (/GATE\s*1/i.test(s)) return 'gate1';
+  return 'unknown';
+}
+
+/** รวมข้อความ text part ของ event หนึ่ง ๆ (ใช้แยก user prompt จริงจาก feedback ของ Plannotator) */
+function eventText(event) {
+  const p = event?.properties || {};
+  const parts = [p.parts, p.info?.parts, event?.data?.parts];
+  const out = [];
+  for (const list of parts) {
+    if (!Array.isArray(list)) continue;
+    for (const part of list) {
+      if (part?.type === 'text' && part.text) out.push(String(part.text));
+    }
+  }
+  if (!out.length && typeof p.text === 'string') out.push(p.text);
+  return out.join('\n');
+}
+
+/** ข้อความแผนจาก input ของ submit_plan */
+function planTextOf(input) {
+  const i = input || {};
+  const value = i.plan ?? i.text ?? i.markdown ?? i.content ?? i.content_preview ?? '';
+  return typeof value === 'string' ? value : JSON.stringify(value ?? '');
+}
 
 function reminder(agent, count) {
   const need = REQUIRED_APPROVALS[agent] ?? 1;
@@ -104,10 +139,11 @@ function statePath(sessionID) {
 function writePhase(sessionID, agent, record) {
   try {
     const file = statePath(sessionID);
-    const key = `${String(agent || '')}|${record?.count || 0}`;
+    const count = countOf(record);
+    const key = `${String(agent || '')}|${count}`;
     if (writePhase.last.get(file) === key) return;
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ agent: String(agent || ''), count: Number(record?.count) || 0, at: Date.now() }));
+    fs.writeFileSync(file, JSON.stringify({ agent: String(agent || ''), count, at: Date.now() }));
     writePhase.last.set(file, key);
   } catch {}
 }
@@ -124,8 +160,12 @@ function readPhase(sessionID) {
 export default Plugin.define({
   id: 'bazer.flow',
   async setup(ctx) {
-    /** sessionID -> { count, at } */
+    /** sessionID -> { gate1, gate2, any, count?, at } */
     const approvals = new Map();
+    /** child sessionID -> parent sessionID (plannotator = subagent → approval อยู่ที่ session ลูก) */
+    const parents = new Map();
+    /** sessionID -> ข้อความแผนล่าสุดที่ส่งเข้า submit_plan (ใช้เลือก gate) */
+    const pendingPlans = new Map();
     const temps = defaultTempRoots();
 
     /** In-memory first; after a plugin reload/restart, restore the phase file. */
@@ -135,11 +175,20 @@ export default Plugin.define({
       if (!record) {
         const saved = readPhase(sid);
         if (saved && (!agent || !saved.agent || String(saved.agent).toLowerCase() === String(agent).toLowerCase())) {
-          record = { count: Number(saved.count) || 0, at: Number(saved.at) || 0 };
+          const count = Number(saved.count) || 0;
+          const savedAgent = String(saved.agent || '').toLowerCase();
+          const isBuddha = savedAgent === 'buddha';
+          record = {
+            gate1: isBuddha && count >= 1,
+            gate2: isBuddha && count >= 2,
+            any: !isBuddha && count >= 1,
+            count,
+            at: Number(saved.at) || 0,
+          };
           approvals.set(sid, record);
         }
       }
-      return record || { count: 0, at: 0 };
+      return record || { gate1: false, gate2: false, any: false, count: 0, at: 0 };
     };
 
     /** agent จาก event ก่อน; ถ้าไม่มี ใช้ phase file (กัน fail-open) */
@@ -148,6 +197,66 @@ export default Plugin.define({
       if (a) return a;
       const saved = readPhase(sid);
       return String(saved?.agent || '').toLowerCase();
+    };
+
+    /** เติม parents จาก host (เฉพาะเมื่อ event ไม่ได้พา parentID มา) */
+    const parentOf = (sid) => {
+      const known = parents.get(sid);
+      if (known) return known;
+      try {
+        const info = ctx.data?.session?.get?.(sid);
+        const parentID = info?.parentID ?? info?.parentId ?? info?.parent;
+        if (parentID) {
+          parents.set(sid, String(parentID));
+          return String(parentID);
+        }
+      } catch {}
+      return '';
+    };
+
+    /**
+     * ให้เครดิต approval กับ session ที่อนุมัติ (child) และไล่ขึ้น parent สูงสุด 5 ชั้น
+     * เพราะ `task → builder` ถูกเรียกจาก parent แต่ submit_plan วิ่งใน child
+     */
+    const creditChain = (sessionID, gate, agent) => {
+      const seen = new Set();
+      let cur = String(sessionID || '');
+      let depth = 0;
+      while (cur && !seen.has(cur) && depth < 5) {
+        seen.add(cur);
+        const owner = depth === 0 ? agentOf(cur, agent) : agentOf(cur, '');
+        const next = markApproved(approvals.get(cur), gate);
+        approvals.set(cur, next);
+        // อย่าเขียนทับ phase file เดิมด้วย agent ว่าง (badge จะหาย)
+        if (owner) writePhase(cur, owner, next);
+        const parent = parentOf(cur);
+        if (!parent) break;
+        cur = parent;
+        depth++;
+      }
+    };
+
+    /** ล้าง approval ของ session นี้ + session ลูกที่รู้จัก */
+    const clearSubtree = (sessionID) => {
+      const sid = String(sessionID || '');
+      if (!sid) return;
+      const ids = new Set([sid]);
+      for (const [child, parent] of parents) if (parent === sid) ids.add(child);
+      for (const id of ids) {
+        approvals.delete(id);
+        pendingPlans.delete(id);
+        const owner = agentOf(id, '');
+        if (owner) writePhase(id, owner, { gate1: false, gate2: false, any: false, count: 0 });
+        else { try { fs.rmSync(statePath(id), { force: true }); } catch {} }
+      }
+    };
+
+    /** จำนวนที่มีผลกับ gate (migrate count เดิม → gateSatisfied โดยไม่แก้ signature ของ decide) */
+    const effectiveCount = (agent, record) => {
+      const have = countOf(record);
+      if (!gateSatisfied(agent, record)) return have;
+      const need = REQUIRED_APPROVALS[agent] ?? 1;
+      return Math.max(have, need);
     };
 
     // ---------------------------------------------------------------- agents
@@ -184,12 +293,37 @@ export default Plugin.define({
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
-          if (event?.type !== 'session.deleted') continue;
-          const id = event?.properties?.sessionID ?? event?.properties?.id ?? event?.data?.sessionID;
-          if (id) {
-            approvals.delete(id);
-            try { fs.rmSync(statePath(id), { force: true }); } catch {}
-          }
+          try {
+            const props = event?.properties || {};
+            const info = props.info || event?.data?.info || {};
+
+            // 1) จำความสัมพันธ์ child → parent ของทุก event ที่พามา
+            const sidOf =
+              props.sessionID ??
+              event?.data?.sessionID ??
+              (String(event?.type || '').startsWith('session.') ? info.sessionID ?? info.id ?? props.id : info.sessionID);
+            const parentID = info.parentID ?? info.parentId ?? props.parentID ?? event?.data?.parentID;
+            if (sidOf && parentID) parents.set(String(sidOf), String(parentID));
+
+            // 2) session ถูกลบ → ล้างทั้ง session นั้นและ memory
+            if (event?.type === 'session.deleted') {
+              const id = props.sessionID ?? props.id ?? event?.data?.sessionID ?? info.id;
+              if (id) {
+                clearSubtree(id);
+                approvals.delete(String(id));
+                parents.delete(String(id));
+                try { fs.rmSync(statePath(String(id)), { force: true }); } catch {}
+              }
+              continue;
+            }
+
+            // 3) ผู้ใช้พิมพ์ใหม่ → approval เดิมของ session (และ session ลูก) เป็นโมฆะ
+            if (String(info.role ?? props.role ?? '').toLowerCase() === 'user') {
+              const text = eventText(event);
+              const keep = text && (isHandoffText(text) || isApprovedOutput(text));
+              if (!keep) clearSubtree(sidOf ?? info.sessionID ?? props.sessionID);
+            }
+          } catch {}
         }
       } catch {}
     })();
@@ -201,8 +335,9 @@ export default Plugin.define({
 
       if (event.tool === 'submit_plan') {
         // A new plan is pending until its review returns approved.
+        pendingPlans.set(sid, planTextOf(event.input));
         const prev = approvalFor(sid, event.agent);
-        const next = { count: prev.count || 0, at: Date.now() };
+        const next = { gate1: !!prev.gate1, gate2: !!prev.gate2, any: !!prev.any, count: countOf(prev), at: Date.now() };
         approvals.set(sid, next);
         writePhase(sid, event.agent, next);
         return;
@@ -215,22 +350,43 @@ export default Plugin.define({
         agent,
         tool: toolName,
         args: event.input,
-        count: record.count,
+        count: effectiveCount(agent, record),
         tempRoots: temps,
       });
       if (!decision.allow) throw new Error(denyText(decision.reason));
     });
 
     await ctx.tool.hook('execute.after', (event) => {
-      if (event.tool !== 'submit_plan') return;
-      if (event.status !== 'completed') return;
-      const text = typeof event.result === 'string' ? event.result : JSON.stringify(event.result ?? '');
-      if (!isApprovedOutput(text)) return;
+      if (event.tool === 'submit_plan') {
+        if (event.status !== 'completed') return;
+        const text = typeof event.result === 'string' ? event.result : JSON.stringify(event.result ?? '');
+        if (!isApprovedOutput(text)) return;
+        const sid = String(event.sessionID || '');
+        if (!sid) return;
+        const plan = pendingPlans.get(sid) ?? planTextOf(event.input);
+        pendingPlans.delete(sid);
+        // approval วิ่งใน child (plannotator) แต่ builder ถูกเรียกจาก parent → ให้เครดิตทั้งสาย
+        creditChain(sid, gateOf(plan), event.agent);
+        return;
+      }
+
+      // host บางตัวไม่มี tool `submit_plan`: subagent (plannotator) ใช้ CLI แล้วรายงาน
+      // `{"decision":"approved"}` กลับมาเป็นข้อความในผลของ tool `task`/`subagent`
+      // ไม่อิงชื่อ target — host อาจส่งชื่อ tool/agent ต่างกัน
+      if (!/(task|subagent)/i.test(String(event.tool ?? ''))) return;
+
       const sid = String(event.sessionID || '');
-      const prev = approvalFor(sid, event.agent);
-      const next = { count: (prev.count || 0) + 1, at: Date.now() };
-      approvals.set(sid, next);
-      writePhase(sid, event.agent, next);
+      if (!sid) return;
+
+      const result = typeof event.result === 'string' ? event.result : JSON.stringify(event.result ?? '');
+      const input = JSON.stringify(event.input ?? '');
+      const gate = approvalOf({ tool: event.tool, result, input });
+      if (gate === null) return;
+
+      creditChain(sid, gate, event.agent);
+      if (process.env.BAZER_FLOW_DEBUG === '1') {
+        console.log(`bazer-flow: approval-source=task-result gate=${gate} tool=${event.tool} sid=${sid}`);
+      }
     });
 
     // Second veto for permission-mediated actions (edit/bash/task) that the
@@ -246,7 +402,7 @@ export default Plugin.define({
         agent,
         tool: mapped.tool,
         args: mapped.args,
-        count: record.count,
+        count: effectiveCount(agent, record),
         tempRoots: temps,
       });
       if (decision.allow) return;
@@ -261,7 +417,7 @@ export default Plugin.define({
       if (!PLANNING_AGENTS.includes(agent)) return;
       const record = approvalFor(sid, agent);
       writePhase(sid, agent, record);
-      event.system.push({ type: 'text', text: reminder(agent, record.count || 0) });
+      event.system.push({ type: 'text', text: reminder(agent, countOf(record)) });
     });
 
     return () => controller.abort();

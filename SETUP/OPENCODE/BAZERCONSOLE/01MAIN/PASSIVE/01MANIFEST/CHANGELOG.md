@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Changed — 2026-10-21
+- เปลี่ยนชื่อขั้นที่ 2 ของบันไดเหมาเข่ง: **ปลดกำ → ปลดแอก** (แก้ที่ `policies.json` เท่านั้น — `id`/`permission` ไม่เปลี่ยน ไม่ต้อง migration)
+
 ### Added — 2026-10-20 (00.00.10 · บันได BAZER + ตรวจขั้นจาก config)
 - **`bazer-ladder`**: policy ใหม่ (`mode: bazer`) ใช้ระดับชุดเดียวกับ BUDDHA ผ่าน `inherit` (ขยายใน `manifest.mjs`) — แยกสถานะ/ปุ่มจาก BUDDHA
 - **`cfg.bazer-default`** entry + `agent.bazer` มี `ladderPolicy`/`ladderAgent`
