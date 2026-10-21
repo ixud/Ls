@@ -23,27 +23,33 @@ permission:
 | `from` | `buddha` หรือ `bazer` — โหมดที่เรียกคุณ |
 | `gate` | `1` (แผน Arena) หรือ `2` (แผนสร้าง) หรือ `single` (BAZER) |
 
+## Canonical gate command
+
+```
+plannotator annotate "<PLAN>" --gate --json --require-approval --result-file "<RESULT>" 2>&1; "EXIT=$LASTEXITCODE"
+```
+
+- ใช้คำสั่งนี้เป๊ะ ๆ ห้ามห่อ ห้ามแก้รูปแบบ
+- ห้ามอ่านไฟล์ result เอง — อ่านเฉพาะบรรทัด JSON สุดท้ายจาก stdout (`{"decision":...}`)
+- ห้ามรันคำสั่ง plannotator อื่น และรายงานบรรทัด decision ตามจริงทุกตัวอักษร
+
 ## ขั้นตอน
 
 1. **ถ้ามีเครื่องมือ `submit_plan`** → เรียกด้วย
    `{ "edits": [{ "start": 1, "content": "<แผนเต็ม>" }] }`
-2. **ถ้าไม่มี** → เขียนไฟล์แผนลง `%TEMP%\bazer\<slug>\plan-gate<gate>.md` แล้วรัน CLI:
-   `plannotator annotate "<ไฟล์แผน>" --gate --json --require-approval --result-file "<ไฟล์ผล.json>"`
+2. **ถ้าไม่มี** → เขียนไฟล์แผนลง `%TEMP%\bazer\<slug>\plan-gate<gate>.md` แล้วรัน **Canonical gate command** ข้างบน
    (ต้องมี `--require-approval` เสมอ — ห้ามใช้โหมดที่อนุมัติอัตโนมัติ)
-3. อ่านผลจาก **`--result-file`** (ไม่ใช่จากปุ่มบนจอ) แล้วตีความ:
-
-   | ไฟล์ผล | สถานะ |
-   |---|---|
-   | `approved: true` (+ `feedback` ว่าง) | `approved` |
-   | `approved: false` + มี `feedback`/`changes` | `feedback` |
-   | ไม่มีไฟล์ / ไฟล์ว่าง / ยังไม่ปิดหน้าต่าง | `pending` (ถือว่า **ยังไม่อนุมัติ**) |
-   | คำสั่ง exit ไม่ใช่ 0 / parse ไม่ได้ | `error` |
+3. อ่าน **บรรทัดสุดท้ายของ stdout ที่เป็น JSON object มีคีย์ `decision`** (ไม่ใช่อ่านไฟล์ result) แล้วตีความ:
+   - `approved` → `approved`
+   - `annotated` → `feedback`
+   - ไม่มีบรรทัดดังกล่าว / ว่าง / ยังไม่ปิดหน้าต่าง → `pending` (ถือว่า **ยังไม่อนุมัติ**)
+   - คำสั่ง exit ไม่ใช่ 0 / parse ไม่ได้ → `error`
 
 4. คืนผลทันที — ห้ามวนแก้แผนเอง (การแก้แผนเป็นงานของ `poteto`)
 
 ## การกลับไปโหมดที่เรียก (สำคัญ)
 
-- **เส้นทาง CLI (ใช้เสมอ):** `--require-approval` คืนผลผ่าน `--result-file` — ไม่มีการสลับ agent และไม่ต้องพึ่งปุ่ม
+- **เส้นทาง CLI (ใช้เสมอ):** คำสั่ง canonical คืน decision เป็นบรรทัด JSON สุดท้ายของ stdout — ไม่มีการสลับ agent และไม่ต้องพึ่งปุ่ม
   ผู้เรียก (`from`) เป็นเจ้าของการตัดสินใจว่าหลัง `approved` จะเดินต่อเฟสไหน
 - **"อนุมัติแล้วกลับโหมดไหน" เป็นค่าที่เลือกในหน้า review UI ของ Plannotator** — ปลั๊กอินจะเรียก `ctx.session.switchAgent` ให้เอง
   - ถ้า host รองรับ → session สลับโหมดตามที่ผู้ใช้เลือกใน UI

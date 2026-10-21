@@ -1,5 +1,0 @@
-// ไฟล์ล็อกของเซิร์ฟเวอร์ — โหมดล็อก provider อย่างเดียว (เปิดทุกโมเดลของ opencode-go)
-{
-  "$schema": "https://opencode.ai/config.json",
-  "enabled_providers": ["opencode-go"]
-}

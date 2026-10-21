@@ -10,6 +10,8 @@
    5) ไม่มีช่อง `edit *.md` ให้ Plan แก้ไฟล์โปรเจกต์ก่อนอนุมัติ
    6) ไม่อ้าง mirror (BAZERs-EXTENSION-*) — ใช้ subagent `poteto` ตรง ๆ */
 
+import { isTempPath, looksLikeWrite, shellTouchesTemp } from './paths.mjs';
+
 /** agent ที่ถูกบังคับด้วย gate (ชื่อเป็น lowercase ตาม OpenCode) */
 export const PLANNING_AGENTS = ['plan', 'buddha', 'bazer', 'arena', 'poteto-mode'];
 
@@ -20,23 +22,9 @@ export const REQUIRED_APPROVALS = { plan: 1, buddha: 2, bazer: 1, arena: 0, 'pot
 export const TEMP_ONLY = ['arena', 'poteto-mode'];
 
 const WRITE_TOOLS = new Set(['write', 'edit', 'patch', 'multiedit', 'apply_patch']);
-const WRITE_COMMANDS = [
-  /(^|[^>])>{1,2}\s*[^&|]/,                                              // redirect
-  /(^|\s)(set-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|add-content|set-item|clear-content)\b/i,
-  /(^|\s)(rm|del|erase|mv|move|cp|copy|tee|touch|mkdir|rmdir)\s/i,
-  /(^|\s)sed\s+(-[a-z]*i|--in-place)/i,
-  /(^|\s)git\s+(apply|checkout\s+--|reset\s+--hard|clean\s+-[a-z]*f)/i,
-  /(^|\s)(npm|pnpm|yarn|bun)\s+(add|install|remove|uninstall|update)\b/i,
-  /(^|\s)node\s+-e\b/i,
-  /\[(?:System\.)?IO\.File\]::/i,
-];
 
 function lower(value) {
   return String(value ?? '').trim().toLowerCase();
-}
-
-function normalizedPath(value) {
-  return String(value ?? '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
 export function isApprovedOutput(value) {
@@ -93,23 +81,6 @@ export function isHandoffText(value) {
   return false;
 }
 
-export function defaultTempRoots() {
-  const base = process.env.TEMP || process.env.TMP || '';
-  const roots = ['/tmp/bazer'];
-  if (base) roots.push(normalizedPath(base).replace(/\/+$/, '') + '/bazer');
-  return roots;
-}
-
-export function isTempPath(filePath, tempRoots = defaultTempRoots()) {
-  const p = normalizedPath(filePath);
-  if (!p) return false;
-  if (p.split('/').includes('..')) return false;
-  return (tempRoots || []).some((root) => {
-    const r = normalizedPath(root);
-    return !!r && (p === r || p.startsWith(r + '/'));
-  });
-}
-
 export function builderTarget(args) {
   const a = args || {};
   return lower(
@@ -120,21 +91,6 @@ export function builderTarget(args) {
 export function writePath(args) {
   const a = args || {};
   return String(a.filePath ?? a.file_path ?? a.path ?? a.file ?? a.filename ?? a.target ?? '');
-}
-
-export function looksLikeWrite(command) {
-  const s = String(command ?? '');
-  if (!s) return false;
-  return WRITE_COMMANDS.some((re) => re.test(s));
-}
-
-/** คำสั่ง shell ที่เขียนไฟล์: อนุญาตเฉพาะเมื่อทุกพาธที่อ้างถึงอยู่ใน temp root */
-export function shellTouchesTemp(command, tempRoots = defaultTempRoots()) {
-  const s = normalizedPath(command);
-  return (tempRoots || []).some((root) => {
-    const r = normalizedPath(root);
-    return !!r && s.includes(r);
-  });
 }
 
 /* ---------------------------------------------------------------- approvals

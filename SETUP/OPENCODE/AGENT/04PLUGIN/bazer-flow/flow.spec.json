@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaults": { "stallMs": 1200000, "ttlMs": 43200000, "feedbackHintAt": 3, "errHintAt": 2, "helpers": ["explore"] },
+  "flows": {
+    "buddha": {
+      "start": "P0",
+      "phases": {
+        "P0": { "name": "SURVEY", "expect": "poteto", "gate": false, "writeProject": false, "transitions": { "poteto.start": "P1" } },
+        "P1": { "name": "PLAN1", "expect": "poteto", "gate": false, "writeProject": false, "transitions": { "poteto.done": "P2" } },
+        "P2": { "name": "GATE1", "expect": "plannotator", "also": ["poteto"], "gate": true, "writeProject": false, "transitions": { "approved": "P3", "feedback": "stay" } },
+        "P3": { "name": "ARENA", "expect": "arena", "also": ["arena-runner", "arena-judge", "arena-loop1"], "gate": false, "writeProject": false, "skippable": true, "transitions": { "arena.done": "P4", "skip": "P4" } },
+        "P4": { "name": "PLAN2", "expect": "poteto", "gate": false, "writeProject": false, "transitions": { "poteto.done": "P5" } },
+        "P5": { "name": "GATE2", "expect": "plannotator", "also": ["poteto"], "gate": true, "writeProject": false, "transitions": { "approved": "P6", "feedback": "stay" } },
+        "P6": { "name": "BUILD", "expect": "builder", "gate": false, "writeProject": true, "transitions": { "builder.done": "P7", "builder.error": "stay" } },
+        "P7": { "name": "DONE", "expect": null, "gate": false, "writeProject": false, "terminal": true, "transitions": {} }
+      }
+    },
+    "bazer": {
+      "start": "B12",
+      "phases": {
+        "B12": { "name": "PLAN", "expect": "plannotator", "gate": false, "writeProject": false, "transitions": { "plannotator.start": "B3" } },
+        "B3": { "name": "GATE", "expect": "plannotator", "gate": true, "writeProject": false, "transitions": { "approved": "B4", "feedback": "stay" } },
+        "B4": { "name": "BUILD", "expect": "builder", "gate": false, "writeProject": true, "transitions": { "builder.done": "B5", "builder.error": "stay" } },
+        "B5": { "name": "FIX", "expect": null, "gate": false, "writeProject": true, "terminal": true, "transitions": {} }
+      }
+    }
+  }
+}

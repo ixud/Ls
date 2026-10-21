@@ -1,9 +1,0 @@
-{
-  "name": "bazer-fire",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./index.ts",
-    "./tui": "./tui.tsx"
-  }
-}

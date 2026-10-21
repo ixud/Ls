@@ -1,3 +1,154 @@
+> หน่วยตัวเลขประจำการอัพเดตที่ใหม่ที่สุด (ล่าสุด) จะอยู่ระหว่างข้อความนี้ (อันที่คุณกำลังเห็นนี้เลย) กับ H1 อันแรก (อันที่ติดกับข้อความนี้ ฝั่งด้านล่าง)
+
+
+# 00.00.11 - Wednesday 21st October 2026 - bazer-flow v2: flow engine + runtime + gate CLI (build 2n)
+
+> คำขอของแชทนี้: อ่าน/วิเคราะห์ระบบเดิม (read-only) → ออกแบบ "flow engine" ที่สถานะเฟสเป็นข้อมูลจริง ไม่เดาจากข้อความแผน → ทำ runtime/hook จริง → ไล่ปิดช่องรั่วจาก log จริงของผู้ใช้ (gate-cli, shell classification, 4 instances, inbox, WSL ฯลฯ)
+> **ขอบเขตที่แตะ:** `AGENT/04PLUGIN/bazer-flow/**` ทั้งโฟลเดอร์ + เอกสาร 2 ไฟล์ (`AGENT/02SUBAGENT/PLANNOTATOR.md`, `AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-RUNNER.md`) — **ไม่แตะ** Console (`BAZERCONSOLE/**`), `policies.json`, โหมด `.md` อื่น
+> **ไม่รัน:** `selftest.mjs` / `apitest.mjs` (บั๊กเดิม: เขียนทับ `var/state.json` จริง) · ไม่รัน `opencode.exe` / `plannotator.exe`
+
+## 1) สถาปัตยกรรมใหม่ของปลั๊กอิน (แยกชั้นชัด)
+
+| ไฟล์ | บรรทัด | หน้าที่ |
+|---|---|---|
+| `flow.spec.json` | 28 | ข้อมูลล้วน: defaults + 2 flows (BUDDHA/BAZER) + เฟส/transition/gate/skippable/also |
+| `paths.mjs` | 217 | จำแนกคำสั่ง shell (write/read/scope), ตัวแปร env, `/mnt/<d>/`, inner `-c`, protected paths, gate-cli verdict |
+| `engine.mjs` | 246 | pure state machine: `check/apply/remind/badge/serialize/deserialize` — **ไม่มี id/ชื่อ agent hardcode** |
+| `runtime.mjs` | 482 | stateful layer: store only (ไม่มี cache), identity, dedupe, gate CLI, inbox, logs |
+| `adapter.mjs` | 165 | แปลง payload ของ host → runtime input (tool req/res, chat.message, tool events, inbox, agent.selected) |
+| `store.mjs` | 58 | fs store sync + atomic write + `ringLog` + `loadSpecFile` (fileURLToPath) + prune 7 วัน |
+| `diag.mjs` | 161 | `shapeOf/shapeDeep/stringLeaves`, `introspect/ctxNames`, `createFlowLog`, `codeOf`, `bootEntry` |
+| `index.ts` | 202 | wiring บาง ๆ: hooks + boot log + event routing (ไม่มี business logic) |
+| `tui.tsx` | 60 | badge อ่านไฟล์ `v2/badge-<sid>.txt` (poll 800ms) |
+| `logic.mjs` | 282 | ของเดิม (decide/phaseFor/approvalOf) — **เก็บไว้** เพราะ `guard.test.mjs` + `SERVER/tools/selftest.mjs:773` ยัง import |
+| `guard.test.mjs` | 176 | เทสต์เดิมของ logic (ไม่แก้) |
+
+เทสต์: `engine.test.mjs` 296 · `runtime.test.mjs` 1045 · `adapter.test.mjs` 124 · `store.test.mjs` 96 → **100 passed / 0 failed** (engine 23 · runtime 59 · adapter 10 · store 8)
+
+## 2) สเปกเฟส (แหล่งความจริงเดียว = `flow.spec.json`)
+
+BUDDHA: `P0 SURVEY → P1 PLAN1 → P2 GATE1 → P3 ARENA → P4 PLAN2 → P5 GATE2 → P6 BUILD → P7 DONE`
+
+| เฟส | expect | gate | writeProject | also | transition |
+|---|---|---|---|---|---|
+| P0 | poteto | – | – | – | poteto.start→P1 |
+| P1 | poteto | – | – | – | poteto.done→P2 |
+| P2 | plannotator | ✓ | – | poteto | approved→P3 · feedback→**stay** |
+| P3 | arena | – | – | arena-runner, arena-judge, arena-loop1 | arena.done→P4 · skip→P4 |
+| P4 | poteto | – | – | – | poteto.done→P5 |
+| P5 | plannotator | ✓ | – | poteto | approved→P6 · feedback→**stay** |
+| P6 | builder | – | ✓ | – | builder.done→P7 · builder.error→stay |
+| P7 | – | – | – | – | terminal |
+
+BAZER: `B12 PLAN → B3 GATE → B4 BUILD → B5 FIX` (B3 feedback→stay · B4/B5 writeProject ✓ · B5 terminal)
+
+กติกา engine:
+- `check(state, req)`: subagent เริ่มได้เมื่อ `name == expect` หรือ helpers (`explore`) หรือ `also[]`; `submit_plan` เฉพาะ gate; project write เฉพาะ `writeProject`; read/temp ผ่านเสมอ
+- `apply(state, ev, now)`: transition ตามตารางเท่านั้น · event ที่ไม่ตรงถูกทิ้ง (state เท่าเดิม) · **ไม่อ่านข้อความแผน**
+- counters: `feedback{}` (ต่อเฟส) · `pending` · `planErrors` (plan error แยกจาก pending) · `errors` (subagent error) · `skipped[]` · `approvals{}`
+- `remind` ≤160 ตัว: hint อย่างเดียวตามลำดับ feedback≥3 → planErrors → pending@gate → subagent errors → stall
+- `badge`: ที่ gate = `GATE r<feedback+1>` (≤12) นอกนั้น `<phase> <name>`
+- `serialize/deserialize` versioned; ttl 12 ชม.; ผิดรูป/flow ไม่รู้จัก → เริ่มใหม่ (write ปิด)
+
+## 3) Runtime: identity, trust, dedupe (อ่าน store ทุกครั้ง ไม่มี cache)
+
+- state key `<root>.<flow>` · meta key `meta` (agents/links) · notice key `notice.<root>.<flow>` · seen key `seen` (cap 200) · gate list key `gcli` (cap 50)
+- `rootOf` ไล่ parent ≤5 ชั้น (cycle-safe) · `info()` คืน root/hops/flow/phase/agent
+- **trust rule (userChat)**: รับเฉพาะ session ที่เป็น root + agent ของ session ต้องเป็น key ของ flow (buddha/bazer) · dedupe ด้วย `m:<messageId>`
+- subagent start/after ใช้ `b:<callId>` / `a:<callId>` · gate CLI ใช้ `g:<callId>` (ตั้งเฉพาะเมื่อ approved/feedback จริง — pending ไม่กิน key)
+- memory-only: `calls` (callId→subagent, cap 50) · `gates` ย้ายเข้า store แล้ว (ข้อ 5)
+- fail-closed: ไม่มี flow + subagent ที่รู้จัก + เขียน project = deny `orphan`; protected path deny ทุกกรณี (รวม peek/permission veto)
+
+## 4) Gate CLI (ทางที่ใช้จริงเพราะ child ไม่มี `submit_plan`)
+
+- ตรวจคำสั่ง: token `plannotator` (+`.exe`) + `--gate` + `--json`; echo/Write-Host/Write-Output/bare string รับได้เฉพาะ `EXIT=$LASTEXITCODE` / `$LASTEXITCODE` / `$?`; ปฏิเสธ `decision|approved|{` (ใน echo/bare/`--result-file`), `Set-Content/Out-File/printf`, redirect ไปไฟล์ (neutral `2>&1`, `2>$null` ไม่นับ)
+- ผลลัพธ์: เก็บ string leaves ทุกชั้น (depth≤5) + JSON-parse ซ้ำ≤3 ชั้น + unescape `\n \r \"` → เอา **บรรทัดสุดท้ายที่เป็น JSON object มี `decision`**
+- map: `approved`→approved · `annotated`→feedback · `dismissed`/อื่นๆ/ไม่มีบรรทัด→pending · error→error
+- ใช้ได้เฉพาะ: root มี flow + เฟสเป็น gate + agent ของผู้เรียก == `phase.expect`
+- 2 ทาง: hook `tool.execute.after` (output เป็น object/string) และ event `session.tool.called/success` (content[]); dedupe ข้ามทางด้วย `g:` ใน store
+- log: `gate-cli-check` (ทุก shell ที่มี token, dedupe per callId), `gate-cli-after` (via/callId6/shape/tail/outcome|why), `after-seen` (เฉพาะ call ที่จำได้), `after-miss` (task ไม่มี subagent)
+
+## 5) Shell classification (`paths.shellWrite`)
+
+- read: `Write-Output/Write-Host/echo/bare string` (ไม่มี redirect), `[IO.File]::Read*`, `Get-Content`, `Test-Path`, `Select-String`, `ConvertFrom-Json`, `Join-Path`, `Get-ChildItem` ฯลฯ
+- write: `Set-Content/Add-Content/Out-File/Remove-Item/Move-Item/Copy-Item/New-Item/rm/del/mv/cp/mkdir/...`, `[IO.File]::Write*/Append*`, redirect `>`/`>>` (neutral ยกเว้น)
+- ตัวแปร: `$name="literal"`, `$env:NAME="..."` ในคำสั่งเดียวกัน + `$env:TEMP/TMP/LOCALAPPDATA/USERPROFILE/APPDATA` และ `%VAR%` (env ฉีดได้ผ่าน `createRuntime({env})`); `Join-Path <literal> <literal>` ถอดเป็นพาธ
+- **builtin ไม่นับเป็น user var**: `$LASTEXITCODE $? $null $true $false $_ $PSScriptRoot $PWD $HOME $args $input $Error $ErrorActionPreference`
+- WSL: `/mnt/<drive>/...` → `<DRIVE>:\...` (ใช้ทั้ง write target และ protected check)
+- inner script: `bash -c`, `sh -c`, `cmd /c`, `powershell -Command` → วิเคราะห์ข้อความในเครื่องหมายคำพูดด้วยกฎเดียวกัน + ใช้ `cd`/`cd /d`/`Set-Location` ในคำสั่งเป็น cwd; ถ้าไม่มีใช้ `input.workdir`
+- interpreter (`python -c`/`node -e`/`perl -e`/`ruby -e` + open w/a/wb/writeFile/File.write/>) → deny `interpreter-write` (ไม่วิเคราะห์เนื้อหาข้างใน)
+- detail enum: `write-verb|redirect|io-write|unresolved-var|interpreter-write|protected|phase-order` (deny log ใช้ค่า `detail` ก่อน แล้ว fallback `codeOf`)
+- hint ตาม detail: unresolved-var = "STOP. Each shell call is a separate process…" · redirect/io-write/interpreter-write = "Use the write/edit tool with a full literal path under %TEMP%\bazer\<task>\…" · phase/protected คงข้อความเดิม (เริ่มด้วย STOP/Stop, ≤200)
+
+## 6) Log/diag (ไฟล์ `~/.local/state/opencode/bazer-flow/v2/`)
+
+- `log.tsv` ring 400 บรรทัด · ทุกบรรทัดมี `seq/at/inst(4 hex)/pid`
+- events: `boot` (build/spec hash 8/hooks/ctxMethods) · `hook-seen` · `evt-shape` (cap 40, skip catalog + `*.updated`) · `root`/`agent` (sid6/root6, dedupe ข้าม instance ด้วย `Symbol.for('bazer.flow.shared')`) · `deny` (hook/sid6/root6/flow/phase/tool/detail) · `after` · `after-seen` · `after-miss` · `user` (cmd|plain|ignored + itemType/delivery) · `user-miss` · `gate-cli-check` · `gate-cli-after` · `notice` · `error`
+- deep shape สำหรับ `session.inbox.enqueued`, `session.tool.success`, `session.tool.called`, `session.agent.selected`: depth 4, ค่าเฉพาะ key `type`/`delivery`, string อื่นเป็น `s<len>`
+- `ctx.txt` เขียนทับทุก boot (ชื่อ property depth 3, cap 800, ข้าม length/name)
+
+## 7) Hooks ที่ผูกจริง (build 2n)
+
+`ctx.agent.transform` (builder: submit_plan/subagent deny) · `ctx.tool.hook('execute.before')` (deny throw + gate-cli check) · `ctx.tool.hook('execute.after')` · `ctx.permission.hook('evaluate')` (peek เท่านั้น — ไม่ mutate) · `ctx.session.hook('context')` (push remind) · `ctx.event.subscribe` (links/agent/user/gate events/inbox)
+→ key `"chat.message"` ยังอยู่ใน export แต่ **หลักฐานจริง: ไม่เคยยิง** → ถอดออกจาก `HOOKS` แล้ว (โค้ดเก็บไว้เฉย ๆ ไม่ทำอันตราย)
+
+## 8) เอกสารที่แก้
+
+- `PLANNOTATOR.md`: เพิ่มหัวข้อ **Canonical gate command** (template เดียว + 3 กติกา) · ลบคำสั่ง `--result-file` เดิม + ตารางอ่านไฟล์ผล 4 แถว (9 บรรทัด) · เปลี่ยนเป็นอ่านบรรทัด `decision` จาก stdout · คงสัญญา "child รายงานสถานะเท่านั้น ห้ามแก้แผนเอง"
+- `ARENA-RUNNER.md`: เพิ่ม 4 บรรทัด — เขียน candidate ด้วย write/edit พาธเต็มใต้ `%TEMP%\bazer\<task>\candidate-N\` · ห้าม shell redirect/bash -c/cmd /c/python -c · ตัวแปรไม่คงข้ามคำสั่ง · ถ้าถูกปฏิเสธให้หยุดรายงาน
+
+## 9) หลักฐานจากของจริง (read-only)
+
+| เรื่อง | หลักฐาน |
+|---|---|
+| Plannotator 0.28.23 (`$CACHE/npm/@plannotator/opencode@latest/.../dist/index.js`) | `invokingAgent: context.agent` (16942) → child ถูก reject ที่ 15188-15191 เพราะ `planningAgents=[buddha]` |
+| decision vocabulary | `approved`/`annotated`/`dismissed` (14822,14856,14860) · `approved:true` boolean |
+| workflow matrix | manual/user-managed = ไม่แตะ config/prompt · plan-agent = reject non-planning + rewrite perms + inject prompt · all-agents = ไม่ reject |
+| approve side effect | `session.prompt({agent, noReply:true, parts:[text]})` (16967-16975) เมื่อมี `agentSwitch` จาก UI |
+| child ไม่มี `submit_plan` | ใช้ CLI `annotate --gate --json --require-approval --result-file`; stdout มี `{"decision":"approved"}\nEXIT=0` |
+| host hooks | binary: `session.hook("context"/"compaction"/"generate")`, `permission.hook("evaluate")`, `tool.hook("execute.before"/"after")`; **ไม่มี** `chat.message` |
+| 4 instances/1 pid | hook tool.*/permission/session ยิง instance เดียว · `event.subscribe` ยิงทุก instance · sid8 ซ้ำ (ใช้ 6 ตัวท้ายแทน) |
+| event envelope | `{id,created,type,data}` · `session.inbox.enqueued data.item.type=user|synthetic|compaction` · `session.tool.called input.workdir` |
+
+## 10) ยังพิสูจน์ไม่ได้ / ค้าง
+
+- ปลั๊กอินยังไม่ถูกโหลดจริงหลัง build 2n (ต้องติดตั้งผ่าน Console → เปิด OpenCode ใหม่)
+- `chat.message` legacy ไม่ยิง → path นั้นเป็น dead code ที่รอวันถอด
+- `submit_plan` ใน child: ถูก Plannotator reject เพราะ `planningAgents` มีแต่ buddha — ทาง CLI ถูกใช้แทนแล้ว แต่ยังไม่ได้ทดสอบรอบใหม่จริง
+- `gate-cli-after` ยังไม่เคยเห็น `outcome:approved` จาก hook route ใน log จริง (เห็นแต่ทาง event)
+- `ctx.txt`/`evt-shape` ยังไม่ถูกอ่านจาก log จริงหลัง build 2n
+- `notices` เก็บใน store แล้ว แต่ dedupe ของ `dup`/`plain` อยู่ใน memory ของ process (หายเมื่อรีสตาร์ท)
+
+## 11) บั๊กฝั่ง Console ที่เจอตอน recon (ยังไม่แก้ — ต้องขออนุญาต)
+
+| # | อาการ | หลักฐาน |
+|---|---|---|
+| C1 | `apitest` เขียน `var/state.json` จริง (snapshotHome ชี้ temp) → drift/lock ของเครื่องจริงพัง | `apply.mjs` default store + `state.json` มี `"p/one"` |
+| C2 | `detectPolicyLevel` อ่าน config เท่านั้น (ไฟล์ agent ชนะ) → UI โชว์ขั้นผิดได้ | `plan.mjs` detectPolicyLevel |
+| C3 | `BAZER.md` ตั้ง `glob/grep/list: ask` ขัดกับ `policies.json` (allow) | ไฟล์โหมด vs policies |
+| C4 | เอกสารนับ actions/entries/probes ไม่ตรง (22/23/11 vs 28/22/13) | `DOCS/USECASE-STATUS.md:253` |
+| C5 | `SNACK.md`/`AGENTS.md.template` อ้าง `…\OPENCODE\CONSOLE\mode-lock.mjs` ที่ไม่มีอยู่ | ตรวจแล้วไม่มีไฟล์ |
+| C6 | `apply` มี 28 actions / 22 entries / 13 probes — ตัวเลขใน LOGS รุ่นก่อนล้าสมัย | ไฟล์จริง |
+
+## 12) วิธีทำงานต่อ
+
+```powershell
+cd "C:\BCS\00.02 LLM Slavery\SETUP\OPENCODE\AGENT\04PLUGIN\bazer-flow"
+node --check paths.mjs; node --check engine.mjs; node --check runtime.mjs; node --check adapter.mjs; node --check store.mjs; node --check diag.mjs
+node --test engine.test.mjs runtime.test.mjs adapter.test.mjs store.test.mjs
+```
+- build ปัจจุบัน: **2n** (`BUILD` ใน `index.ts`) · boot log อยู่ที่ `~/.local/state/opencode/bazer-flow/v2/log.tsv`
+- ก่อนเชื่อ log ให้ดู `boot` ล่าสุด (spec hash + hooks) และ `inst` ว่าเป็น instance ไหน
+- ถ้าจะเปลี่ยนพฤติกรรมเฟส → แก้ `flow.spec.json` ก่อน แล้วค่อยแก้เทสต์ (engine ไม่มี id hardcode)
+
+## ไฟล์ที่แตะ (ทั้งแชท)
+
+**ใหม่:** `flow.spec.json` · `paths.mjs` · `engine.mjs` · `runtime.mjs` · `adapter.mjs` · `store.mjs` · `diag.mjs` · `engine.test.mjs` · `runtime.test.mjs` · `adapter.test.mjs` · `store.test.mjs`
+**แก้:** `index.ts` (เขียนใหม่ทั้งไฟล์) · `tui.tsx` · `logic.mjs` (ย้าย helper ออก) · `AGENT/02SUBAGENT/PLANNOTATOR.md` · `AGENT/02SUBAGENT/SUBSUBAGENT/ARENA-RUNNER.md` · `BAZERCONSOLE/LOGS.md`
+**ไม่แตะ:** `guard.test.mjs` · `package.json` · Console ทุกไฟล์ · `policies.json` · โหมด `.md` อื่น
+
+---
+
 # 00.00.10 - Tuesday 20th October 2026 - บันได BAZER แยกจาก BUDDHA + ตรวจขั้นจาก config จริง
 
 > คำขอ: "บันไดเหมาเข่ง ฝากทำให้ BAZER MODE ด้วย กดแยกกับ BUDDHA · เช็คว่าระบบตรวจว่าอยู่ขั้นไหนใช้ได้จริงไหม"
